@@ -18,6 +18,9 @@ function App(p: AppProps) {
         // const navService = await SDK.getService<IHostNavigationService>("ms.vss-features.host-navigation-service");
         // const proj = navService.getPageRoute()
 
+        let host = SDK.getHost()
+        console.log("Host:", host);
+
         const projectInfoService = await SDK.getService<IProjectPageService>(
             "ms.vss-tfs-web.tfs-page-data-service" // TODO: CommonServiceIds.ProjectPageService
         );

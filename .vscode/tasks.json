@@ -14,7 +14,7 @@
 			"problemMatcher": "$msCompile",
 			"presentation": {
 				"clear": true,
-				"reveal": "silent"
+				"reveal": "always"
 			}
 		}
 	]

@@ -1,4 +1,3 @@
-// TODO: import '../main.scss'
 import ReactDOM from 'react-dom'
 import * as SDK from 'azure-devops-extension-sdk';
 import { App } from './App.tsx'

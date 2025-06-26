@@ -1,0 +1,61 @@
+{
+    "manifestVersion": 1,
+    "id": "pingmint-extension",
+    "version": "0.0.2",
+    "name": "Pingmint",
+    "description": "Pingmint",
+    "publisher": "pingmint",
+    "categories": [
+        "Azure Boards"
+    ],
+    "targets": [
+        {
+            "id": "Microsoft.VisualStudio.Services"
+        }
+    ],
+    "icons": {
+        "default": "images/dot-icon.png"
+    },
+    "contributions": [
+        {
+            "id": "pingmint-pipeline-hub",
+            "type": "ms.vss-web.hub",
+            "description": "Adds a hub to the Pipelines hub group.",
+            "targets": [
+                "ms.vss-build-web.build-release-hub-group"
+            ],
+            "properties": {
+                "icon": "images/robotbig.png",
+                "name": "Pingmint",
+                "order": 313,
+                "uri": "dist/web/local/index.html"
+            }
+        }
+    ],
+    "scopes": [
+        "vso.build",
+        "vso.build_execute",
+        "vso.code",
+        "vso.graph",
+        "vso.identity",
+        "vso.pipelineresources_use",
+        "vso.profile",
+        "vso.project",
+        "vso.release",
+        "vso.release_manage",
+        "vso.work",
+        "vso.work_write"
+    ],
+    "files": [
+        {
+            "path": "dist",
+            "addressable": true,
+            "packagePath": "dist"
+        },
+        {
+            "path": "images",
+            "addressable": true,
+            "packagePath": "images"
+        }
+    ]
+}

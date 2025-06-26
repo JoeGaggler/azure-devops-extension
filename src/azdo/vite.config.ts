@@ -8,8 +8,9 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        index: './web/local/index.html'
-      }
+        // index: './web/index.html',
+        mergequeue: './web/mergequeue/index.html'
+      },
     }
   }
 })

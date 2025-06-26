@@ -1,7 +1,7 @@
 {
     "manifestVersion": 1,
     "id": "pingmint-extension",
-    "version": "0.0.2",
+    "version": "0.0.4",
     "name": "Pingmint",
     "description": "Pingmint",
     "publisher": "pingmint",
@@ -18,17 +18,17 @@
     },
     "contributions": [
         {
-            "id": "pingmint-pipeline-hub",
+            "id": "pingmint-pipeline-mergequeue",
             "type": "ms.vss-web.hub",
-            "description": "Adds a hub to the Pipelines hub group.",
+            "description": "Merge Queue",
             "targets": [
-                "ms.vss-build-web.build-release-hub-group"
+                "ms.vss-code-web.code-hub-group"
             ],
             "properties": {
                 "icon": "images/robotbig.png",
-                "name": "Pingmint",
+                "name": "Merge Queue",
                 "order": 313,
-                "uri": "dist/web/local/index.html"
+                "uri": "dist/web/mergequeue/index.html"
             }
         }
     ],

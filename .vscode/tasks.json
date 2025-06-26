@@ -1,0 +1,21 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "build extension",
+			"command": "sh",
+			"type": "process",
+			"args": [
+				"make.sh"
+			],
+			"options": {
+				"cwd": "${workspaceFolder}/src/azdo"
+			},
+			"problemMatcher": "$msCompile",
+			"presentation": {
+				"clear": true,
+				"reveal": "silent"
+			}
+		}
+	]
+}

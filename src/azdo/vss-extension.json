@@ -1,67 +1,67 @@
 {
-    "manifestVersion": 1,
-    "id": "pingmint-extension",
-    "version": "0.0.22",
-    "name": "Pingmint",
-    "description": "Pingmint",
-    "publisher": "pingmint",
-    "categories": [
-        "Azure Boards"
-    ],
-    "targets": [
-        {
-            "id": "Microsoft.VisualStudio.Services"
-        }
-    ],
-    "icons": {
-        "default": "images/dot-icon.png"
+  "manifestVersion": 1,
+  "id": "pingmint-extension",
+  "version": "0.0.32",
+  "name": "Pingmint",
+  "description": "Pingmint",
+  "publisher": "pingmint",
+  "categories": [
+    "Azure Boards"
+  ],
+  "targets": [
+    {
+      "id": "Microsoft.VisualStudio.Services"
+    }
+  ],
+  "icons": {
+    "default": "images/dot-icon.png"
+  },
+  "contributions": [
+    {
+      "id": "pingmint-pipeline-mergequeue",
+      "type": "ms.vss-web.hub",
+      "description": "Merge Queue",
+      "targets": [
+        "ms.vss-code-web.code-hub-group"
+      ],
+      "includes": [
+        "ms.vss-tfs-web.tfs-page-data-service",
+        "ms.vss-features.host-navigation-service",
+        "ms.vss-features.extension-data-service",
+        "ms.vss-features.host-dialog-service"
+      ],
+      "properties": {
+        "icon": "images/robotbig.png",
+        "name": "Merge Queue",
+        "order": 313,
+        "uri": "dist/web/mergequeue/index.html"
+      }
+    }
+  ],
+  "scopes": [
+    "vso.build",
+    "vso.build_execute",
+    "vso.code",
+    "vso.graph",
+    "vso.identity",
+    "vso.pipelineresources_use",
+    "vso.profile",
+    "vso.project",
+    "vso.release",
+    "vso.release_manage",
+    "vso.work",
+    "vso.work_write"
+  ],
+  "files": [
+    {
+      "path": "dist",
+      "addressable": true,
+      "packagePath": "dist"
     },
-    "contributions": [
-        {
-            "id": "pingmint-pipeline-mergequeue",
-            "type": "ms.vss-web.hub",
-            "description": "Merge Queue",
-            "targets": [
-                "ms.vss-code-web.code-hub-group"
-            ],
-            "includes": [
-                "ms.vss-tfs-web.tfs-page-data-service",
-                "ms.vss-features.host-navigation-service",
-                "ms.vss-features.extension-data-service",
-                "ms.vss-features.host-dialog-service"
-            ],
-            "properties": {
-                "icon": "images/robotbig.png",
-                "name": "Merge Queue",
-                "order": 313,
-                "uri": "dist/web/mergequeue/index.html"
-            }
-        }
-    ],
-    "scopes": [
-        "vso.build",
-        "vso.build_execute",
-        "vso.code",
-        "vso.graph",
-        "vso.identity",
-        "vso.pipelineresources_use",
-        "vso.profile",
-        "vso.project",
-        "vso.release",
-        "vso.release_manage",
-        "vso.work",
-        "vso.work_write"
-    ],
-    "files": [
-        {
-            "path": "dist",
-            "addressable": true,
-            "packagePath": "dist"
-        },
-        {
-            "path": "images",
-            "addressable": true,
-            "packagePath": "images"
-        }
-    ]
+    {
+      "path": "images",
+      "addressable": true,
+      "packagePath": "images"
+    }
+  ]
 }

@@ -31,7 +31,7 @@ function App(p: AppProps) {
 
     return (
         <>
-            <Card className="padding-8">
+            <Card className="padding-8 margin-8">
                 <div className="flex-row rhythm-horizontal-8 flex-center">
                     <div>Coming soon.</div>
                 </div>

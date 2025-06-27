@@ -1,4 +1,5 @@
 import * as SDK from 'azure-devops-extension-sdk';
+import { IProjectPageService } from "azure-devops-extension-api";
 import { type IExtensionDataService } from 'azure-devops-extension-api';
 
 export async function getAzdo(url: string, bearertoken: string): Promise<any> {
@@ -101,4 +102,24 @@ export async function getOrCreateUserDocument(colId: string, docId: string, docu
     }
 
     return userFiltersDoc;
+}
+
+export async function getAzdoInfo() {
+    let newInfo: AzdoInfo = {};
+
+    let host = SDK.getHost()
+    newInfo.organization = host.name;
+
+    const projectInfoService = await SDK.getService<IProjectPageService>(
+        "ms.vss-tfs-web.tfs-page-data-service" // TODO: CommonServiceIds.ProjectPageService
+    );
+    const proj = await projectInfoService.getProject();
+    newInfo.project = proj?.name;
+
+    return newInfo;
+}
+
+export interface AzdoInfo {
+    organization?: string;
+    project?: string;
 }

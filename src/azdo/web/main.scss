@@ -1,4 +1,4 @@
-@use "../node_modules/azure-devops-ui/Core/override.scss" as azdo;
+@use "../node_modules/azure-devops-ui/Core/core.scss" as azdo;
 
 :root {
     font-family: azdo.$fontFamily;

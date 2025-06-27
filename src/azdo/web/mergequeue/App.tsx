@@ -8,6 +8,7 @@ import { getAzdo } from '../azdo/azdo.ts';
 import { PullRequestList } from './PullRequestList.tsx';
 import { Button } from "azure-devops-ui/Button";
 import { ButtonGroup } from "azure-devops-ui/ButtonGroup";
+import { TrainCard } from "./TrainCard.tsx"
 
 
 interface AppProps {
@@ -59,6 +60,14 @@ function App(p: AppProps) {
                         />
                     </ButtonGroup>
                 </Card>
+
+                <TrainCard
+                    name="Demo Train #1"
+                />
+
+                <TrainCard
+                    name="Demo Train #2"
+                />
 
                 <br />
 

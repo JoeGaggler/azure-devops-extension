@@ -1,1 +1,91 @@
 @use "../node_modules/azure-devops-ui/Core/override.scss" as azdo;
+
+:root {
+    font-family: azdo.$fontFamily;
+}
+
+#extension_root_div {
+    padding: 8px;
+}
+
+.neutral-0 {
+    background-color: azdo.$neutral-0;
+}
+
+.neutral-2 {
+    background-color: azdo.$neutral-2;
+}
+
+.neutral-alpha-2 {
+    background-color: azdo.$neutral-alpha-2;
+}
+
+.neutral-alpha-4 {
+    background-color: azdo.$neutral-alpha-4;
+}
+
+.bolt-card {
+    background-color: azdo.$neutral-alpha-4;
+}
+
+.child-padding-8>* {
+    padding: 8px;
+}
+
+.child-padding-16>* {
+    padding: 8px;
+}
+
+.text-neutral-70 {
+    color: azdo.$neutral-70;
+}
+
+.italic {
+    font-style: italic;
+}
+
+.width-50 {
+    width: 50%;
+}
+
+.width-60 {
+    width: 60%;
+}
+
+.width-40 {
+    width: 40%;
+}
+
+.justify-self-stretch {
+    justify-self: stretch;
+}
+
+.gap-4 {
+    gap: 4px;
+}
+
+.gap-8 {
+    gap: 8px;
+}
+
+.gap-16 {
+    gap: 16px;
+}
+
+.alternate-run-row {
+    border: 1px dashed gray;
+    background-color: azdo.$neutral-alpha-4;
+}
+
+.normal-run-row {
+    border: 1px dashed transparent;
+}
+
+.sticky {
+    position: sticky;
+    top: 10px;
+}
+
+.runs-tabbar {
+    border: 1px solid transparent;
+}

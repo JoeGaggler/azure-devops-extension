@@ -15,6 +15,19 @@ let render = (p: AppProps) => {
     );
 }
 
+let refreshMs = 1000 * 60 * 5; // 5 minutes
+
+let refreshToken = () => {
+    console.log("refreshToken");
+    SDK.getAccessToken().then((token) => {
+        console.log("Refreshed token", token);
+        render({ bearerToken: token, appToken: "TODO_REFRESH_APP_TOKEN" });
+        setTimeout(refreshToken, refreshMs);
+    }).catch((err) => {
+        console.error("Error getting access token", err);
+    });
+}
+
 SDK.ready().then(() => {
     console.log("SDK is ready");
     SDK.getAppToken().then((a) => {
@@ -28,6 +41,8 @@ SDK.ready().then(() => {
             console.log("conf", conf);
             render({ bearerToken: b, appToken: a });
             SDK.notifyLoadSucceeded();
+
+            setTimeout(refreshToken, refreshMs);
         });
     });
 });

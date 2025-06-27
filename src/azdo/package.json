@@ -12,10 +12,12 @@
   "dependencies": {
     "azure-devops-extension-api": "^4.234.0",
     "azure-devops-extension-sdk": "^4.0.2",
-    "azure-devops-ui": "^2.251.0"
+    "azure-devops-ui": "^2.251.0",
+    "luxon": "^3.6.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.29.0",
+    "@types/luxon": "^3.6.2",
     "@types/react": "^16.8.1",
     "@types/react-dom": "^16.8.1",
     "@vitejs/plugin-react": "^4.3.4",

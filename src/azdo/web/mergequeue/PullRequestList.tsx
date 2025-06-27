@@ -4,15 +4,31 @@ import { type IHostNavigationService } from 'azure-devops-extension-api';
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { ScrollableList, IListItemDetails, ListSelection, ListItem } from "azure-devops-ui/List";
 import { Status, Statuses, StatusSize } from "azure-devops-ui/Status";
+import { Card } from "azure-devops-ui/Card";
+import { Pill } from "azure-devops-ui/Pill";
+import { PillGroup } from "azure-devops-ui/PillGroup";
 
 interface PullRequestListProps {
     organization?: string;
     project?: string;
     pullRequests: Array<any>;
+    filters: any;
 }
 
 function PullRequestList(p: PullRequestListProps) {
     let selection = new ListSelection(true);
+
+    function filteredList() {
+        let all = [...p.pullRequests];
+        console.log("Filtering drafts: ", p.filters, p.filters.drafts);
+        if (p.filters && (p.filters.drafts as boolean) === false) {
+            console.log("Filtering out drafts");
+            all = all.filter(pr => !pr.isDraft);
+        } else {
+            console.log("Not filtering out drafts");
+        }
+        return all;
+    }
 
     function renderPullRequestRow(
         index: number,
@@ -28,22 +44,44 @@ function PullRequestList(p: PullRequestListProps) {
                 index={index}
                 details={details}>
 
-                <div className={className}>
-                    <Status
-                        {...Statuses.Information}
-                        key="information"
-                        size={StatusSize.m}
-                    />
-                    <div className="font-size-m padding-left-8">{pullRequest.repository.name}</div>
-                    <div className="font-size-m italic text-neutral-70 text-ellipsis padding-left-8">{pullRequest.title}</div>
-                    <div className="font-size-m flex-row flex-grow"><div className="flex-grow" /><div>{luxon.DateTime.fromISO(pullRequest.creationDate).toRelative()}</div></div>
+                {
+                    pullRequest.isBundle && pullRequest.bundle ? (
+                        <Card>
+                            <PullRequestList
+                                organization={p.organization}
+                                project={p.project}
+                                pullRequests={pullRequest.bundle}
+                                filters={{}}
+                            />
+                        </Card>
+                    ) : (
+                        <div className={className}>
+                            <Status
+                                {...Statuses.Information}
+                                key="information"
+                                size={StatusSize.m}
+                            />
+                            <div className="font-size-m padding-left-8">{pullRequest.repository.name}</div>
+                            <div className="font-size-m italic text-neutral-70 text-ellipsis padding-left-8">{pullRequest.title}</div>
+                            <PillGroup className="padding-left-16 padding-right-16">
+                                {
+                                    pullRequest.isDraft && (
+                                        <Pill>Draft</Pill>
+                                    )
+                                }
+                            </PillGroup>
+                            <div className="font-size-m flex-row flex-grow"><div className="flex-grow" />
+                                <div>{luxon.DateTime.fromISO(pullRequest.creationDate).toRelative()}</div>
+                            </div>
+                        </div>
+                    )
+                }
 
-                </div>
+
 
             </ListItem>
         );
     };
-
 
     function selectPullRequest(_: any, data: any) {
         console.log("selected run: ", data, data.data);
@@ -53,7 +91,7 @@ function PullRequestList(p: PullRequestListProps) {
     }
 
     function getPullRequests(): Array<any> {
-        let all = [...p.pullRequests];
+        let all = [...filteredList()];
         return all.sort((a, b) => {
             if (a.pullRequestId < b.pullRequestId) {
                 return 1;

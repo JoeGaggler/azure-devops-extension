@@ -33,7 +33,7 @@ function App(p: AppProps) {
 
     let mergeQueueDocumentCollectionId = "mergeQueue";
     let mergeQueueDocumentId = "primaryQueue";
-    // let userPullRequestFiltersDocumentId = "userPullRequestFilters";
+    let userPullRequestFiltersDocumentId = "userPullRequestFilters";
 
     // run once
     React.useEffect(() => { go() }, []);
@@ -99,6 +99,58 @@ function App(p: AppProps) {
         }
         catch {
         }
+
+        let userFiltersDoc = {
+            id: userPullRequestFiltersDocumentId,
+            drafts: false,
+        }
+        console.log("userFiltersDoc 1: ", mergeQueueDoc);
+        try {
+            userFiltersDoc = await dataManager.getDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, { scopeType: "User" });
+            console.log("userFiltersDoc 2: ", userFiltersDoc);
+        } catch {
+            userFiltersDoc = await dataManager.createDocument(mergeQueueDocumentCollectionId, userFiltersDoc, { scopeType: "User" });
+            console.log("userFiltersDoc 3: ", userFiltersDoc);
+        }
+
+        setShowingDrafts(userFiltersDoc.drafts);
+
+        try {
+            userFiltersDoc = await dataManager.updateDocument(mergeQueueDocumentCollectionId, userFiltersDoc, { scopeType: "User" });
+            console.log("userFiltersDoc 4: ", userFiltersDoc);
+        }
+        catch {
+        }
+    }
+
+    async function persistShowingDrafts(value: boolean) {
+        setShowingDrafts(value);
+
+        const accessToken = await SDK.getAccessToken();
+        const extDataService = await SDK.getService<IExtensionDataService>("ms.vss-features.extension-data-service");
+        const dataManager = await extDataService.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
+
+        let userFiltersDoc = {
+            id: userPullRequestFiltersDocumentId,
+            drafts: value,
+        }
+        console.log("userFiltersDoc 5: ", userFiltersDoc);
+        try {
+            userFiltersDoc = await dataManager.getDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, { scopeType: "User" });
+            console.log("userFiltersDoc 6: ", userFiltersDoc);
+        } catch {
+            userFiltersDoc = await dataManager.createDocument(mergeQueueDocumentCollectionId, userFiltersDoc, { scopeType: "User" });
+            console.log("userFiltersDoc 7: ", userFiltersDoc);
+        }
+
+        userFiltersDoc.drafts = value;
+
+        try {
+            userFiltersDoc = await dataManager.updateDocument(mergeQueueDocumentCollectionId, userFiltersDoc, { scopeType: "User" });
+            console.log("userFiltersDoc 8: ", userFiltersDoc);
+        }
+        catch {
+        }
     }
 
     return (
@@ -131,7 +183,7 @@ function App(p: AppProps) {
                                 offText={"Hiding drafts"}
                                 onText={"Showing drafts"}
                                 checked={showingDrafts}
-                                onChange={(_event, value) => { setShowingDrafts(value); }}
+                                onChange={(_event, value) => { persistShowingDrafts(value); }}
                             />
                         </div>
                         {/* <div className="flex-row">

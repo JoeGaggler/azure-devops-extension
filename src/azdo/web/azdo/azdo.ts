@@ -65,20 +65,6 @@ export async function deleteSharedDocument(colId: string, docId: string): Promis
     }
 }
 
-export async function deleteUserDocument(colId: string, docId: string): Promise<boolean> {
-    const accessToken = await SDK.getAccessToken();
-    const extDataService = await SDK.getService<IExtensionDataService>("ms.vss-features.extension-data-service");
-    const dataManager = await extDataService.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
-
-    try {
-        await dataManager.deleteDocument(colId, docId, { scopeType: "User" });
-        console.log("Delete User Document: ", colId, docId);
-        return true;
-    } catch {
-        return false;
-    }
-}
-
 export async function getOrCreateSharedDocument(colId: string, docId: string, document: any): Promise<any> {
     const accessToken = await SDK.getAccessToken();
     const extDataService = await SDK.getService<IExtensionDataService>("ms.vss-features.extension-data-service");
@@ -130,6 +116,37 @@ export async function getOrCreateUserDocument(colId: string, docId: string, docu
     }
 
     return userFiltersDoc;
+}
+
+export async function trySaveUserDocument(colId: string, docId: string, document: any): Promise<boolean> {
+    const accessToken = await SDK.getAccessToken();
+    const extDataService = await SDK.getService<IExtensionDataService>("ms.vss-features.extension-data-service");
+    const dataManager = await extDataService.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
+
+    document.id = docId;
+
+    try {
+        document = await dataManager.setDocument(colId, document, { scopeType: "User" });
+        console.log("Update Shared Document: ", colId, docId, document);
+        return true;
+    } catch (err) {
+        console.error("Error updating shared document", err);
+        return false;
+    }
+}
+
+export async function deleteUserDocument(colId: string, docId: string): Promise<boolean> {
+    const accessToken = await SDK.getAccessToken();
+    const extDataService = await SDK.getService<IExtensionDataService>("ms.vss-features.extension-data-service");
+    const dataManager = await extDataService.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
+
+    try {
+        await dataManager.deleteDocument(colId, docId, { scopeType: "User" });
+        console.log("Delete User Document: ", colId, docId);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 export async function getAzdoInfo() {

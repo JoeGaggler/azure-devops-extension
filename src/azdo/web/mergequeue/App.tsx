@@ -1,10 +1,9 @@
 import React from "react";
+import * as Azdo from '../azdo/azdo.ts';
 import * as SDK from 'azure-devops-extension-sdk';
 import { Card } from "azure-devops-ui/Card";
-import * as Azdo from '../azdo/azdo.ts';
 import { PullRequestList } from './PullRequestList.tsx';
 import { Icon } from "azure-devops-ui/Icon";
-import { type IExtensionDataService } from 'azure-devops-extension-api';
 import { Toggle } from "azure-devops-ui/Toggle";
 
 interface AppProps {
@@ -17,12 +16,7 @@ interface PullRequestFilters {
     allBranches: boolean;
 }
 
-interface ExtensionDocument {
-    id: string;
-    __etag?: number;
-}
-
-interface MergeQueueList extends ExtensionDocument {
+interface MergeQueueList {
     queues: Array<MergeQueue>;
 }
 
@@ -37,7 +31,6 @@ function App(p: AppProps) {
 
     // Extension Document IDs
     let mergeQueueDocumentCollectionId = "mergeQueue";
-    let primaryQueueDocumentId = "primaryQueue";
     let mergeQueueListDocumentId = "mergeQueueList";
     let repoCacheDocumentId = "repoCache";
     let userPullRequestFiltersDocumentId = "userPullRequestFilters";
@@ -46,7 +39,7 @@ function App(p: AppProps) {
     const [allPullRequests, setAllPullRequests] = React.useState<Array<any>>([]);
     const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false });
     const [repoMap, setRepoMap] = React.useState<any>({});
-    const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [], id: mergeQueueListDocumentId });
+    const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] });
 
 
     React.useEffect(() => { init() }, []); // run once
@@ -65,13 +58,11 @@ function App(p: AppProps) {
 
         // setup merge queue list
         let newMergeQueueList: MergeQueueList = {
-            id: mergeQueueListDocumentId,
             queues: []
         }
         newMergeQueueList = await Azdo.getOrCreateSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)
         await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList); // TODO: REMOVE THIS
-        newMergeQueueList = {
-            id: mergeQueueListDocumentId,
+        newMergeQueueList = { // TODO: REMOVE THIS
             queues: [
                 {
                     pullRequests: [
@@ -149,22 +140,13 @@ function App(p: AppProps) {
     async function persistFilters(value: PullRequestFilters) {
         setFilters(value);
 
-        const accessToken = await SDK.getAccessToken();
-        const extDataService = await SDK.getService<IExtensionDataService>("ms.vss-features.extension-data-service");
-        const dataManager = await extDataService.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
-
         let userFiltersDoc = { ...value };
         userFiltersDoc = await Azdo.getOrCreateUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
 
         userFiltersDoc.drafts = value.drafts;
         userFiltersDoc.allBranches = value.allBranches;
 
-        try {
-            userFiltersDoc = await dataManager.updateDocument(mergeQueueDocumentCollectionId, userFiltersDoc, { scopeType: "User" });
-            console.log("userFiltersDoc 8: ", userFiltersDoc);
-        }
-        catch {
-        }
+        Azdo.trySaveUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
     }
 
     return (
@@ -173,12 +155,16 @@ function App(p: AppProps) {
 
                 <h2>Merge Queue</h2>
                 <Card className="padding-8">
-                    {/* <ButtonGroup className="flex-wrap">
-                        <Button
-                            text="New Train"
-                            onClick={() => alert("TODO: Create a new release train")}
-                        />
-                    </ButtonGroup> */}
+                    {
+                        /*
+                        <ButtonGroup className="flex-wrap">
+                            <Button
+                                text="New Train"
+                                onClick={() => alert("TODO: Create a new release train")}
+                            />
+                        </ButtonGroup> 
+                        */
+                    }
                     <PullRequestList
                         pullRequests={getPrimaryPullRequests()}
                         organization={tenantInfo.organization}

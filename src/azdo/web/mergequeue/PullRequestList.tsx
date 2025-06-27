@@ -41,26 +41,6 @@ function PullRequestList(p: PullRequestListProps) {
         console.log("all map: ", all);
         if (p.filters && (p.filters.allBranches as boolean) == false && p.repos) {
             all = all.filter(pr => { return true === (pr && pr.isDefaultBranch) });
-            // console.log("Repo count: ", Object.keys(p.repos).length);
-            // for (let pr of all) {
-            //     pr.isDefaultBranch = false
-            //     let repo = p.repos[pr.repository.name];
-            //     if (!repo) { continue }
-            //     pr.isDefaultBranch = (pr.targetRefName == repo.defaultBranch)
-            // }
-
-            // all = all.filter(pr => {
-            //     if (!pr.repository) {
-            //         console.warn("Pull request has no repository:", pr);
-            //         return false;
-            //     }
-            //     let repo = p.repos[pr.repository.name];
-            //     if (!repo) {
-            //         console.warn("No repository found for pull request:", pr);
-            //         return false;
-            //     }
-            //     return (pr.targetRefName == repo.defaultBranch);
-            // });
         }
 
         return all;

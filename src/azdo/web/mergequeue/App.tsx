@@ -20,6 +20,11 @@ interface AppProps {
     appToken: string | null;
 }
 
+interface PullRequestFilters {
+    drafts: boolean;
+    allBranches: boolean;
+}
+
 function App(p: AppProps) {
     if (p) {
         console.log("App props:", p);
@@ -29,8 +34,7 @@ function App(p: AppProps) {
     const [proj, setProj] = React.useState<string | undefined>();
     const [allPullRequests, setAllPullRequests] = React.useState<Array<any>>([]);
     const [queuedPullRequests, setQueuedPullRequests] = React.useState<Array<any>>([]);
-    const [showingDrafts, setShowingDrafts] = React.useState<boolean>(false);
-    const [showingAllBranches, setShowingAllBranches] = React.useState<boolean>(false);
+    const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false });
     const [repoMap, setRepoMap] = React.useState<any>({});
 
     let mergeQueueDocumentCollectionId = "mergeQueue";
@@ -86,8 +90,7 @@ function App(p: AppProps) {
         }
         userFiltersDoc = await getOrCreateUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc)
 
-        setShowingDrafts(userFiltersDoc.drafts);
-        setShowingAllBranches(userFiltersDoc.allBranches);
+        setFilters({ ...userFiltersDoc });
 
         try {
             userFiltersDoc = await dataManager.updateDocument(mergeQueueDocumentCollectionId, userFiltersDoc, { scopeType: "User" });
@@ -139,48 +142,22 @@ function App(p: AppProps) {
         console.log("Shared map:", sharedMap);
     }
 
-    async function persistShowingDrafts(value: boolean) {
-        setShowingDrafts(value);
+    async function persistFilters(value: PullRequestFilters) {
+        setFilters(value);
 
         const accessToken = await SDK.getAccessToken();
         const extDataService = await SDK.getService<IExtensionDataService>("ms.vss-features.extension-data-service");
         const dataManager = await extDataService.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
 
-        let userFiltersDoc = {
-            drafts: value,
-            allBranches: false
-        }
+        let userFiltersDoc = { ...value };
         userFiltersDoc = await getOrCreateUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
 
-        userFiltersDoc.drafts = value;
+        userFiltersDoc.drafts = value.drafts;
+        userFiltersDoc.allBranches = value.allBranches;
 
         try {
             userFiltersDoc = await dataManager.updateDocument(mergeQueueDocumentCollectionId, userFiltersDoc, { scopeType: "User" });
             console.log("userFiltersDoc 8: ", userFiltersDoc);
-        }
-        catch {
-        }
-    }
-
-    // TODO: combine all filters
-    async function persistShowingAllBranches(value: boolean) {
-        setShowingAllBranches(value);
-
-        const accessToken = await SDK.getAccessToken();
-        const extDataService = await SDK.getService<IExtensionDataService>("ms.vss-features.extension-data-service");
-        const dataManager = await extDataService.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
-
-        let userFiltersDoc = {
-            drafts: false,
-            allBranches: value
-        }
-        userFiltersDoc = await getOrCreateUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
-
-        userFiltersDoc.allBranches = value;
-
-        try {
-            userFiltersDoc = await dataManager.updateDocument(mergeQueueDocumentCollectionId, userFiltersDoc, { scopeType: "User" });
-            console.log("userFiltersDoc 9: ", userFiltersDoc);
         }
         catch {
         }
@@ -216,28 +193,21 @@ function App(p: AppProps) {
                             <Toggle
                                 offText={"All branches"}
                                 onText={"All branches"}
-                                checked={showingAllBranches}
-                                onChange={(_event, value) => { persistShowingAllBranches(value); }}
+                                checked={filters.allBranches}
+                                onChange={(_event, value) => { persistFilters({ ...filters, allBranches: value }) }}
                             />
                             <Toggle
                                 offText={"Drafts"}
                                 onText={"Drafts"}
-                                checked={showingDrafts}
-                                onChange={(_event, value) => { persistShowingDrafts(value); }}
+                                checked={filters.drafts}
+                                onChange={(_event, value) => { persistFilters({ ...filters, drafts: value }) }}
                             />
                         </div>
                         <PullRequestList
                             pullRequests={allPullRequests}
                             organization={org}
                             project={proj}
-                            filters={
-                                (() => {
-                                    return {
-                                        drafts: showingDrafts,
-                                        allBranches: showingAllBranches
-                                    }
-                                })()
-                            }
+                            filters={filters}
                             repos={repoMap}
                         />
                     </div>

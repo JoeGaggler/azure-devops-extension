@@ -51,6 +51,34 @@ export async function approveRun(approvalId: string, status: string, comment: st
     return response;
 }
 
+export async function deleteSharedDocument(colId: string, docId: string): Promise<boolean> {
+    const accessToken = await SDK.getAccessToken();
+    const extDataService = await SDK.getService<IExtensionDataService>("ms.vss-features.extension-data-service");
+    const dataManager = await extDataService.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
+
+    try {
+        await dataManager.deleteDocument(colId, docId);
+        console.log("Delete Shared Document: ", colId, docId);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+export async function deleteUserDocument(colId: string, docId: string): Promise<boolean> {
+    const accessToken = await SDK.getAccessToken();
+    const extDataService = await SDK.getService<IExtensionDataService>("ms.vss-features.extension-data-service");
+    const dataManager = await extDataService.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
+
+    try {
+        await dataManager.deleteDocument(colId, docId, { scopeType: "User" });
+        console.log("Delete User Document: ", colId, docId);
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 export async function getOrCreateSharedDocument(colId: string, docId: string, document: any): Promise<any> {
     const accessToken = await SDK.getAccessToken();
     const extDataService = await SDK.getService<IExtensionDataService>("ms.vss-features.extension-data-service");
@@ -105,7 +133,7 @@ export async function getOrCreateUserDocument(colId: string, docId: string, docu
 }
 
 export async function getAzdoInfo() {
-    let newInfo: AzdoInfo = {};
+    let newInfo: TenantInfo = {};
 
     let host = SDK.getHost()
     newInfo.organization = host.name;
@@ -119,7 +147,7 @@ export async function getAzdoInfo() {
     return newInfo;
 }
 
-export interface AzdoInfo {
+export interface TenantInfo {
     organization?: string;
     project?: string;
 }

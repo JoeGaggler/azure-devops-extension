@@ -17,29 +17,44 @@ interface PullRequestFilters {
     allBranches: boolean;
 }
 
+interface ExtensionDocument {
+    id: string;
+    __etag?: number;
+}
+
+interface MergeQueueList extends ExtensionDocument {
+    queues: Array<MergeQueue>;
+}
+
+interface MergeQueue {
+    pullRequests: Array<any>;
+}
+
 function App(p: AppProps) {
     if (p) {
         console.log("App props:", p);
     }
 
-    const [azdoInfo, setAzdoInfo] = React.useState<Azdo.AzdoInfo>({});
-    const [allPullRequests, setAllPullRequests] = React.useState<Array<any>>([]);
-    const [queuedPullRequests, setQueuedPullRequests] = React.useState<Array<any>>([]);
-    const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false });
-    const [repoMap, setRepoMap] = React.useState<any>({});
-
     // Extension Document IDs
     let mergeQueueDocumentCollectionId = "mergeQueue";
     let primaryQueueDocumentId = "primaryQueue";
+    let mergeQueueListDocumentId = "mergeQueueList";
     let repoCacheDocumentId = "repoCache";
     let userPullRequestFiltersDocumentId = "userPullRequestFilters";
-    
+
+    const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
+    const [allPullRequests, setAllPullRequests] = React.useState<Array<any>>([]);
+    const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false });
+    const [repoMap, setRepoMap] = React.useState<any>({});
+    const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [], id: mergeQueueListDocumentId });
+
+
     React.useEffect(() => { init() }, []); // run once
     async function init() {
         let bearer = await SDK.getAccessToken()
 
         let info = await Azdo.getAzdoInfo();
-        setAzdoInfo(info)
+        setTenantInfo(info)
 
         let pullRequests = await Azdo.getAzdo(`https://dev.azure.com/${info.organization}/${info.project}/_apis/git/pullrequests?api-version=7.2-preview.2`, bearer as string);
         console.log("Pull Requests value:", pullRequests.value);
@@ -48,29 +63,45 @@ function App(p: AppProps) {
 
         setAllPullRequests(pullRequests.value);
 
-        // HACK: for demo purposes, we will just take the first 5 pull requests
-        let queue = [
-            pullRequests.value[0],
-            pullRequests.value[1],
-            pullRequests.value[2],
-            pullRequests.value[3],
-            pullRequests.value[4]
-        ]
-        setQueuedPullRequests(queue);
-
-        let primaryQueue = {
-            prs: []
+        // setup merge queue list
+        let newMergeQueueList: MergeQueueList = {
+            id: mergeQueueListDocumentId,
+            queues: []
         }
-        primaryQueue = await Azdo.getOrCreateSharedDocument(mergeQueueDocumentCollectionId, primaryQueueDocumentId, primaryQueue)
-        await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, primaryQueueDocumentId, primaryQueue);
+        newMergeQueueList = await Azdo.getOrCreateSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)
+        await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList); // TODO: REMOVE THIS
+        newMergeQueueList = {
+            id: mergeQueueListDocumentId,
+            queues: [
+                {
+                    pullRequests: [
+                        // HACK: for demo purposes, we will just take the first 5 pull requests
+                        pullRequests.value[0],
+                        pullRequests.value[1],
+                        pullRequests.value[2],
+                        pullRequests.value[3],
+                        pullRequests.value[4]
+                    ]
+                }
+            ]
+        }
+        setMergeQueueList(newMergeQueueList);
 
+        // setup user filters
         let userFiltersDoc = {
             drafts: false,
             allBranches: false
         }
         userFiltersDoc = await Azdo.getOrCreateUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc)
-
         setFilters({ ...userFiltersDoc });
+    }
+
+    // TODO: FIX THIS
+    function getPrimaryPullRequests(): Array<any> {
+        if (mergeQueueList && mergeQueueList.queues && mergeQueueList.queues.length > 0) {
+            return mergeQueueList.queues[0].pullRequests;
+        }
+        return [];
     }
 
     async function refreshRepos(value: any) {
@@ -149,9 +180,9 @@ function App(p: AppProps) {
                         />
                     </ButtonGroup> */}
                     <PullRequestList
-                        pullRequests={queuedPullRequests}
-                        organization={azdoInfo.organization}
-                        project={azdoInfo.project}
+                        pullRequests={getPrimaryPullRequests()}
+                        organization={tenantInfo.organization}
+                        project={tenantInfo.project}
                         filters={{}}
                         repos={repoMap}
                     />
@@ -178,8 +209,8 @@ function App(p: AppProps) {
                         </div>
                         <PullRequestList
                             pullRequests={allPullRequests}
-                            organization={azdoInfo.organization}
-                            project={azdoInfo.project}
+                            organization={tenantInfo.organization}
+                            project={tenantInfo.project}
                             filters={filters}
                             repos={repoMap}
                         />

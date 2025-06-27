@@ -4,7 +4,7 @@ import * as SDK from 'azure-devops-extension-sdk';
 import { IProjectPageService } from "azure-devops-extension-api";
 // import { Button } from "azure-devops-ui/Button";
 import { Card } from "azure-devops-ui/Card";
-import { getAzdo } from '../azdo/azdo.ts';
+import { getAzdo, getOrCreateUserDocument, getOrCreateSharedDocument, trySaveSharedDocument } from '../azdo/azdo.ts';
 import { PullRequestList } from './PullRequestList.tsx';
 // import { Button } from "azure-devops-ui/Button";
 // import { ButtonGroup } from "azure-devops-ui/ButtonGroup";
@@ -30,9 +30,12 @@ function App(p: AppProps) {
     const [allPullRequests, setAllPullRequests] = React.useState<Array<any>>([]);
     const [queuedPullRequests, setQueuedPullRequests] = React.useState<Array<any>>([]);
     const [showingDrafts, setShowingDrafts] = React.useState<boolean>(false);
+    const [showingAllBranches, setShowingAllBranches] = React.useState<boolean>(false);
+    const [repoMap, setRepoMap] = React.useState<any>({});
 
     let mergeQueueDocumentCollectionId = "mergeQueue";
     let mergeQueueDocumentId = "primaryQueue";
+    let repoCacheDocumentId = "repoCache";
     let userPullRequestFiltersDocumentId = "userPullRequestFilters";
 
     // run once
@@ -54,16 +57,11 @@ function App(p: AppProps) {
         let pullRequests = await getAzdo(`https://dev.azure.com/${host.name}/${proj?.name}/_apis/git/pullrequests?api-version=7.2-preview.2`, bearer as string);
         console.log("Pull Requests value:", pullRequests.value);
 
+        await refreshRepos(pullRequests.value);
+
         setAllPullRequests(pullRequests.value);
 
         let queue = [
-            // {
-            //     isBundle: true,
-            //     bundle: [
-            //         pullRequests.value[0],
-            //         pullRequests.value[1]
-            //     ]
-            // },
             pullRequests.value[0],
             pullRequests.value[1],
             pullRequests.value[2],
@@ -77,43 +75,19 @@ function App(p: AppProps) {
         const dataManager = await extDataService.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
 
         let mergeQueueDoc = {
-            id: mergeQueueDocumentId,
             prs: []
         }
-        console.log("mergeQueueDoc 1: ", mergeQueueDoc);
-        try {
-            mergeQueueDoc = await dataManager.getDocument(mergeQueueDocumentCollectionId, mergeQueueDocumentId);
-            console.log("mergeQueueDoc 2: ", mergeQueueDoc);
-        } catch {
-            // mergeQueueDoc = {
-            //     id: mergeQueueDocumentId,
-            //     prs: []
-            // }
-            mergeQueueDoc = await dataManager.createDocument(mergeQueueDocumentCollectionId, mergeQueueDoc);
-            console.log("mergeQueueDoc 3: ", mergeQueueDoc);
-        }
-
-        try {
-            mergeQueueDoc = await dataManager.updateDocument(mergeQueueDocumentCollectionId, mergeQueueDoc);
-            console.log("mergeQueueDoc 4: ", mergeQueueDoc);
-        }
-        catch {
-        }
+        mergeQueueDoc = await getOrCreateSharedDocument(mergeQueueDocumentCollectionId, mergeQueueDocumentId, mergeQueueDoc)
+        await trySaveSharedDocument(mergeQueueDocumentCollectionId, mergeQueueDocumentId, mergeQueueDoc);
 
         let userFiltersDoc = {
-            id: userPullRequestFiltersDocumentId,
             drafts: false,
+            allBranches: false
         }
-        console.log("userFiltersDoc 1: ", mergeQueueDoc);
-        try {
-            userFiltersDoc = await dataManager.getDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, { scopeType: "User" });
-            console.log("userFiltersDoc 2: ", userFiltersDoc);
-        } catch {
-            userFiltersDoc = await dataManager.createDocument(mergeQueueDocumentCollectionId, userFiltersDoc, { scopeType: "User" });
-            console.log("userFiltersDoc 3: ", userFiltersDoc);
-        }
+        userFiltersDoc = await getOrCreateUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc)
 
         setShowingDrafts(userFiltersDoc.drafts);
+        setShowingAllBranches(userFiltersDoc.allBranches);
 
         try {
             userFiltersDoc = await dataManager.updateDocument(mergeQueueDocumentCollectionId, userFiltersDoc, { scopeType: "User" });
@@ -121,6 +95,48 @@ function App(p: AppProps) {
         }
         catch {
         }
+    }
+
+    async function refreshRepos(value: any) {
+        let map = repoMap;
+
+        let sharedMap = await getOrCreateSharedDocument(mergeQueueDocumentCollectionId, repoCacheDocumentId, {});
+        if (sharedMap) {
+            console.log("Shared repo map:", sharedMap);
+        }
+
+        for (let pullRequest of value) {
+            if (pullRequest.repository.name && map[pullRequest.repository.name]) {
+                // already cached
+                continue
+            }
+            if (sharedMap && sharedMap[pullRequest.repository.name]) {
+                let repo = sharedMap[pullRequest.repository.name];
+                if (repo && repo.id && repo.name && repo.defaultBranch) {
+                    map[pullRequest.repository.name] = repo;
+                    continue
+                }
+            }
+            if (pullRequest.repository && pullRequest.repository.name && pullRequest.repository.url) {
+                let repo = await getAzdo(pullRequest.repository.url, p.bearerToken as string);
+                console.log("Repo:", pullRequest.repository.name, repo);
+                let newRepo = {
+                    id: repo.id,
+                    name: repo.name,
+                    defaultBranch: repo.defaultBranch,
+                }
+                map[pullRequest.repository.name] = newRepo;
+                sharedMap[pullRequest.repository.name] = newRepo;
+            } else {
+                // console.warn("No repository found for pull request:", pullRequest);
+            }
+        }
+
+        setRepoMap(map);
+        trySaveSharedDocument(mergeQueueDocumentCollectionId, repoCacheDocumentId, sharedMap);
+
+        console.log("Repo map:", map);
+        console.log("Shared map:", sharedMap);
     }
 
     async function persistShowingDrafts(value: boolean) {
@@ -131,23 +147,40 @@ function App(p: AppProps) {
         const dataManager = await extDataService.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
 
         let userFiltersDoc = {
-            id: userPullRequestFiltersDocumentId,
             drafts: value,
+            allBranches: false
         }
-        console.log("userFiltersDoc 5: ", userFiltersDoc);
-        try {
-            userFiltersDoc = await dataManager.getDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, { scopeType: "User" });
-            console.log("userFiltersDoc 6: ", userFiltersDoc);
-        } catch {
-            userFiltersDoc = await dataManager.createDocument(mergeQueueDocumentCollectionId, userFiltersDoc, { scopeType: "User" });
-            console.log("userFiltersDoc 7: ", userFiltersDoc);
-        }
+        userFiltersDoc = await getOrCreateUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
 
         userFiltersDoc.drafts = value;
 
         try {
             userFiltersDoc = await dataManager.updateDocument(mergeQueueDocumentCollectionId, userFiltersDoc, { scopeType: "User" });
             console.log("userFiltersDoc 8: ", userFiltersDoc);
+        }
+        catch {
+        }
+    }
+
+    // TODO: combine all filters
+    async function persistShowingAllBranches(value: boolean) {
+        setShowingAllBranches(value);
+
+        const accessToken = await SDK.getAccessToken();
+        const extDataService = await SDK.getService<IExtensionDataService>("ms.vss-features.extension-data-service");
+        const dataManager = await extDataService.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
+
+        let userFiltersDoc = {
+            drafts: false,
+            allBranches: value
+        }
+        userFiltersDoc = await getOrCreateUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
+
+        userFiltersDoc.allBranches = value;
+
+        try {
+            userFiltersDoc = await dataManager.updateDocument(mergeQueueDocumentCollectionId, userFiltersDoc, { scopeType: "User" });
+            console.log("userFiltersDoc 9: ", userFiltersDoc);
         }
         catch {
         }
@@ -170,6 +203,7 @@ function App(p: AppProps) {
                         organization={org}
                         project={proj}
                         filters={{}}
+                        repos={repoMap}
                     />
                 </Card>
 
@@ -178,34 +212,20 @@ function App(p: AppProps) {
                 <h2>All Pull Requests</h2>
                 <Card className="padding-8">
                     <div className="flex-column">
-                        <div className="padding-8 flex-row">
+                        <div className="padding-8 flex-row rhythm-horizontal-16">
                             <Toggle
-                                offText={"Hiding drafts"}
-                                onText={"Showing drafts"}
+                                offText={"All branches"}
+                                onText={"All branches"}
+                                checked={showingAllBranches}
+                                onChange={(_event, value) => { persistShowingAllBranches(value); }}
+                            />
+                            <Toggle
+                                offText={"Drafts"}
+                                onText={"Drafts"}
                                 checked={showingDrafts}
                                 onChange={(_event, value) => { persistShowingDrafts(value); }}
                             />
                         </div>
-                        {/* <div className="flex-row">
-                        <Dropdown
-                            items={[
-                                { id: "include", text: "Include drafts" },
-                                { id: "exclude", text: "Exclude drafts" },
-                                { id: "only", text: "Only drafts" }
-                            ]}
-                            onSelect={() => { }}
-                            placeholder="Select drafts"
-                        />
-                        <Dropdown
-                            items={[
-                                { id: "include", text: "Include drafts" },
-                                { id: "exclude", text: "Exclude drafts" },
-                                { id: "only", text: "Only drafts" }
-                            ]}
-                            onSelect={() => { }}
-                            placeholder="Demo dropdown"
-                        />
-                    </div> */}
                         <PullRequestList
                             pullRequests={allPullRequests}
                             organization={org}
@@ -213,10 +233,12 @@ function App(p: AppProps) {
                             filters={
                                 (() => {
                                     return {
-                                        drafts: showingDrafts
+                                        drafts: showingDrafts,
+                                        allBranches: showingAllBranches
                                     }
                                 })()
                             }
+                            repos={repoMap}
                         />
                     </div>
                 </Card>

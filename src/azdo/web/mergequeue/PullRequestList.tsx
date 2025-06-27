@@ -4,7 +4,6 @@ import { type IHostNavigationService } from 'azure-devops-extension-api';
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { ScrollableList, IListItemDetails, ListSelection, ListItem } from "azure-devops-ui/List";
 import { Status, Statuses, StatusSize } from "azure-devops-ui/Status";
-import { Card } from "azure-devops-ui/Card";
 import { Pill } from "azure-devops-ui/Pill";
 import { PillGroup } from "azure-devops-ui/PillGroup";
 
@@ -13,6 +12,7 @@ interface PullRequestListProps {
     project?: string;
     pullRequests: Array<any>;
     filters: any;
+    repos: any;
 }
 
 function PullRequestList(p: PullRequestListProps) {
@@ -27,6 +27,40 @@ function PullRequestList(p: PullRequestListProps) {
         } else {
             console.log("Not filtering out drafts");
         }
+
+        all = all.map(pr => {
+            pr.isDefaultBranch = false
+            let repo = p.repos[pr.repository.name];
+            if (repo && pr.targetRefName && repo.defaultBranch) {
+                pr.isDefaultBranch = ((pr.targetRefName == repo.defaultBranch) as boolean)
+            }
+            return pr;
+        })
+        console.log("all map: ", all);
+        if (p.filters && (p.filters.allBranches as boolean) == false && p.repos) {
+            all = all.filter(pr => { return true === (pr && pr.isDefaultBranch) });
+            // console.log("Repo count: ", Object.keys(p.repos).length);
+            // for (let pr of all) {
+            //     pr.isDefaultBranch = false
+            //     let repo = p.repos[pr.repository.name];
+            //     if (!repo) { continue }
+            //     pr.isDefaultBranch = (pr.targetRefName == repo.defaultBranch)
+            // }
+
+            // all = all.filter(pr => {
+            //     if (!pr.repository) {
+            //         console.warn("Pull request has no repository:", pr);
+            //         return false;
+            //     }
+            //     let repo = p.repos[pr.repository.name];
+            //     if (!repo) {
+            //         console.warn("No repository found for pull request:", pr);
+            //         return false;
+            //     }
+            //     return (pr.targetRefName == repo.defaultBranch);
+            // });
+        }
+
         return all;
     }
 
@@ -45,36 +79,30 @@ function PullRequestList(p: PullRequestListProps) {
                 details={details}>
 
                 {
-                    pullRequest.isBundle && pullRequest.bundle ? (
-                        <Card>
-                            <PullRequestList
-                                organization={p.organization}
-                                project={p.project}
-                                pullRequests={pullRequest.bundle}
-                                filters={{}}
-                            />
-                        </Card>
-                    ) : (
-                        <div className={className}>
-                            <Status
-                                {...Statuses.Information}
-                                key="information"
-                                size={StatusSize.m}
-                            />
-                            <div className="font-size-m padding-left-8">{pullRequest.repository.name}</div>
-                            <div className="font-size-m italic text-neutral-70 text-ellipsis padding-left-8">{pullRequest.title}</div>
-                            <PillGroup className="padding-left-16 padding-right-16">
-                                {
-                                    pullRequest.isDraft && (
-                                        <Pill>Draft</Pill>
-                                    )
-                                }
-                            </PillGroup>
-                            <div className="font-size-m flex-row flex-grow"><div className="flex-grow" />
-                                <div>{luxon.DateTime.fromISO(pullRequest.creationDate).toRelative()}</div>
-                            </div>
+                    <div className={className}>
+                        <Status
+                            {...Statuses.Information}
+                            key="information"
+                            size={StatusSize.m}
+                        />
+                        <div className="font-size-m padding-left-8">{pullRequest.repository.name}</div>
+                        <div className="font-size-m italic text-neutral-70 text-ellipsis padding-left-8">{pullRequest.title}</div>
+                        <PillGroup className="padding-left-16 padding-right-16">
+                            {
+                                pullRequest.isDraft && (
+                                    <Pill>Draft</Pill>
+                                )
+                            }
+                            {
+                                pullRequest.isDefaultBranch && (
+                                    <Pill>Default Branch</Pill>
+                                )
+                            }
+                        </PillGroup>
+                        <div className="font-size-m flex-row flex-grow"><div className="flex-grow" />
+                            <div>{luxon.DateTime.fromISO(pullRequest.creationDate).toRelative()}</div>
                         </div>
-                    )
+                    </div>
                 }
 
 

@@ -4,7 +4,7 @@ import { type IHostNavigationService } from 'azure-devops-extension-api';
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { ScrollableList, IListItemDetails, ListSelection, ListItem } from "azure-devops-ui/List";
 import { Status, Statuses, StatusSize } from "azure-devops-ui/Status";
-import { Pill } from "azure-devops-ui/Pill";
+import { Pill, PillVariant } from "azure-devops-ui/Pill";
 import { PillGroup } from "azure-devops-ui/PillGroup";
 
 interface PullRequestListProps {
@@ -29,10 +29,12 @@ function PullRequestList(p: PullRequestListProps) {
         }
 
         all = all.map(pr => {
-            pr.isDefaultBranch = false
+            pr.isDefaultBranch = false;
+            pr.targetBranch = undefined;
             let repo = p.repos[pr.repository.name];
             if (repo && pr.targetRefName && repo.defaultBranch) {
                 pr.isDefaultBranch = ((pr.targetRefName == repo.defaultBranch) as boolean)
+                pr.targetBranch = pr.targetRefName.replace("refs/heads/", "");
             }
             return pr;
         })
@@ -81,7 +83,7 @@ function PullRequestList(p: PullRequestListProps) {
                 {
                     <div className={className}>
                         <Status
-                            {...Statuses.Information}
+                            {...(pullRequest.isDraft ? Statuses.Queued : Statuses.Information)}
                             key="information"
                             size={StatusSize.m}
                         />
@@ -94,8 +96,8 @@ function PullRequestList(p: PullRequestListProps) {
                                 )
                             }
                             {
-                                pullRequest.isDefaultBranch && (
-                                    <Pill>Default Branch</Pill>
+                                !pullRequest.isDefaultBranch && pullRequest.targetBranch && (
+                                    <Pill variant={PillVariant.outlined}>{pullRequest.targetBranch}</Pill>
                                 )
                             }
                         </PillGroup>

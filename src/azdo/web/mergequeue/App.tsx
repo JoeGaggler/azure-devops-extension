@@ -1,6 +1,5 @@
 import React from "react";
 import * as Azdo from '../azdo/azdo.ts';
-import * as SDK from 'azure-devops-extension-sdk';
 import { Card } from "azure-devops-ui/Card";
 import { PullRequestList } from './PullRequestList.tsx';
 import { Icon } from "azure-devops-ui/Icon";
@@ -25,9 +24,7 @@ interface MergeQueue {
 }
 
 function App(p: AppProps) {
-    if (p) {
-        console.log("App props:", p);
-    }
+    console.log("AppProps:", p);
 
     // Extension Document IDs
     let mergeQueueDocumentCollectionId = "mergeQueue";
@@ -41,15 +38,13 @@ function App(p: AppProps) {
     const [repoMap, setRepoMap] = React.useState<any>({});
     const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] });
 
-
-    React.useEffect(() => { init() }, []); // run once
+    // initialize the app
+    React.useEffect(() => { init() }, []);
     async function init() {
-        let bearer = await SDK.getAccessToken()
-
         let info = await Azdo.getAzdoInfo();
         setTenantInfo(info)
 
-        let pullRequests = await Azdo.getAzdo(`https://dev.azure.com/${info.organization}/${info.project}/_apis/git/pullrequests?api-version=7.2-preview.2`, bearer as string);
+        let pullRequests = await Azdo.getAllPullRequests(info);
         console.log("Pull Requests value:", pullRequests.value);
 
         refreshRepos(pullRequests.value); // not awaited

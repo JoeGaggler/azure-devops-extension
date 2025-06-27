@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "pingmint-extension",
-  "version": "0.0.203",
+  "version": "0.0.206",
   "name": "Pingmint",
   "description": "Pingmint",
   "publisher": "pingmint",
@@ -23,12 +23,6 @@
       "description": "Merge Queue",
       "targets": [
         "ms.vss-code-web.code-hub-group"
-      ],
-      "includes": [
-        "ms.vss-tfs-web.tfs-page-data-service",
-        "ms.vss-features.host-navigation-service",
-        "ms.vss-features.extension-data-service",
-        "ms.vss-features.host-dialog-service"
       ],
       "properties": {
         "icon": "images/robotbig.png",

@@ -1,11 +1,18 @@
 import React from "react";
+import * as SDK from 'azure-devops-extension-sdk';
 import * as Azdo from '../azdo/azdo.ts';
-import { Card } from "azure-devops-ui/Card";
-import { PullRequestList } from './PullRequestList.tsx';
-import { Toggle } from "azure-devops-ui/Toggle";
+import * as luxon from 'luxon'
+import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Button } from "azure-devops-ui/Button";
+import { Card } from "azure-devops-ui/Card";
 import { ListSelection } from "azure-devops-ui/List";
+import { Pill, PillVariant } from "azure-devops-ui/Pill";
+import { PillGroup } from "azure-devops-ui/PillGroup";
+import { ScrollableList, IListItemDetails, ListItem } from "azure-devops-ui/List";
+import { Status, Statuses, StatusSize } from "azure-devops-ui/Status";
 import { Toast } from "azure-devops-ui/Toast";
+import { Toggle } from "azure-devops-ui/Toggle";
+import { type IHostNavigationService } from 'azure-devops-extension-api';
 
 interface AppProps {
     bearerToken: string | null;
@@ -47,6 +54,7 @@ function App(p: AppProps) {
     const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] });
     const [allSelection, _setAllSelection] = React.useState<ListSelection>(new ListSelection(true));
     const [toastState, setToastState] = React.useState<ToastState>({ message: "Hi!", visible: false, ref: React.createRef() });
+    const [_selectedIds, _setSelectedIds] = React.useState<Array<number>>([]); // TODO: use this
 
     // initialize the app
     React.useEffect(() => { init() }, []);
@@ -97,12 +105,12 @@ function App(p: AppProps) {
     }
 
     // TODO: FIX THIS
-    function getPrimaryPullRequests(): Array<any> {
-        if (mergeQueueList && mergeQueueList.queues && mergeQueueList.queues.length > 0) {
-            return mergeQueueList.queues[0].pullRequests;
-        }
-        return [];
-    }
+    // function getPrimaryPullRequests(): Array<any> {
+    //     if (mergeQueueList && mergeQueueList.queues && mergeQueueList.queues.length > 0) {
+    //         return mergeQueueList.queues[0].pullRequests;
+    //     }
+    //     return [];
+    // }
 
     async function refreshRepos(value: any) {
         let map = repoMap;
@@ -113,17 +121,22 @@ function App(p: AppProps) {
         }
 
         for (let pullRequest of value) {
+            // TODO: cache expiration
+
             if (pullRequest.repository.name && map[pullRequest.repository.name]) {
                 // already cached
                 continue
             }
+
             if (sharedMap && sharedMap[pullRequest.repository.name]) {
                 let repo = sharedMap[pullRequest.repository.name];
                 if (repo && repo.id && repo.name && repo.defaultBranch) {
+                    // copy cached repo to local map
                     map[pullRequest.repository.name] = repo;
                     continue
                 }
             }
+
             if (pullRequest.repository && pullRequest.repository.name && pullRequest.repository.url) {
                 let repo: Azdo.Repo = await Azdo.getAzdo(pullRequest.repository.url, p.bearerToken as string);
                 console.log("Repo:", pullRequest.repository.name, repo);
@@ -171,6 +184,72 @@ function App(p: AppProps) {
             (pr.isDefaultBranch || filters.allBranches) &&
             (!pr.isDraft || (filters.drafts as boolean))
         );
+
+        // TODO: sort
+    }
+
+    function renderPullRequestRow(
+        index: number,
+        pullRequest: any,
+        details: IListItemDetails<any>,
+        key?: string
+    ): React.JSX.Element {
+        let extra = "";
+        let className = `scroll-hidden flex-row flex-center flex-grow padding-4 ${extra}`;
+        return (
+            <ListItem
+                key={key || "list-item" + index}
+                index={index}
+                details={details}
+            >
+                <div className={className}>
+                    <Status
+                        {...(pullRequest.isDraft ? Statuses.Queued : Statuses.Information)}
+                        key="information"
+                        size={StatusSize.m}
+                    />
+                    <div className="font-size-m padding-left-8">{pullRequest.repository.name}</div>
+                    <div className="font-size-m italic text-neutral-70 text-ellipsis padding-left-8">{pullRequest.title}</div>
+                    <PillGroup className="padding-left-16 padding-right-16">
+                        {
+                            pullRequest.isDraft && (
+                                <Pill>Draft</Pill>
+                            )
+                        }
+                        {
+                            !pullRequest.isDefaultBranch && pullRequest.targetBranch && (
+                                <Pill variant={PillVariant.outlined}>{pullRequest.targetBranch}</Pill>
+                            )
+                        }
+                    </PillGroup>
+                    <div className="font-size-m flex-row flex-grow"><div className="flex-grow" />
+                        <div>{luxon.DateTime.fromISO(pullRequest.creationDate).toRelative()}</div>
+                    </div>
+                </div>
+            </ListItem>
+        );
+    };
+
+    // function sortPullRequests(): Array<any> {
+    //     let all = [...p.pullRequests];
+    //     return all.sort((a, b) => {
+    //         let x = a.pullRequestId || 0;
+    //         let y = b.pullRequestId || 0;
+    //         if (x < y) { return 1; }
+    //         else if (x > y) { return -1; }
+    //         else { return 0; }
+    //     })
+    // }
+
+    async function activatePullRequest(_: any, evt: any) {
+        console.log("activated pull request: ", evt);
+        let idx = evt.index;
+        let data = evt.data;
+        console.log("activated pull request2: ", idx, data);
+        const navService = await SDK.getService<IHostNavigationService>("ms.vss-features.host-navigation-service");
+        let url = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_git/${data.repository.name}/pullrequest/${data.pullRequestId}`;
+        console.log("url: ", url);
+        navService.openNewWindow(url, "");
     }
 
     return (
@@ -190,12 +269,17 @@ function App(p: AppProps) {
                         </ButtonGroup> 
                         */
                     }
-                    <PullRequestList
+
+                    {
+                        /*** TODO
+                        <PullRequestList
                         pullRequests={getPrimaryPullRequests()}
                         organization={tenantInfo.organization}
                         project={tenantInfo.project}
                         selection={new ListSelection(true)} // TODO: THIS IS WRONG
-                    />
+                        />
+                        */
+                    }
                 </Card>
 
                 <br />
@@ -239,22 +323,28 @@ function App(p: AppProps) {
                                 }}
                             />
                         </div>
-                        <PullRequestList
-                            pullRequests={filteredList()}
-                            organization={tenantInfo.organization}
-                            project={tenantInfo.project}
+                        <ScrollableList
+                            itemProvider={new ArrayItemProvider(filteredList())}
                             selection={allSelection}
-                            onSelectionChanged={
-                                (s) => {
-                                    console.log("Event Selection changed:", s);
+                            onSelect={(_evt, _listRow) => {
+                                console.log("Event Selection changed:", _evt, _listRow);
+                                // let list = filteredList();
+                                // if (list.length == 0) { return; }
+                                // let index = allSelection.value?.[0]?.beginIndex;
+                                // let pullRequest = list[index];
+                                // console.log("Selected pull request:", pullRequest);
 
-                                    let list = filteredList();
-                                    if (list.length == 0) { return; }
-                                    let index = allSelection.value?.[0]?.beginIndex;
-                                    let pullRequest = list[index];
-                                    console.log("Selected pull request:", pullRequest);
-                                }
-                            }
+                                // FROM PULL REQUEST LIST:
+                                // console.log("selected run: ", data, data.data);
+                                // const t = p.selection.value?.[0];
+                                // if (!t) return;
+                                // let u = p.pullRequests[t.beginIndex];
+                                // if (!u) return;
+                                // p.onSelectionChanged?.(u);
+                            }}
+                            onActivate={activatePullRequest}
+                            renderRow={renderPullRequestRow}
+                            width="100%"
                         />
                     </div>
                 </Card>

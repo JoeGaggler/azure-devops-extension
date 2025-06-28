@@ -133,7 +133,7 @@ export async function trySaveUserDocument(colId: string, docId: string, document
 
     try {
         document = await dataManager.setDocument(colId, document, { scopeType: "User" });
-        console.log("Update Shared Document: ", colId, docId, document);
+        console.log("Update User Document: ", colId, docId, document);
         return true;
     } catch (err) {
         console.error("Error updating shared document", err);

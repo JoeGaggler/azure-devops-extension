@@ -4,6 +4,7 @@ import { Card } from "azure-devops-ui/Card";
 import { PullRequestList } from './PullRequestList.tsx';
 import { Icon } from "azure-devops-ui/Icon";
 import { Toggle } from "azure-devops-ui/Toggle";
+import { Button } from "azure-devops-ui/Button";
 
 interface AppProps {
     bearerToken: string | null;
@@ -53,25 +54,29 @@ function App(p: AppProps) {
 
         // setup merge queue list
         let newMergeQueueList: MergeQueueList = {
-            queues: []
-        }
-        newMergeQueueList = await Azdo.getOrCreateSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)
-        await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList); // TODO: REMOVE THIS
-        newMergeQueueList = { // TODO: REMOVE THIS
             queues: [
+                // maintain at least one queue
                 {
-                    pullRequests: [
-                        // HACK: for demo purposes, we will just take the first 5 pull requests
-                        pullRequests.value[0],
-                        pullRequests.value[1],
-                        pullRequests.value[2],
-                        pullRequests.value[3],
-                        pullRequests.value[4]
-                    ]
+                    pullRequests: []
                 }
             ]
         }
+        newMergeQueueList = await Azdo.getOrCreateSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)
         setMergeQueueList(newMergeQueueList);
+        // newMergeQueueList = { // TODO: REMOVE THIS
+        //     queues: [
+        //         {
+        //             pullRequests: [
+        //                 // HACK: for demo purposes, we will just take the first 5 pull requests
+        //                 pullRequests.value[0],
+        //                 pullRequests.value[1],
+        //                 pullRequests.value[2],
+        //                 pullRequests.value[3],
+        //                 pullRequests.value[4]
+        //             ]
+        //         }
+        //     ]
+        // }
 
         // setup user filters
         let userFiltersDoc = {
@@ -186,6 +191,15 @@ function App(p: AppProps) {
                                 onText={"Drafts"}
                                 checked={filters.drafts}
                                 onChange={(_event, value) => { persistFilters({ ...filters, drafts: value }) }}
+                            />
+                            <div className="flex-grow"></div>
+                            <Button
+                                text="Enqueue"
+                                primary={true}
+                                disabled={false} // TODO: validation
+                                onClick={async () => {
+                                   // TODO
+                                }}
                             />
                         </div>
                         <PullRequestList

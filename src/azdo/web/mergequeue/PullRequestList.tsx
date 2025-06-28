@@ -13,7 +13,7 @@ interface PullRequestListProps {
     project?: string;
     pullRequests: Array<Azdo.PullRequest>;
     filters: any;
-    repos: any;
+    repos: Record<string, Azdo.Repo>;
 }
 
 interface PullRequestItemState extends Azdo.PullRequest {

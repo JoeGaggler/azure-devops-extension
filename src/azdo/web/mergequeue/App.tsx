@@ -36,7 +36,7 @@ function App(p: AppProps) {
     const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
     const [allPullRequests, setAllPullRequests] = React.useState<Array<Azdo.PullRequest>>([]);
     const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false });
-    const [repoMap, setRepoMap] = React.useState<any>({});
+    const [repoMap, setRepoMap] = React.useState<Record<string, Azdo.Repo>>({});
     const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] });
 
     // initialize the app
@@ -116,9 +116,9 @@ function App(p: AppProps) {
                 }
             }
             if (pullRequest.repository && pullRequest.repository.name && pullRequest.repository.url) {
-                let repo = await Azdo.getAzdo(pullRequest.repository.url, p.bearerToken as string);
+                let repo: Azdo.Repo = await Azdo.getAzdo(pullRequest.repository.url, p.bearerToken as string);
                 console.log("Repo:", pullRequest.repository.name, repo);
-                let newRepo = {
+                let newRepo: Azdo.Repo = {
                     id: repo.id,
                     name: repo.name,
                     defaultBranch: repo.defaultBranch,
@@ -198,7 +198,7 @@ function App(p: AppProps) {
                                 primary={true}
                                 disabled={false} // TODO: validation
                                 onClick={async () => {
-                                   // TODO
+                                    // TODO
                                 }}
                             />
                         </div>

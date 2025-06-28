@@ -181,3 +181,9 @@ export interface PullRequest {
     targetRefName?: string;
     isDraft?: boolean;
 }
+
+export interface Repo {
+    id?: string;
+    name?: string;
+    defaultBranch?: string;
+}

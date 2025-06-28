@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "pingmint-extension",
-  "version": "0.0.225",
+  "version": "0.0.237",
   "name": "Pingmint",
   "description": "Pingmint",
   "publisher": "pingmint",

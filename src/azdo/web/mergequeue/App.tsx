@@ -5,6 +5,7 @@ import { PullRequestList } from './PullRequestList.tsx';
 import { Toggle } from "azure-devops-ui/Toggle";
 import { Button } from "azure-devops-ui/Button";
 import { ListSelection } from "azure-devops-ui/List";
+import { Toast } from "azure-devops-ui/Toast";
 
 interface AppProps {
     bearerToken: string | null;
@@ -24,6 +25,12 @@ interface MergeQueue {
     pullRequests: Array<any>;
 }
 
+interface ToastState {
+    message: string;
+    visible: boolean;
+    ref: React.RefObject<Toast>;
+}
+
 function App(p: AppProps) {
     console.log("AppProps:", p);
 
@@ -38,8 +45,8 @@ function App(p: AppProps) {
     const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false });
     const [repoMap, setRepoMap] = React.useState<Record<string, Azdo.Repo>>({});
     const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] });
-
-    let selection = new ListSelection(true);
+    const [allSelection, _setAllSelection] = React.useState<ListSelection>(new ListSelection(true));
+    const [toastState, setToastState] = React.useState<ToastState>({ message: "Hi!", visible: false, ref: React.createRef() });
 
     // initialize the app
     React.useEffect(() => { init() }, []);
@@ -168,6 +175,7 @@ function App(p: AppProps) {
 
     return (
         <>
+            {toastState.visible && <Toast message={toastState.message} ref={toastState.ref} />}
             <div className="padding-8 margin-8">
 
                 <h2>Merge Queue</h2>
@@ -214,7 +222,21 @@ function App(p: AppProps) {
                                 primary={true}
                                 disabled={false} // TODO: validation
                                 onClick={async () => {
-                                    // TODO
+                                    let list = filteredList();
+                                    let index = allSelection.value?.[0]?.beginIndex;
+                                    if (index) {
+                                        let pullRequest = list[index]; // TODO: untyped
+                                        console.log("Enqueue pull request:", pullRequest);
+                                        if (!toastState.visible) {
+                                            setToastState({ ...toastState, message: `TODO: enqueue pull request ${pullRequest.pullRequestId}`, visible: true });
+                                            setTimeout(() => {
+                                                toastState.ref.current?.fadeOut();
+                                                setTimeout(() => {
+                                                    setToastState({ ...toastState, visible: false });
+                                                }, 1000);
+                                            }, 3000);
+                                        }
+                                    }
                                 }}
                             />
                         </div>
@@ -222,10 +244,16 @@ function App(p: AppProps) {
                             pullRequests={filteredList()}
                             organization={tenantInfo.organization}
                             project={tenantInfo.project}
-                            selection={selection}
+                            selection={allSelection}
                             onSelectionChanged={
                                 (s) => {
                                     console.log("Event Selection changed:", s);
+
+                                    let list = filteredList();
+                                    if (list.length == 0) { return; }
+                                    let index = allSelection.value?.[0]?.beginIndex;
+                                    let pullRequest = list[index];
+                                    console.log("Selected pull request:", pullRequest);
                                 }
                             }
                         />

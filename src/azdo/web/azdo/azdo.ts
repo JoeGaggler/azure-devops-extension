@@ -41,10 +41,10 @@ export async function patchAzdo(url: string, body: any, bearertoken: string): Pr
     }
 }
 
-export async function getAllPullRequests(tenantInfo: TenantInfo): Promise<any> {
+export async function getAllPullRequests(tenantInfo: TenantInfo): Promise<Array<PullRequest>> {
     let bearer = await SDK.getAccessToken()
     let json = await getAzdo(`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/git/pullrequests?api-version=7.2-preview.2`, bearer as string);
-    return json // TODO: strong type
+    return json.value
 }
 
 export async function approveRun(approvalId: string, status: string, comment: string, bearertoken: string): Promise<any> {
@@ -173,4 +173,11 @@ export async function getAzdoInfo() {
 export interface TenantInfo {
     organization?: string;
     project?: string;
+}
+
+export interface PullRequest {
+    pullRequestId?: number;
+    repository?: any;
+    targetRefName?: string;
+    isDraft?: boolean;
 }

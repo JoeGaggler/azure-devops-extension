@@ -34,7 +34,7 @@ function App(p: AppProps) {
     let userPullRequestFiltersDocumentId = "userPullRequestFilters";
 
     const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
-    const [allPullRequests, setAllPullRequests] = React.useState<Array<any>>([]);
+    const [allPullRequests, setAllPullRequests] = React.useState<Array<Azdo.PullRequest>>([]);
     const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false });
     const [repoMap, setRepoMap] = React.useState<any>({});
     const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] });
@@ -46,11 +46,11 @@ function App(p: AppProps) {
         setTenantInfo(info)
 
         let pullRequests = await Azdo.getAllPullRequests(info);
-        console.log("Pull Requests value:", pullRequests.value);
+        console.log("Pull Requests value:", pullRequests);
 
-        refreshRepos(pullRequests.value); // not awaited
+        refreshRepos(pullRequests); // not awaited
 
-        setAllPullRequests(pullRequests.value);
+        setAllPullRequests(pullRequests);
 
         // setup merge queue list
         let newMergeQueueList: MergeQueueList = {
@@ -211,9 +211,6 @@ function App(p: AppProps) {
                         />
                     </div>
                 </Card>
-
-                <Icon iconName="Video" />
-
             </div>
         </>
     )

@@ -1,5 +1,6 @@
 import * as SDK from 'azure-devops-extension-sdk';
 import * as luxon from 'luxon'
+import * as Azdo from '../azdo/azdo.ts';
 import { type IHostNavigationService } from 'azure-devops-extension-api';
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { ScrollableList, IListItemDetails, ListSelection, ListItem } from "azure-devops-ui/List";
@@ -10,40 +11,32 @@ import { PillGroup } from "azure-devops-ui/PillGroup";
 interface PullRequestListProps {
     organization?: string;
     project?: string;
-    pullRequests: Array<any>;
+    pullRequests: Array<Azdo.PullRequest>;
     filters: any;
     repos: any;
+}
+
+interface PullRequestItemState extends Azdo.PullRequest {
+    isDefaultBranch: boolean;
+    targetBranch: string;
 }
 
 function PullRequestList(p: PullRequestListProps) {
     let selection = new ListSelection(true);
 
-    function filteredList() {
-        let all = [...p.pullRequests];
-        console.log("Filtering drafts: ", p.filters, p.filters.drafts);
-        if (p.filters && (p.filters.drafts as boolean) === false) {
-            console.log("Filtering out drafts");
-            all = all.filter(pr => !pr.isDraft);
-        } else {
-            console.log("Not filtering out drafts");
-        }
-
-        all = all.map(pr => {
-            pr.isDefaultBranch = false;
-            pr.targetBranch = undefined;
+    function filteredList(): Array<PullRequestItemState> {
+        return p.pullRequests.flatMap((pr) => {
             let repo = p.repos[pr.repository.name];
-            if (repo && pr.targetRefName && repo.defaultBranch) {
-                pr.isDefaultBranch = ((pr.targetRefName == repo.defaultBranch) as boolean)
-                pr.targetBranch = pr.targetRefName.replace("refs/heads/", "");
+            if (!repo) { return [] }
+            return {
+                ...pr,
+                isDefaultBranch: ((pr.targetRefName == repo.defaultBranch) as boolean),
+                targetBranch: (pr.targetRefName ?? "").replace("refs/heads/", "")
             }
-            return pr;
-        })
-        console.log("all map: ", all);
-        if (p.filters && (p.filters.allBranches as boolean) == false && p.repos) {
-            all = all.filter(pr => { return true === (pr && pr.isDefaultBranch) });
-        }
-
-        return all;
+        }).filter(pr =>
+            (pr.isDefaultBranch || p.filters.allBranches) &&
+            (!pr.isDraft || (p.filters.drafts as boolean))
+        );
     }
 
     function renderPullRequestRow(
@@ -103,13 +96,11 @@ function PullRequestList(p: PullRequestListProps) {
     function getPullRequests(): Array<any> {
         let all = [...filteredList()];
         return all.sort((a, b) => {
-            if (a.pullRequestId < b.pullRequestId) {
-                return 1;
-            } else if (a.pullRequestId > b.pullRequestId) {
-                return -1;
-            } else {
-                return 0;
-            }
+            let x = a.pullRequestId || 0;
+            let y = b.pullRequestId || 0;
+            if (x < y) { return 1; }
+            else if (x > y) { return -1; }
+            else { return 0; }
         })
     }
 

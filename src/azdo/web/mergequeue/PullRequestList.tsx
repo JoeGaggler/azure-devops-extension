@@ -14,6 +14,8 @@ interface PullRequestListProps {
     pullRequests: Array<Azdo.PullRequest>;
     filters: any;
     repos: Record<string, Azdo.Repo>;
+    selection: ListSelection;
+    onSelectionChanged?: (selection: Azdo.PullRequest) => void;
 }
 
 interface PullRequestItemState extends Azdo.PullRequest {
@@ -22,7 +24,6 @@ interface PullRequestItemState extends Azdo.PullRequest {
 }
 
 function PullRequestList(p: PullRequestListProps) {
-    let selection = new ListSelection(true);
 
     function filteredList(): Array<PullRequestItemState> {
         return p.pullRequests.flatMap((pr) => {
@@ -88,9 +89,12 @@ function PullRequestList(p: PullRequestListProps) {
 
     function selectPullRequest(_: any, data: any) {
         console.log("selected run: ", data, data.data);
-        // setSelectedRunId(data.data.i);
-        // setSelectedPipelineId(data.data.p);
-        // p.onSelectRun && p.onSelectRun(data.data.i);
+        
+        const t = p.selection.value?.[0];
+        if (!t) return;
+        let u = filteredList()[t.beginIndex];
+        if (!u) return;
+        p.onSelectionChanged?.(u);
     }
 
     function getPullRequests(): Array<any> {
@@ -119,7 +123,7 @@ function PullRequestList(p: PullRequestListProps) {
         <>
             <ScrollableList
                 itemProvider={new ArrayItemProvider(getPullRequests())}
-                selection={selection}
+                selection={p.selection}
                 onSelect={selectPullRequest}
                 onActivate={activatePullRequest}
                 renderRow={renderPullRequestRow}

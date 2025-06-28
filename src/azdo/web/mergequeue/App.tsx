@@ -2,9 +2,9 @@ import React from "react";
 import * as Azdo from '../azdo/azdo.ts';
 import { Card } from "azure-devops-ui/Card";
 import { PullRequestList } from './PullRequestList.tsx';
-import { Icon } from "azure-devops-ui/Icon";
 import { Toggle } from "azure-devops-ui/Toggle";
 import { Button } from "azure-devops-ui/Button";
+import { ListSelection } from "azure-devops-ui/List";
 
 interface AppProps {
     bearerToken: string | null;
@@ -38,6 +38,8 @@ function App(p: AppProps) {
     const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false });
     const [repoMap, setRepoMap] = React.useState<Record<string, Azdo.Repo>>({});
     const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] });
+
+    let selection = new ListSelection(true);
 
     // initialize the app
     React.useEffect(() => { init() }, []);
@@ -171,6 +173,7 @@ function App(p: AppProps) {
                         project={tenantInfo.project}
                         filters={{}}
                         repos={repoMap}
+                        selection={new ListSelection(true)} // TODO: THIS IS WRONG
                     />
                 </Card>
 
@@ -208,6 +211,12 @@ function App(p: AppProps) {
                             project={tenantInfo.project}
                             filters={filters}
                             repos={repoMap}
+                            selection={selection}
+                            onSelectionChanged={
+                                (s) => {
+                                    console.log("Event Selection changed:", s);
+                                }
+                            }
                         />
                     </div>
                 </Card>

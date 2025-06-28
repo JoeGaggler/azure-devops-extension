@@ -12,33 +12,16 @@ interface PullRequestListProps {
     organization?: string;
     project?: string;
     pullRequests: Array<Azdo.PullRequest>;
-    filters: any;
-    repos: Record<string, Azdo.Repo>;
     selection: ListSelection;
     onSelectionChanged?: (selection: Azdo.PullRequest) => void;
 }
 
-interface PullRequestItemState extends Azdo.PullRequest {
-    isDefaultBranch: boolean;
-    targetBranch: string;
-}
+// interface PullRequestItemState extends Azdo.PullRequest {
+//     isDefaultBranch: boolean;
+//     targetBranch: string;
+// }
 
 function PullRequestList(p: PullRequestListProps) {
-
-    function filteredList(): Array<PullRequestItemState> {
-        return p.pullRequests.flatMap((pr) => {
-            let repo = p.repos[pr.repository.name];
-            if (!repo) { return [] }
-            return {
-                ...pr,
-                isDefaultBranch: ((pr.targetRefName == repo.defaultBranch) as boolean),
-                targetBranch: (pr.targetRefName ?? "").replace("refs/heads/", "")
-            }
-        }).filter(pr =>
-            (pr.isDefaultBranch || p.filters.allBranches) &&
-            (!pr.isDraft || (p.filters.drafts as boolean))
-        );
-    }
 
     function renderPullRequestRow(
         index: number,
@@ -92,13 +75,15 @@ function PullRequestList(p: PullRequestListProps) {
         
         const t = p.selection.value?.[0];
         if (!t) return;
-        let u = filteredList()[t.beginIndex];
+        // let u = filteredList()[t.beginIndex];
+        let u = p.pullRequests[t.beginIndex];
         if (!u) return;
         p.onSelectionChanged?.(u);
     }
 
     function getPullRequests(): Array<any> {
-        let all = [...filteredList()];
+        // let all = [...filteredList()];
+        let all = [...p.pullRequests];
         return all.sort((a, b) => {
             let x = a.pullRequestId || 0;
             let y = b.pullRequestId || 0;

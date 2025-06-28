@@ -151,6 +151,21 @@ function App(p: AppProps) {
         Azdo.trySaveUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
     }
 
+    function filteredList(): Array<any> {
+        return allPullRequests.flatMap((pr) => {
+            let repo = repoMap[pr.repository.name];
+            if (!repo) { return [] }
+            return {
+                ...pr,
+                isDefaultBranch: ((pr.targetRefName == repo.defaultBranch) as boolean),
+                targetBranch: (pr.targetRefName ?? "").replace("refs/heads/", "")
+            }
+        }).filter(pr =>
+            (pr.isDefaultBranch || filters.allBranches) &&
+            (!pr.isDraft || (filters.drafts as boolean))
+        );
+    }
+
     return (
         <>
             <div className="padding-8 margin-8">
@@ -171,8 +186,6 @@ function App(p: AppProps) {
                         pullRequests={getPrimaryPullRequests()}
                         organization={tenantInfo.organization}
                         project={tenantInfo.project}
-                        filters={{}}
-                        repos={repoMap}
                         selection={new ListSelection(true)} // TODO: THIS IS WRONG
                     />
                 </Card>
@@ -206,11 +219,9 @@ function App(p: AppProps) {
                             />
                         </div>
                         <PullRequestList
-                            pullRequests={allPullRequests}
+                            pullRequests={filteredList()}
                             organization={tenantInfo.organization}
                             project={tenantInfo.project}
-                            filters={filters}
-                            repos={repoMap}
                             selection={selection}
                             onSelectionChanged={
                                 (s) => {

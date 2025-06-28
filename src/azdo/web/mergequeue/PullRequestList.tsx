@@ -35,54 +35,46 @@ function PullRequestList(p: PullRequestListProps) {
             <ListItem
                 key={key || "list-item" + index}
                 index={index}
-                details={details}>
-
-                {
-                    <div className={className}>
-                        <Status
-                            {...(pullRequest.isDraft ? Statuses.Queued : Statuses.Information)}
-                            key="information"
-                            size={StatusSize.m}
-                        />
-                        <div className="font-size-m padding-left-8">{pullRequest.repository.name}</div>
-                        <div className="font-size-m italic text-neutral-70 text-ellipsis padding-left-8">{pullRequest.title}</div>
-                        <PillGroup className="padding-left-16 padding-right-16">
-                            {
-                                pullRequest.isDraft && (
-                                    <Pill>Draft</Pill>
-                                )
-                            }
-                            {
-                                !pullRequest.isDefaultBranch && pullRequest.targetBranch && (
-                                    <Pill variant={PillVariant.outlined}>{pullRequest.targetBranch}</Pill>
-                                )
-                            }
-                        </PillGroup>
-                        <div className="font-size-m flex-row flex-grow"><div className="flex-grow" />
-                            <div>{luxon.DateTime.fromISO(pullRequest.creationDate).toRelative()}</div>
-                        </div>
+                details={details}
+            >
+                <div className={className}>
+                    <Status
+                        {...(pullRequest.isDraft ? Statuses.Queued : Statuses.Information)}
+                        key="information"
+                        size={StatusSize.m}
+                    />
+                    <div className="font-size-m padding-left-8">{pullRequest.repository.name}</div>
+                    <div className="font-size-m italic text-neutral-70 text-ellipsis padding-left-8">{pullRequest.title}</div>
+                    <PillGroup className="padding-left-16 padding-right-16">
+                        {
+                            pullRequest.isDraft && (
+                                <Pill>Draft</Pill>
+                            )
+                        }
+                        {
+                            !pullRequest.isDefaultBranch && pullRequest.targetBranch && (
+                                <Pill variant={PillVariant.outlined}>{pullRequest.targetBranch}</Pill>
+                            )
+                        }
+                    </PillGroup>
+                    <div className="font-size-m flex-row flex-grow"><div className="flex-grow" />
+                        <div>{luxon.DateTime.fromISO(pullRequest.creationDate).toRelative()}</div>
                     </div>
-                }
-
-
-
+                </div>
             </ListItem>
         );
     };
 
     function selectPullRequest(_: any, data: any) {
         console.log("selected run: ", data, data.data);
-        
         const t = p.selection.value?.[0];
         if (!t) return;
-        // let u = filteredList()[t.beginIndex];
         let u = p.pullRequests[t.beginIndex];
         if (!u) return;
         p.onSelectionChanged?.(u);
     }
 
     function getPullRequests(): Array<any> {
-        // let all = [...filteredList()];
         let all = [...p.pullRequests];
         return all.sort((a, b) => {
             let x = a.pullRequestId || 0;

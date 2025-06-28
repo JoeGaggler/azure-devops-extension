@@ -158,7 +158,7 @@ function App(p: AppProps) {
         Azdo.trySaveUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
     }
 
-    function filteredList(): Array<any> {
+    function filteredList(): Array<PullRequestWithRepo> {
         return allPullRequests.flatMap((pr) => {
             let repo = repoMap[pr.repository.name];
             if (!repo) { return [] }
@@ -223,19 +223,18 @@ function App(p: AppProps) {
                                 disabled={false} // TODO: validation
                                 onClick={async () => {
                                     let list = filteredList();
+                                    if (list.length == 0) { return; }
                                     let index = allSelection.value?.[0]?.beginIndex;
-                                    if (index) {
-                                        let pullRequest = list[index]; // TODO: untyped
-                                        console.log("Enqueue pull request:", pullRequest);
-                                        if (!toastState.visible) {
-                                            setToastState({ ...toastState, message: `TODO: enqueue pull request ${pullRequest.pullRequestId}`, visible: true });
+                                    let pullRequest = list[index]; // TODO: untyped
+                                    console.log("Enqueue pull request:", pullRequest);
+                                    if (!toastState.visible) {
+                                        setToastState({ ...toastState, message: `TODO: enqueue pull request ${pullRequest.pullRequestId}`, visible: true });
+                                        setTimeout(() => {
+                                            toastState.ref.current?.fadeOut();
                                             setTimeout(() => {
-                                                toastState.ref.current?.fadeOut();
-                                                setTimeout(() => {
-                                                    setToastState({ ...toastState, visible: false });
-                                                }, 1000);
-                                            }, 3000);
-                                        }
+                                                setToastState({ ...toastState, visible: false });
+                                            }, 1000);
+                                        }, 3000);
                                     }
                                 }}
                             />
@@ -262,6 +261,11 @@ function App(p: AppProps) {
             </div>
         </>
     )
+}
+
+interface PullRequestWithRepo extends Azdo.PullRequest {
+    isDefaultBranch: boolean;
+    targetBranch: string;
 }
 
 export { App };

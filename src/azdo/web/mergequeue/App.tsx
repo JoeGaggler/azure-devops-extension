@@ -257,6 +257,24 @@ function App(p: AppProps) {
         navService.openNewWindow(url, "");
     }
 
+    async function enqueuePullRequests() {
+        let list = selectedIds
+        console.log("Enqueue pull request:", list);
+        showToast(`Enqueuing pull request: ${list.join(", ")}`);
+    }
+
+    function showToast(message: string) {
+        if (!toastState.visible) {
+            setToastState({ ...toastState, message: message, visible: true });
+            setTimeout(() => {
+                toastState.ref.current?.fadeOut();
+                setTimeout(() => {
+                    setToastState({ ...toastState, visible: false });
+                }, 1000);
+            }, 3000);
+        }
+    }
+
     return (
         <>
             {toastState.visible && <Toast message={toastState.message} ref={toastState.ref} />}
@@ -310,22 +328,7 @@ function App(p: AppProps) {
                                 text="Enqueue"
                                 primary={true}
                                 disabled={false} // TODO: validation
-                                onClick={async () => {
-                                    let list = allFilteredPullRequests;
-                                    if (list.length == 0) { return; }
-                                    let index = allSelection.value?.[0]?.beginIndex;
-                                    let pullRequest = list[index]; // TODO: untyped
-                                    console.log("Enqueue pull request:", pullRequest);
-                                    if (!toastState.visible) {
-                                        setToastState({ ...toastState, message: `TODO: enqueue pull request ${pullRequest.pullRequestId}`, visible: true });
-                                        setTimeout(() => {
-                                            toastState.ref.current?.fadeOut();
-                                            setTimeout(() => {
-                                                setToastState({ ...toastState, visible: false });
-                                            }, 1000);
-                                        }, 3000);
-                                    }
-                                }}
+                                onClick={enqueuePullRequests}
                             />
                         </div>
                         <ScrollableList
@@ -333,7 +336,7 @@ function App(p: AppProps) {
                             selection={allSelection}
                             onSelect={(_evt, _listRow) => {
                                 console.log("Event Selection changed:", _evt, _listRow);
-                                
+
                                 let list = allFilteredPullRequests;
                                 if (list.length == 0) {
                                     setSelectedIds([]);

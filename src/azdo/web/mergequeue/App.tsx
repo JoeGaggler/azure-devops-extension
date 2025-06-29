@@ -94,11 +94,11 @@ function App(p: AppProps) {
     // TODO: if changing the filter hides a selected pull request, we should update the selection to remove it
 
     // rendering the primary queue list
-    let primaryQueueItems = (mergeQueueList?.queues[0]?.pullRequests || []).map((pr) => {
+    let primaryQueueItems: Azdo.PullRequest[] = (mergeQueueList?.queues[0]?.pullRequests || []).flatMap((pr) => {
         let pullRequest = allFilteredPullRequests.find(p => p.pullRequestId == pr.pullRequestId);
         if (!pullRequest) {
             console.warn("Pull request not found in all pull requests:", pr);
-            return null; // skip this item
+            return []; // skip this item
         }
         return {
             ...pullRequest,
@@ -345,6 +345,25 @@ function App(p: AppProps) {
         }
     }
 
+    function onSelectPullRequests(list: Azdo.PullRequest[], listSelection: ListSelection) {
+        if (list.length == 0) {
+            setSelectedIds([]);
+            return;
+        }
+
+        let pids: number[] = []
+        for (let selRange of listSelection.value) {
+            for (let i = selRange.beginIndex; i <= selRange.endIndex; i++) {
+                let pr = list[i];
+                if (pr && pr.pullRequestId) {
+                    pids.push(pr.pullRequestId);
+                }
+            }
+        }
+        setSelectedIds(pids)
+        console.log("Selected pull request IDs:", pids);
+    }
+
     return (
         <>
             {toastState.visible && <Toast message={toastState.message} ref={toastState.ref} />}
@@ -375,27 +394,7 @@ function App(p: AppProps) {
                         <ScrollableList
                             itemProvider={new ArrayItemProvider(primaryQueueItems)}
                             selection={primaryQueueSelection}
-                            onSelect={(_evt, _listRow) => {
-                                console.log("Event Selection changed:", _evt, _listRow);
-
-                                // let list = allFilteredPullRequests;
-                                // if (list.length == 0) {
-                                //     setSelectedIds([]);
-                                //     return;
-                                // }
-
-                                // let pids: number[] = []
-                                // for (let selRange of allSelection.value) {
-                                //     for (let i = selRange.beginIndex; i <= selRange.endIndex; i++) {
-                                //         let pr = list[i];
-                                //         if (pr && pr.pullRequestId) {
-                                //             pids.push(pr.pullRequestId);
-                                //         }
-                                //     }
-                                // }
-                                // setSelectedIds(pids)
-                                // console.log("Selected pull request IDs:", pids);
-                            }}
+                            onSelect={(_evt, _listRow) => { onSelectPullRequests(primaryQueueItems, primaryQueueSelection); }}
                             onActivate={activatePullRequest}
                             renderRow={renderPullRequestRow}
                             width="100%"
@@ -432,27 +431,7 @@ function App(p: AppProps) {
                         <ScrollableList
                             itemProvider={new ArrayItemProvider(allFilteredPullRequests)}
                             selection={allSelection}
-                            onSelect={(_evt, _listRow) => {
-                                console.log("Event Selection changed:", _evt, _listRow);
-
-                                let list = allFilteredPullRequests;
-                                if (list.length == 0) {
-                                    setSelectedIds([]);
-                                    return;
-                                }
-
-                                let pids: number[] = []
-                                for (let selRange of allSelection.value) {
-                                    for (let i = selRange.beginIndex; i <= selRange.endIndex; i++) {
-                                        let pr = list[i];
-                                        if (pr && pr.pullRequestId) {
-                                            pids.push(pr.pullRequestId);
-                                        }
-                                    }
-                                }
-                                setSelectedIds(pids)
-                                console.log("Selected pull request IDs:", pids);
-                            }}
+                            onSelect={(_evt, _listRow) => { onSelectPullRequests(allFilteredPullRequests, allSelection); }}
                             onActivate={activatePullRequest}
                             renderRow={renderPullRequestRow}
                             width="100%"

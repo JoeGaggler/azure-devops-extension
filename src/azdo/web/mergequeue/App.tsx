@@ -30,7 +30,11 @@ interface MergeQueueList {
 }
 
 interface MergeQueue {
-    pullRequests: Array<any>;
+    pullRequests: Array<MergeQueuePullRequest>;
+}
+
+interface MergeQueuePullRequest {
+    pullRequestId: number;
 }
 
 interface ToastState {
@@ -258,9 +262,67 @@ function App(p: AppProps) {
     }
 
     async function enqueuePullRequests() {
-        let list = selectedIds
-        console.log("Enqueue pull request:", list);
-        showToast(`Enqueuing pull request: ${list.join(", ")}`);
+        if (selectedIds.length == 0) {
+            showToast("No pull requests selected to enqueue.");
+            return;
+        }
+        if (selectedIds.length != 1) {
+            showToast("Only one pull request can be enqueued at a time.");
+            return;
+        }
+        let pullRequestId = selectedIds[0];
+        console.log("Enqueuing pull request ID:", pullRequestId);
+        showToast(`Enqueuing pull request ID: ${pullRequestId}`);
+
+        // TODO: already done?
+        let newMergeQueueList: MergeQueueList = {
+            queues: [
+                // maintain at least one queue
+                {
+                    pullRequests: []
+                }
+            ]
+        }
+        newMergeQueueList = await Azdo.getOrCreateSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)
+        console.log("Old merge queue list:", newMergeQueueList);
+
+        let queues: MergeQueue[]
+        if (!newMergeQueueList.queues) {
+            newMergeQueueList.queues = [];
+        }
+        queues = newMergeQueueList.queues;
+
+        if (queues.length == 0) {
+            queues = [
+                {
+                    pullRequests: []
+                }
+            ]
+        }
+        let queue = queues[0]; // TODO: support multiple queues
+
+        let pullRequests = queue.pullRequests
+        if (pullRequests.findIndex(pr => pr.pullRequestId == pullRequestId) >= 0) {
+            showToast(`Pull request ID: ${pullRequestId} is already in the queue.`);
+            return;
+        }
+        pullRequests.push({
+            pullRequestId: pullRequestId
+        })
+
+        newMergeQueueList = {
+            ...newMergeQueueList,
+            queues: [queue] // TODO: support multiple queues
+        };
+        console.log("New merge queue list:", newMergeQueueList);
+
+        if (!await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList))
+        {
+            showToast("Failed to save the merge queue list.");
+            return;
+        }
+
+        setMergeQueueList(newMergeQueueList);
     }
 
     function showToast(message: string) {

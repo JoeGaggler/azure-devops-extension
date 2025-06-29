@@ -333,6 +333,11 @@ function App(p: AppProps) {
         setMergeQueueList(newMergeQueueList);
     }
 
+    async function removePullRequests() {
+        // TODO
+        showToast("TODO: remove selected pull requests.");
+    }
+
     function showToast(message: string) {
         if (!toastState.visible) {
             setToastState({ ...toastState, message: message, visible: true });
@@ -371,26 +376,18 @@ function App(p: AppProps) {
 
                 <h2>Merge Queue</h2>
                 <Card className="padding-8">
-                    {
-                        /*
-                        <ButtonGroup className="flex-wrap">
-                            <Button
-                                text="New Train"
-                                onClick={() => alert("TODO: Create a new release train")}
-                            />
-                        </ButtonGroup> 
-                        */
-                    }
+                    <div className="flex-column">
+                        <div className="padding-8 flex-row rhythm-horizontal-16">
 
-                    {
-                        /*** TODO
-                        <PullRequestList
-                        pullRequests={getPrimaryPullRequests()}
-                        organization={tenantInfo.organization}
-                        project={tenantInfo.project}
-                        selection={new ListSelection(true)} // TODO: THIS IS WRONG
-                        />
-                        */
+                            <div className="flex-grow"></div>
+                            <Button
+                                text="Remove"
+                                danger={true}
+                                disabled={false} // TODO: validation
+                                onClick={removePullRequests}
+                            />
+                        </div>
+
                         <ScrollableList
                             itemProvider={new ArrayItemProvider(primaryQueueItems)}
                             selection={primaryQueueSelection}
@@ -399,7 +396,7 @@ function App(p: AppProps) {
                             renderRow={renderPullRequestRow}
                             width="100%"
                         />
-                    }
+                    </div>
                 </Card>
 
                 <br />

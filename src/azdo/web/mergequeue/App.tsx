@@ -58,7 +58,7 @@ function App(p: AppProps) {
     const [selectedIds, setSelectedIds] = React.useState<number[]>([]); // TODO: use this
 
     const [repoMap, setRepoMap] = React.useState<Record<string, Azdo.Repo>>({});
-    const [_mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] }); // TODO use this
+    const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] }); // TODO use this
     const [toastState, setToastState] = React.useState<ToastState>({ message: "Hi!", visible: false, ref: React.createRef() });
 
     // rendering the all pull requests list
@@ -93,6 +93,29 @@ function App(p: AppProps) {
     }
     // TODO: if changing the filter hides a selected pull request, we should update the selection to remove it
 
+    // rendering the primary queue list
+    let primaryQueueItems = (mergeQueueList?.queues[0]?.pullRequests || []).map((pr) => {
+        let pullRequest = allFilteredPullRequests.find(p => p.pullRequestId == pr.pullRequestId);
+        if (!pullRequest) {
+            console.warn("Pull request not found in all pull requests:", pr);
+            return null; // skip this item
+        }
+        return {
+            ...pullRequest,
+            isDraft: pullRequest.isDraft || false, // ensure isDraft is always defined
+            repository: repoMap[pullRequest.repository.name] || { name: pullRequest.repository.name, defaultBranch: "" }
+        };
+    });
+
+    // rebuild selections from state
+    let primaryQueueSelection = new ListSelection(true);
+    for (let i = 0; i < primaryQueueItems.length; i++) {
+        let pr = primaryQueueItems[i];
+        if (selectedIds.includes(pr?.pullRequestId || 0)) {
+            primaryQueueSelection.select(i, 1, true, true);
+        }
+    }
+
     // initialize the app
     React.useEffect(() => { init() }, []);
     async function init() {
@@ -117,20 +140,6 @@ function App(p: AppProps) {
         }
         newMergeQueueList = await Azdo.getOrCreateSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)
         setMergeQueueList(newMergeQueueList);
-        // newMergeQueueList = { // TODO: REMOVE THIS
-        //     queues: [
-        //         {
-        //             pullRequests: [
-        //                 // HACK: for demo purposes, we will just take the first 5 pull requests
-        //                 pullRequests.value[0],
-        //                 pullRequests.value[1],
-        //                 pullRequests.value[2],
-        //                 pullRequests.value[3],
-        //                 pullRequests.value[4]
-        //             ]
-        //         }
-        //     ]
-        // }
 
         // setup user filters
         let userFiltersDoc = {
@@ -316,8 +325,7 @@ function App(p: AppProps) {
         };
         console.log("New merge queue list:", newMergeQueueList);
 
-        if (!await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList))
-        {
+        if (!await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)) {
             showToast("Failed to save the merge queue list.");
             return;
         }
@@ -364,6 +372,34 @@ function App(p: AppProps) {
                         selection={new ListSelection(true)} // TODO: THIS IS WRONG
                         />
                         */
+                        <ScrollableList
+                            itemProvider={new ArrayItemProvider(primaryQueueItems)}
+                            selection={primaryQueueSelection}
+                            onSelect={(_evt, _listRow) => {
+                                console.log("Event Selection changed:", _evt, _listRow);
+
+                                // let list = allFilteredPullRequests;
+                                // if (list.length == 0) {
+                                //     setSelectedIds([]);
+                                //     return;
+                                // }
+
+                                // let pids: number[] = []
+                                // for (let selRange of allSelection.value) {
+                                //     for (let i = selRange.beginIndex; i <= selRange.endIndex; i++) {
+                                //         let pr = list[i];
+                                //         if (pr && pr.pullRequestId) {
+                                //             pids.push(pr.pullRequestId);
+                                //         }
+                                //     }
+                                // }
+                                // setSelectedIds(pids)
+                                // console.log("Selected pull request IDs:", pids);
+                            }}
+                            onActivate={activatePullRequest}
+                            renderRow={renderPullRequestRow}
+                            width="100%"
+                        />
                     }
                 </Card>
 

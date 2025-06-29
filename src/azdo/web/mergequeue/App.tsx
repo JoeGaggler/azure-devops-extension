@@ -5,6 +5,7 @@ import * as luxon from 'luxon'
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Button } from "azure-devops-ui/Button";
 import { Card } from "azure-devops-ui/Card";
+// import { List } from "azure-devops-ui/List";
 import { ListSelection } from "azure-devops-ui/List";
 import { Pill, PillVariant } from "azure-devops-ui/Pill";
 import { PillGroup } from "azure-devops-ui/PillGroup";
@@ -50,11 +51,43 @@ function App(p: AppProps) {
     const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
     const [allPullRequests, setAllPullRequests] = React.useState<Array<Azdo.PullRequest>>([]);
     const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false });
+    const [selectedIds, setSelectedIds] = React.useState<number[]>([]); // TODO: use this
+
     const [repoMap, setRepoMap] = React.useState<Record<string, Azdo.Repo>>({});
-    const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] });
-    const [allSelection, _setAllSelection] = React.useState<ListSelection>(new ListSelection(true));
+    const [_mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] }); // TODO use this
     const [toastState, setToastState] = React.useState<ToastState>({ message: "Hi!", visible: false, ref: React.createRef() });
-    const [_selectedIds, _setSelectedIds] = React.useState<Array<number>>([]); // TODO: use this
+
+    // rendering the all pull requests list
+    // TODO: useMemo?
+    let allFilteredPullRequests = allPullRequests.flatMap((pr) => {
+        let repo = repoMap[pr.repository.name];
+        if (!repo) { return [] }
+        return {
+            ...pr,
+            isDefaultBranch: ((pr.targetRefName == repo.defaultBranch) as boolean),
+            targetBranch: (pr.targetRefName ?? "").replace("refs/heads/", "")
+        }
+    }).filter(pr =>
+        (pr.isDefaultBranch || filters.allBranches) &&
+        (!pr.isDraft || (filters.drafts as boolean))
+    );
+    allFilteredPullRequests.sort((a, b) => {
+        let x = a.pullRequestId || 0;
+        let y = b.pullRequestId || 0;
+        if (x < y) { return 1; }
+        else if (x > y) { return -1; }
+        else { return 0; }
+    })
+
+    // rebuild selections from state
+    let allSelection = new ListSelection(true);
+    for (let i = 0; i < allFilteredPullRequests.length; i++) {
+        let pr = allFilteredPullRequests[i];
+        if (selectedIds.includes(pr.pullRequestId || 0)) {
+            allSelection.select(i, 1, true, true);
+        }
+    }
+    // TODO: if changing the filter hides a selected pull request, we should update the selection to remove it
 
     // initialize the app
     React.useEffect(() => { init() }, []);
@@ -171,23 +204,6 @@ function App(p: AppProps) {
         Azdo.trySaveUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
     }
 
-    function filteredList(): Array<PullRequestWithRepo> {
-        return allPullRequests.flatMap((pr) => {
-            let repo = repoMap[pr.repository.name];
-            if (!repo) { return [] }
-            return {
-                ...pr,
-                isDefaultBranch: ((pr.targetRefName == repo.defaultBranch) as boolean),
-                targetBranch: (pr.targetRefName ?? "").replace("refs/heads/", "")
-            }
-        }).filter(pr =>
-            (pr.isDefaultBranch || filters.allBranches) &&
-            (!pr.isDraft || (filters.drafts as boolean))
-        );
-
-        // TODO: sort
-    }
-
     function renderPullRequestRow(
         index: number,
         pullRequest: any,
@@ -229,17 +245,6 @@ function App(p: AppProps) {
             </ListItem>
         );
     };
-
-    // function sortPullRequests(): Array<any> {
-    //     let all = [...p.pullRequests];
-    //     return all.sort((a, b) => {
-    //         let x = a.pullRequestId || 0;
-    //         let y = b.pullRequestId || 0;
-    //         if (x < y) { return 1; }
-    //         else if (x > y) { return -1; }
-    //         else { return 0; }
-    //     })
-    // }
 
     async function activatePullRequest(_: any, evt: any) {
         console.log("activated pull request: ", evt);
@@ -306,7 +311,7 @@ function App(p: AppProps) {
                                 primary={true}
                                 disabled={false} // TODO: validation
                                 onClick={async () => {
-                                    let list = filteredList();
+                                    let list = allFilteredPullRequests;
                                     if (list.length == 0) { return; }
                                     let index = allSelection.value?.[0]?.beginIndex;
                                     let pullRequest = list[index]; // TODO: untyped
@@ -324,23 +329,28 @@ function App(p: AppProps) {
                             />
                         </div>
                         <ScrollableList
-                            itemProvider={new ArrayItemProvider(filteredList())}
+                            itemProvider={new ArrayItemProvider(allFilteredPullRequests)}
                             selection={allSelection}
                             onSelect={(_evt, _listRow) => {
                                 console.log("Event Selection changed:", _evt, _listRow);
-                                // let list = filteredList();
-                                // if (list.length == 0) { return; }
-                                // let index = allSelection.value?.[0]?.beginIndex;
-                                // let pullRequest = list[index];
-                                // console.log("Selected pull request:", pullRequest);
+                                
+                                let list = allFilteredPullRequests;
+                                if (list.length == 0) {
+                                    setSelectedIds([]);
+                                    return;
+                                }
 
-                                // FROM PULL REQUEST LIST:
-                                // console.log("selected run: ", data, data.data);
-                                // const t = p.selection.value?.[0];
-                                // if (!t) return;
-                                // let u = p.pullRequests[t.beginIndex];
-                                // if (!u) return;
-                                // p.onSelectionChanged?.(u);
+                                let pids: number[] = []
+                                for (let selRange of allSelection.value) {
+                                    for (let i = selRange.beginIndex; i <= selRange.endIndex; i++) {
+                                        let pr = list[i];
+                                        if (pr && pr.pullRequestId) {
+                                            pids.push(pr.pullRequestId);
+                                        }
+                                    }
+                                }
+                                setSelectedIds(pids)
+                                console.log("Selected pull request IDs:", pids);
                             }}
                             onActivate={activatePullRequest}
                             renderRow={renderPullRequestRow}
@@ -351,11 +361,6 @@ function App(p: AppProps) {
             </div>
         </>
     )
-}
-
-interface PullRequestWithRepo extends Azdo.PullRequest {
-    isDefaultBranch: boolean;
-    targetBranch: string;
 }
 
 export { App };

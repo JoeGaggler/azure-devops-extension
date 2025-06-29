@@ -334,8 +334,65 @@ function App(p: AppProps) {
     }
 
     async function removePullRequests() {
-        // TODO
-        showToast("TODO: remove selected pull requests.");
+        if (selectedIds.length == 0) {
+            showToast("No pull requests selected to remove.");
+            return;
+        }
+        if (selectedIds.length != 1) {
+            showToast("Only one pull request can be removed at a time.");
+            return;
+        }
+        let pullRequestId = selectedIds[0];
+        console.log("Removing pull request ID:", pullRequestId);
+        showToast(`Removing pull request ID: ${pullRequestId}`);
+
+        // TODO: already done?
+        let newMergeQueueList: MergeQueueList = {
+            queues: [
+                // maintain at least one queue
+                {
+                    pullRequests: []
+                }
+            ]
+        }
+        newMergeQueueList = await Azdo.getOrCreateSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)
+        console.log("Old merge queue list:", newMergeQueueList);
+
+        let queues: MergeQueue[]
+        if (!newMergeQueueList.queues) {
+            newMergeQueueList.queues = [];
+        }
+        queues = newMergeQueueList.queues;
+
+        if (queues.length == 0) {
+            queues = [
+                {
+                    pullRequests: []
+                }
+            ]
+        }
+        let queue = queues[0]; // TODO: support multiple queues
+
+        let pullRequests = queue.pullRequests
+        let pullRequestIndex = pullRequests.findIndex(pr => pr.pullRequestId == pullRequestId);
+        if (pullRequestIndex < 0) {
+            showToast(`Pull request ID: ${pullRequestId} no longer in queue.`);
+            return;
+        }
+        pullRequests.splice(pullRequestIndex, 1); // remove the pull request
+
+        newMergeQueueList = {
+            ...newMergeQueueList,
+            queues: [queue] // TODO: support multiple queues
+        };
+        console.log("New merge queue list:", newMergeQueueList);
+
+        if (!await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)) {
+            showToast("Failed to save the merge queue list.");
+            return;
+        }
+
+        setMergeQueueList(newMergeQueueList);
     }
 
     function showToast(message: string) {

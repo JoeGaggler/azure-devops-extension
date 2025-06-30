@@ -1,8 +1,8 @@
 {
   "manifestVersion": 1,
   "id": "pingmint-extension",
-  "version": "0.0.294",
-  "name": "Pingmint",
+  "version": "0.0.345",
+  "name": "PR Merge Queue",
   "description": "Pingmint",
   "publisher": "pingmint",
   "categories": [

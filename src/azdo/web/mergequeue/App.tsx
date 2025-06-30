@@ -6,6 +6,7 @@ import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Button } from "azure-devops-ui/Button";
 import { Card } from "azure-devops-ui/Card";
 // import { List } from "azure-devops-ui/List";
+import { Icon } from "azure-devops-ui/Icon";
 import { ListSelection } from "azure-devops-ui/List";
 import { Pill, PillVariant } from "azure-devops-ui/Pill";
 import { PillGroup } from "azure-devops-ui/PillGroup";
@@ -516,6 +517,7 @@ function App(p: AppProps) {
                         />
                     </div>
                 </Card>
+                <Icon iconName="Video" />
             </div>
         </>
     )

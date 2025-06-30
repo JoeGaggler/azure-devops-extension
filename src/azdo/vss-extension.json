@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "pingmint-extension",
-  "version": "0.0.278",
+  "version": "0.0.294",
   "name": "Pingmint",
   "description": "Pingmint",
   "publisher": "pingmint",
@@ -36,6 +36,8 @@
     "vso.build",
     "vso.build_execute",
     "vso.code",
+    "vso.code_status",
+    "vso.code_write",
     "vso.graph",
     "vso.identity",
     "vso.pipelineresources_use",

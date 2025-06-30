@@ -15,6 +15,9 @@ import { Toast } from "azure-devops-ui/Toast";
 import { Toggle } from "azure-devops-ui/Toggle";
 import { type IHostNavigationService } from 'azure-devops-extension-api';
 
+// TODO: removing a PR from the queue should clear all PR statuses
+// TODO: adding a PR status should remove all prior statuses for that PR
+
 interface AppProps {
     bearerToken: string | null;
     appToken: string | null;
@@ -331,6 +334,27 @@ function App(p: AppProps) {
         }
 
         setMergeQueueList(newMergeQueueList);
+
+        // post pull request status
+        let pullRequest = allFilteredPullRequests.find(pr => pr.pullRequestId == pullRequestId);
+        if (pullRequest) {
+            let body = {
+                "state": "pending",
+                "description": "Pending on merge queue", // TODO: position in queue
+                "context": {
+                    "name": "merge-queue",
+                    "genre": "pingmint"
+                },
+                "targetUrl": `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apps/hub/pingmint.pingmint-extension.pingmint-pipeline-mergequeue`, // TODO: hashtag pr-id
+            };
+            let url = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/git/repositories/${pullRequest.repository.name}/pullRequests/${pullRequestId}/statuses?api-version=7.2-preview.2`;
+            let resp = await Azdo.postAzdo(url, body, p.bearerToken as string);
+            console.log("Pull request status posted:", resp);
+        }
+        else {
+            showToast(`Pull request ID: ${pullRequestId} not found in all pull requests.`);
+        }
+        console.log("Pull request status posted for ID:", pullRequestId);
     }
 
     async function removePullRequests() {

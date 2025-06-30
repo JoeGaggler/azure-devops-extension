@@ -21,6 +21,24 @@ export async function getAzdo(url: string, bearertoken: string): Promise<any> {
     }
 }
 
+export async function deleteAzdo(url: string, bearertoken: string): Promise<any> {
+    console.log("deleteapi", url);
+    const response = await fetch(url, {
+        method: "DELETE",
+        headers: {
+            "Authorization": `Bearer ${bearertoken}`,
+            "Content-Type": "application/json"
+        }
+    });
+    if (response.ok) {
+        // const data = await response.json();
+        // console.log(data);
+        // return data;
+    } else {
+        console.log("Error deleting azdo data", response.statusText);
+    }
+}
+
 export async function patchAzdo(url: string, body: any, bearertoken: string): Promise<any> {
     console.log("patchapi", url, body);
     const response = await fetch(url, {
@@ -38,6 +56,26 @@ export async function patchAzdo(url: string, body: any, bearertoken: string): Pr
         return data;
     } else {
         console.log("Error patching azdo data", response.statusText);
+    }
+}
+
+export async function postAzdo(url: string, body: any, bearertoken: string): Promise<any> {
+    console.log("postapi", url, body);
+    const response = await fetch(url, {
+        method: "POST",
+        headers: {
+            "Authorization": `Bearer ${bearertoken}`,
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body)
+    });
+    console.log("postapi response", response);
+    if (response.ok) {
+        const data = await response.json();
+        console.log(data);
+        return data;
+    } else {
+        console.log("Error posting azdo data", response.statusText);
     }
 }
 

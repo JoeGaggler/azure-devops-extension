@@ -223,7 +223,7 @@ function App(p: AppProps) {
 
     function renderPullRequestRow(
         index: number,
-        pullRequest: any,
+        pullRequest: any, // TODO: strongly type this
         details: IListItemDetails<any>,
         key?: string
     ): React.JSX.Element {

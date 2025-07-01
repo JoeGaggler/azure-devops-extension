@@ -217,6 +217,7 @@ export interface PullRequest {
     pullRequestId?: number;
     repository?: any;
     targetRefName?: string;
+    title?: string;
     isDraft?: boolean;
 }
 

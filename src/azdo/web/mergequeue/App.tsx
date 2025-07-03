@@ -65,6 +65,11 @@ function App(p: AppProps) {
     const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] }); // TODO use this
     const [toastState, setToastState] = React.useState<ToastState>({ message: "Hi!", visible: false, ref: React.createRef() });
 
+    // HACK: force rerendering for server sync
+    const [pollHack, setPollHack] = React.useState(Math.random());
+    React.useEffect(() => { poll(); }, [pollHack]);
+    function Resync() { setPollHack(Math.random()); }
+
     // rendering the all pull requests list
     // TODO: useMemo?
     let allFilteredPullRequests = allPullRequests.flatMap((pr) => {
@@ -111,16 +116,6 @@ function App(p: AppProps) {
         };
     });
 
-    const latestQueueItems = React.useRef(primaryQueueItems);
-    React.useEffect(() => {
-        latestQueueItems.current = primaryQueueItems;
-    }, [primaryQueueItems]);
-
-    const latestTenantInfo = React.useRef(tenantInfo);
-    React.useEffect(() => {
-        latestTenantInfo.current = tenantInfo;
-    }, [tenantInfo]);
-
     // rebuild selections from state
     let primaryQueueSelection = new ListSelection(true);
     for (let i = 0; i < primaryQueueItems.length; i++) {
@@ -131,10 +126,8 @@ function App(p: AppProps) {
     }
 
     async function poll() {
-        let prs = (latestQueueItems.current)
-        console.log("Polling...", prs.length, allPullRequests.length);
-
-        let tenantInfo = latestTenantInfo.current;
+        let prs = (primaryQueueItems)
+        console.log("Polling...");
 
         let isFirst = true;
         let position = 1;
@@ -158,7 +151,7 @@ function App(p: AppProps) {
                         pr.repository.name,
                         pr.pullRequestId,
                         "succeeded",
-                        "Head of merge queue",
+                        "Merge queue: ready",
                         targetUrl
                     );
 
@@ -174,7 +167,7 @@ function App(p: AppProps) {
                     console.log("Posting success status for pull request:", pr.pullRequestId, status0);
                 }
             } else {
-                let statusText = `#${position} on merge queue`;
+                let statusText = `Merge queue: #${position} in line`;
                 if (status0?.state != "pending" || status0.description != statusText) {
                     Azdo.postPullRequestStatus(
                         p.bearerToken as string,
@@ -258,9 +251,9 @@ function App(p: AppProps) {
         userFiltersDoc = await Azdo.getOrCreateUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc)
         setFilters({ ...userFiltersDoc });
 
-        setInterval(() => {
-            poll();
-        }, 1000 * 10);
+        // Refresh from server
+        setInterval(() => { Resync(); }, 1000 * 10);
+        Resync();
     }
 
     // TODO: FIX THIS

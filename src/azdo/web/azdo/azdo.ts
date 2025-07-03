@@ -68,7 +68,6 @@ export async function postAzdo(url: string, body: any, bearertoken: string): Pro
         },
         body: JSON.stringify(body)
     });
-    console.log("postapi response", response);
     if (response.ok) {
         const data = await response.json();
         // console.log(data);

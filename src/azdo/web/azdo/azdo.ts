@@ -13,7 +13,7 @@ export async function getAzdo(url: string, bearertoken: string): Promise<any> {
     });
     if (response.ok) {
         const data = await response.json();
-        console.log(data);
+        // console.log(data);
         return data;
     } else {
         console.log("Error fetching azdo data", response.statusText);
@@ -51,7 +51,7 @@ export async function patchAzdo(url: string, body: any, bearertoken: string): Pr
     console.log("patchapi response", response);
     if (response.ok) {
         const data = await response.json();
-        console.log(data);
+        // console.log(data);
         return data;
     } else {
         console.log("Error patching azdo data", response.statusText);
@@ -71,7 +71,7 @@ export async function postAzdo(url: string, body: any, bearertoken: string): Pro
     console.log("postapi response", response);
     if (response.ok) {
         const data = await response.json();
-        console.log(data);
+        // console.log(data);
         return data;
     } else {
         console.log("Error posting azdo data", response.statusText);

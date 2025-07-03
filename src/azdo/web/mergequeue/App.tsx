@@ -6,7 +6,7 @@ import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Button } from "azure-devops-ui/Button";
 import { Card } from "azure-devops-ui/Card";
 // import { List } from "azure-devops-ui/List";
-import { Icon } from "azure-devops-ui/Icon";
+// import { Icon } from "azure-devops-ui/Icon";
 import { ListSelection } from "azure-devops-ui/List";
 import { Pill, PillVariant } from "azure-devops-ui/Pill";
 import { PillGroup } from "azure-devops-ui/PillGroup";
@@ -562,20 +562,18 @@ function App(p: AppProps) {
             {toastState.visible && <Toast message={toastState.message} ref={toastState.ref} />}
             <div className="padding-8 margin-8">
 
-                <h2>Merge Queue</h2>
+                <div className="padding-8 flex-row flex-baseline rhythm-horizontal-16">
+                    <h2>Merge Queue</h2>
+                    <div className="flex-grow"></div>
+                    <Button
+                        text="Remove"
+                        danger={true}
+                        disabled={false} // TODO: validation
+                        onClick={removePullRequests}
+                    />
+                </div>
                 <Card className="padding-8">
                     <div className="flex-column">
-                        <div className="padding-8 flex-row rhythm-horizontal-16">
-
-                            <div className="flex-grow"></div>
-                            <Button
-                                text="Remove"
-                                danger={true}
-                                disabled={false} // TODO: validation
-                                onClick={removePullRequests}
-                            />
-                        </div>
-
                         <ScrollableList
                             itemProvider={new ArrayItemProvider(primaryQueueItems)}
                             selection={primaryQueueSelection}
@@ -589,30 +587,30 @@ function App(p: AppProps) {
 
                 <br />
 
-                <h2>All Pull Requests</h2>
+                <div className="padding-8 flex-row flex-baseline rhythm-horizontal-16">
+                    <h2>All Pull Requests</h2>
+                    <div className="flex-grow"></div>
+                    <Toggle
+                        offText={"All branches"}
+                        onText={"All branches"}
+                        checked={filters.allBranches}
+                        onChange={(_event, value) => { persistFilters({ ...filters, allBranches: value }) }}
+                    />
+                    <Toggle
+                        offText={"Drafts"}
+                        onText={"Drafts"}
+                        checked={filters.drafts}
+                        onChange={(_event, value) => { persistFilters({ ...filters, drafts: value }) }}
+                    />
+                    <Button
+                        text="Enqueue"
+                        primary={true}
+                        disabled={false} // TODO: validation
+                        onClick={enqueuePullRequests}
+                    />
+                </div>
                 <Card className="padding-8">
                     <div className="flex-column">
-                        <div className="padding-8 flex-row rhythm-horizontal-16">
-                            <Toggle
-                                offText={"All branches"}
-                                onText={"All branches"}
-                                checked={filters.allBranches}
-                                onChange={(_event, value) => { persistFilters({ ...filters, allBranches: value }) }}
-                            />
-                            <Toggle
-                                offText={"Drafts"}
-                                onText={"Drafts"}
-                                checked={filters.drafts}
-                                onChange={(_event, value) => { persistFilters({ ...filters, drafts: value }) }}
-                            />
-                            <div className="flex-grow"></div>
-                            <Button
-                                text="Enqueue"
-                                primary={true}
-                                disabled={false} // TODO: validation
-                                onClick={enqueuePullRequests}
-                            />
-                        </div>
                         <ScrollableList
                             itemProvider={new ArrayItemProvider(allFilteredPullRequests)}
                             selection={allSelection}
@@ -623,7 +621,6 @@ function App(p: AppProps) {
                         />
                     </div>
                 </Card>
-                <Icon iconName="Video" />
             </div>
         </>
     )

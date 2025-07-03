@@ -3,7 +3,6 @@ import { IProjectPageService } from "azure-devops-extension-api";
 import { type IExtensionDataService } from 'azure-devops-extension-api';
 
 export async function getAzdo(url: string, bearertoken: string): Promise<any> {
-    console.log("getapi", url);
     const response = await fetch(url, {
         method: "GET",
         headers: {
@@ -206,6 +205,70 @@ export async function getAzdoInfo() {
     newInfo.project = proj?.name;
 
     return newInfo;
+}
+
+export async function postPullRequestStatus(
+    bearerToken: string,
+    tenantInfo: TenantInfo,
+    repository: String,
+    pullRequestId: number,
+    state: string,
+    description: string,
+    targetUrl: string = "https://dev.azure.com/pingmint/pingmint-project/_apps/hub/pingmint.pingmint-extension.pingmint-pipeline-mergequeue"
+): Promise<boolean> {
+    try {
+        let body = {
+            "state": state,
+            "description": description,
+            "context": {
+                "name": "merge-queue",
+                "genre": "pingmint"
+            },
+            "targetUrl": targetUrl
+        };
+        let url = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/git/repositories/${repository}/pullRequests/${pullRequestId}/statuses?api-version=7.2-preview.2`;
+        await postAzdo(url, body, bearerToken);
+        return true;
+    }
+    catch (error) {
+        console.error("Error posting pull request status:", error);
+        return false;
+    }
+}
+
+export async function getPullRequestStatuses(
+    bearerToken: string,
+    tenantInfo: TenantInfo,
+    repository: String,
+    pullRequestId: number
+): Promise<any> {
+    try {
+        let url = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/git/repositories/${repository}/pullRequests/${pullRequestId}/statuses?api-version=7.2-preview.2`;
+        let resp = await getAzdo(url, bearerToken);
+        return resp;
+    }
+    catch (error) {
+        console.error("Error fetching pull request status:", error);
+        return null;
+    }
+}
+
+export async function deletePullRequestStatuses(
+    bearerToken: string,
+    tenantInfo: TenantInfo,
+    repository: String,
+    pullRequestId: number,
+    statusId: number
+): Promise<boolean> {
+    try {
+        let url = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/git/repositories/${repository}/pullRequests/${pullRequestId}/statuses/${statusId}?api-version=7.2-preview.2`;
+        await deleteAzdo(url, bearerToken);
+        return false;
+    }
+    catch (error) {
+        console.error("Error deleting pull request status:", error);
+        return false;
+    }
 }
 
 export interface TenantInfo {

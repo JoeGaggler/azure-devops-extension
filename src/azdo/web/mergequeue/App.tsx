@@ -111,6 +111,16 @@ function App(p: AppProps) {
         };
     });
 
+    const latestQueueItems = React.useRef(primaryQueueItems);
+    React.useEffect(() => {
+        latestQueueItems.current = primaryQueueItems;
+    }, [primaryQueueItems]);
+
+    const latestTenantInfo = React.useRef(tenantInfo);
+    React.useEffect(() => {
+        latestTenantInfo.current = tenantInfo;
+    }, [tenantInfo]);
+
     // rebuild selections from state
     let primaryQueueSelection = new ListSelection(true);
     for (let i = 0; i < primaryQueueItems.length; i++) {
@@ -118,6 +128,101 @@ function App(p: AppProps) {
         if (selectedIds.includes(pr?.pullRequestId || 0)) {
             primaryQueueSelection.select(i, 1, true, true);
         }
+    }
+
+    async function poll() {
+        let prs = (latestQueueItems.current)
+        console.log("Polling...", prs.length, allPullRequests.length);
+
+        let tenantInfo = latestTenantInfo.current;
+
+        let isFirst = true;
+        let position = 1;
+        for (let pr of prs) {
+            if (!pr.pullRequestId || !pr.repository || !pr.repository.name) {
+                console.warn("Invalid pull request:", pr);
+                continue;
+            }
+
+            let statuses = (await Azdo.getPullRequestStatuses(p.bearerToken as string, tenantInfo, pr.repository.name, pr.pullRequestId))
+                .value.filter((s: any) => s.context.genre == "pingmint" && s.context.name == "merge-queue");
+            let status0 = statuses.length > 0 ? statuses[0] : null;
+
+            let targetUrl = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apps/hub/pingmint.pingmint-extension.pingmint-pipeline-mergequeue#pr-${pr.pullRequestId}` // TODO: hashtag pr-id
+
+            if (isFirst) {
+                if (status0?.state != "succeeded") {
+                    Azdo.postPullRequestStatus(
+                        p.bearerToken as string,
+                        tenantInfo,
+                        pr.repository.name,
+                        pr.pullRequestId,
+                        "succeeded",
+                        "Head of merge queue",
+                        targetUrl
+                    );
+
+                    for (let status of statuses) {
+                        console.log("Deleting old status for pull request:", pr.pullRequestId, status.id);
+                        Azdo.deletePullRequestStatuses(
+                            p.bearerToken as string,
+                            tenantInfo,
+                            pr.repository.name,
+                            pr.pullRequestId,
+                            status.id)
+                    }
+                    console.log("Posting success status for pull request:", pr.pullRequestId, status0);
+                }
+            } else {
+                let statusText = `#${position} on merge queue`;
+                if (status0?.state != "pending" || status0.description != statusText) {
+                    Azdo.postPullRequestStatus(
+                        p.bearerToken as string,
+                        tenantInfo,
+                        pr.repository.name,
+                        pr.pullRequestId,
+                        "pending",
+                        statusText,
+                        targetUrl
+                    );
+
+                    for (let status of statuses) {
+                        console.log("Deleting old status for pull request:", pr.pullRequestId, status.id);
+                        Azdo.deletePullRequestStatuses(
+                            p.bearerToken as string,
+                            tenantInfo,
+                            pr.repository.name,
+                            pr.pullRequestId,
+                            status.id)
+                    }
+                    console.log("Posting pending status for pull request:", pr.pullRequestId, status0);
+                }
+            }
+
+            isFirst = false;
+            position++;
+        }
+
+        // TODO: sync with server
+        // let pullRequests = await Azdo.getAllPullRequests(tenantInfo);
+        // console.log("Pull Requests value:", pullRequests);
+
+        // // refresh repos
+        // await refreshRepos(pullRequests); // awaited
+
+        // setAllPullRequests(pullRequests);
+
+        // // update merge queue list
+        // let newMergeQueueList: MergeQueueList = {
+        //     queues: [
+        //         // maintain at least one queue
+        //         {
+        //             pullRequests: []
+        //         }
+        //     ]
+        // }
+        // newMergeQueueList = await Azdo.getOrCreateSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)
+        // setMergeQueueList(newMergeQueueList);
     }
 
     // initialize the app
@@ -152,6 +257,10 @@ function App(p: AppProps) {
         }
         userFiltersDoc = await Azdo.getOrCreateUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc)
         setFilters({ ...userFiltersDoc });
+
+        setInterval(() => {
+            poll();
+        }, 1000 * 10);
     }
 
     // TODO: FIX THIS
@@ -339,18 +448,15 @@ function App(p: AppProps) {
         // post pull request status
         let pullRequest = allFilteredPullRequests.find(pr => pr.pullRequestId == pullRequestId);
         if (pullRequest) {
-            let body = {
-                "state": "pending",
-                "description": "Pending on merge queue", // TODO: position in queue
-                "context": {
-                    "name": "merge-queue",
-                    "genre": "pingmint"
-                },
-                "targetUrl": `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apps/hub/pingmint.pingmint-extension.pingmint-pipeline-mergequeue`, // TODO: hashtag pr-id
-            };
-            let url = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/git/repositories/${pullRequest.repository.name}/pullRequests/${pullRequestId}/statuses?api-version=7.2-preview.2`;
-            let resp = await Azdo.postAzdo(url, body, p.bearerToken as string);
-            console.log("Pull request status posted:", resp);
+            Azdo.postPullRequestStatus(
+                p.bearerToken as string,
+                tenantInfo,
+                pullRequest.repository.name,
+                pullRequestId,
+                "pending",
+                "Pending on merge queue", // TODO: position in queue
+                `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apps/hub/pingmint.pingmint-extension.pingmint-pipeline-mergequeue#pr-${pullRequestId}` // TODO: hashtag pr-id
+            );
         }
         else {
             showToast(`Pull request ID: ${pullRequestId} not found in all pull requests.`);

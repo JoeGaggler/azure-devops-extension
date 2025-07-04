@@ -316,6 +316,7 @@ export interface PullRequest {
     targetRefName?: string;
     title?: string;
     isDraft?: boolean;
+    creationDate?: string; // ISO date string
 }
 
 export interface Repo {

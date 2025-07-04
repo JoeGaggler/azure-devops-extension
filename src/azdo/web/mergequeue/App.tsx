@@ -50,7 +50,7 @@ interface SomePullRequest {
     title: string;
     targetRefName: string;
     isDraft: boolean;
-    creationDate?: string; // ISO date string
+    creationDate: string; // ISO date string
 }
 
 interface AllPullRequests {
@@ -72,14 +72,18 @@ function App(p: AppProps) {
     let repoCacheDocumentId = "repoCache";
     let userPullRequestFiltersDocumentId = "userPullRequestFilters";
 
-    const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
-    const [allPullRequests, setAllPullRequests] = React.useState<AllPullRequests>({ pullRequests: [] });
-    const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false });
+    // ui state
     const [selectedIds, setSelectedIds] = React.useState<number[]>([]);
-
-    const [repoMap, setRepoMap] = React.useState<Record<string, Azdo.Repo>>({});
-    const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] }); // TODO use this
     const [toastState, setToastState] = React.useState<ToastState>({ message: "Hi!", visible: false, ref: React.createRef() });
+    
+    // cached state
+    const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
+    const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false });
+    const [repoMap, setRepoMap] = React.useState<Record<string, Azdo.Repo>>({});
+    
+    // state if the lists
+    const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] }); // TODO use this
+    const [allPullRequests, setAllPullRequests] = React.useState<AllPullRequests>({ pullRequests: [] });
 
     // HACK: force rerendering for server sync
     const [pollHack, setPollHack] = React.useState(Math.random());
@@ -127,58 +131,37 @@ function App(p: AppProps) {
         }
     }
 
-    async function updatePullRequestDetails(pullRequest: any) {
-        if (!pullRequest) { return; }
-
-        // Update the all pull requests list
-        allPullRequests.pullRequests = allPullRequests.pullRequests.map((p) => {
-            if (p.pullRequestId == pullRequest.pullRequestId) {
-                return {
-                    ...p,
-                    title: pullRequest.title || p.title,
-                    repositoryName: pullRequest.repositoryName || p.repositoryName,
-                    targetRefName: pullRequest.targetRefName || p.targetRefName,
-                    isDraft: pullRequest.isDraft || p.isDraft,
-                    creationDate: pullRequest.creationDate || p.creationDate
-                };
-            }
-            return p;
-        });
-        setAllPullRequests(allPullRequests);
-
-        // Update the primary queue items as well
-        primaryQueueItems = primaryQueueItems
-            .flatMap((p): MergeQueuePullRequest | readonly MergeQueuePullRequest[] => {
-                if (p.pullRequestId == pullRequest.pullRequestId && pullRequest.status == "completed") {
-                    return []
-                }
-                return p;
-            })
-            .map((p) => {
-                if (p.pullRequestId == pullRequest.pullRequestId) {
-                    return {
-                        ...p,
-                        title: pullRequest.title || p.title,
-                        repositoryName: pullRequest.repositoryName || p.repositoryName,
-                        targetRefName: pullRequest.targetRefName || p.targetRefName,
-                        isDraft: pullRequest.isDraft || p.isDraft,
-                        creationDate: pullRequest.creationDate || p.creationDate
-                    };
-                }
-                return p;
-            });
-        setMergeQueueList({
-            ...mergeQueueList,
-            queues: [{ pullRequests: primaryQueueItems }] // TODO: support multiple queues
-        });
-    }
-
     async function poll() {
         var mrl = mergeQueueList
         let prs: MergeQueuePullRequest[] = (mrl?.queues[0]?.pullRequests || []);
 
         console.log("Polling...");
 
+        // UPDATE ALL PULL REQUESTS
+        let pullRequests = await Azdo.getAllPullRequests(tenantInfo);
+        console.log("Pull Requests value:", pullRequests);
+        await refreshRepos(pullRequests);
+
+        let pullRequestsArray: SomePullRequest[] = pullRequests.flatMap((p) => {
+            if (p.pullRequestId && p.repository && p.repository.name) {
+                return {
+                    pullRequestId: p.pullRequestId,
+                    repositoryName: p.repository.name,
+                    title: p.title || "",
+                    targetRefName: p.targetRefName || "",
+                    isDraft: p.isDraft || false,
+                    creationDate: p.creationDate || "" // ISO date string
+                };
+            } else {
+                return [];
+            }
+        });
+        setAllPullRequests({
+            ...allPullRequests,
+            pullRequests: pullRequestsArray
+        })
+
+        // UPDATE MERGE QUEUE
         let repoVisitedSet: Set<string> = new Set();
         let position = 1;
         for (let pr of prs) {
@@ -198,7 +181,11 @@ function App(p: AppProps) {
             if (pr2) {
                 console.log("Pull Request details:", pr2);
             }
-            await updatePullRequestDetails(pr2);
+            pr.title = pr2.title || pr.title,
+            pr.repositoryName = pr2.repositoryName || pr.repositoryName,
+            pr.targetRefName = pr2.targetRefName || pr.targetRefName,
+            pr.isDraft = pr2.isDraft || pr.isDraft,
+            pr.creationDate = pr2.creationDate || pr.creationDate
 
             let isFirst = false
             if (!repoVisitedSet.has(pr.repositoryName)) {
@@ -277,29 +264,6 @@ function App(p: AppProps) {
     async function init() {
         let info = await Azdo.getAzdoInfo();
         setTenantInfo(info)
-
-        let pullRequests = await Azdo.getAllPullRequests(info);
-        console.log("Pull Requests value:", pullRequests);
-
-        refreshRepos(pullRequests); // not awaited
-
-        let pullRequestsArray: SomePullRequest[] = pullRequests.flatMap((p) => {
-            if (p.pullRequestId && p.repository && p.repository.name) {
-                return {
-                    pullRequestId: p.pullRequestId,
-                    repositoryName: p.repository.name,
-                    title: p.title || "",
-                    targetRefName: p.targetRefName || "",
-                    isDraft: p.isDraft || false
-                };
-            } else {
-                return [];
-            }
-        });
-        setAllPullRequests({
-            ...allPullRequests,
-            pullRequests: pullRequestsArray
-        })
 
         // setup merge queue list
         let newMergeQueueList = await downloadMergeQueuePullRequests();
@@ -547,12 +511,12 @@ function App(p: AppProps) {
             return;
         }
 
-        let foundAtAll = allFilteredPullRequests.find(pr => pr.pullRequestId == pullRequestId);
-        if (!foundAtAll) {
+        let pullRequest = allFilteredPullRequests.find(pr => pr.pullRequestId == pullRequestId);
+        if (!pullRequest) {
             showToast(`Pull request ID: ${pullRequestId} not found in all pull requests.`);
             return;
         }
-        let repositoryName = foundAtAll.repositoryName
+        let repositoryName = pullRequest.repositoryName
         if (!repositoryName) {
             showToast(`Pull request ID: ${pullRequestId} has no repository name.`);
             return;
@@ -561,9 +525,10 @@ function App(p: AppProps) {
         pullRequests.push({
             pullRequestId: pullRequestId,
             repositoryName: repositoryName,
-            title: foundAtAll.title,
-            targetRefName: foundAtAll.targetRefName,
-            isDraft: foundAtAll.isDraft,
+            title: pullRequest.title,
+            targetRefName: pullRequest.targetRefName,
+            isDraft: pullRequest.isDraft,
+            creationDate: pullRequest.creationDate,
             ready: false
         })
 
@@ -581,21 +546,17 @@ function App(p: AppProps) {
         setMergeQueueList(newMergeQueueList);
 
         // post pull request status
-        let pullRequest = allFilteredPullRequests.find(pr => pr.pullRequestId == pullRequestId);
-        if (pullRequest) {
-            Azdo.postPullRequestStatus(
-                p.bearerToken,
-                tenantInfo,
-                pullRequest.repositoryName,
-                pullRequestId,
-                "pending",
-                "Pending on merge queue", // TODO: position in queue
-                `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apps/hub/pingmint.pingmint-extension.pingmint-pipeline-mergequeue#pr-${pullRequestId}` // TODO: hashtag pr-id
-            );
-        }
-        else {
-            showToast(`Pull request ID: ${pullRequestId} not found in all pull requests.`);
-        }
+        Azdo.postPullRequestStatus(
+            p.bearerToken,
+            tenantInfo,
+            pullRequest.repositoryName,
+            pullRequestId,
+            "pending",
+            "Pending on merge queue", // TODO: position in queue
+            `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apps/hub/pingmint.pingmint-extension.pingmint-pipeline-mergequeue#pr-${pullRequestId}` // TODO: hashtag pr-id
+        );
+
+
         console.log("Pull request status posted for ID:", pullRequestId);
     }
 

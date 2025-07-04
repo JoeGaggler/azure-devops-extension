@@ -361,7 +361,7 @@ function App(p: AppProps) {
         key?: string
     ): React.JSX.Element {
         let extra = "";
-        let className = `scroll-hidden flex-row flex-center flex-grow padding-4 ${extra}`;
+        let className = `scroll-hidden flex-row flex-baseline rhythm-horizontal-8 flex-grow padding-4 ${extra}`;
         return (
             <ListItem
                 key={key || "list-item" + index}
@@ -373,7 +373,11 @@ function App(p: AppProps) {
                         {...(pullRequest.isDraft ? Statuses.Queued : Statuses.Information)}
                         key="information"
                         size={StatusSize.m}
+                        className="flex-self-center"
                     />
+                    <div className="font-size-m flex-row flex-center flex-shrink">
+                        {index + 1}
+                    </div>
                     <div className="font-size-m padding-left-8">{pullRequest.repositoryName}</div>
                     <div className="font-size-m italic text-neutral-70 text-ellipsis padding-left-8">{pullRequest.title}</div>
                     <PillGroup className="padding-left-16 padding-right-16">

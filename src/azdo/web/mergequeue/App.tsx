@@ -20,8 +20,8 @@ import { type IHostNavigationService } from 'azure-devops-extension-api';
 // TODO: adding a PR status should remove all prior statuses for that PR
 
 interface AppProps {
-    bearerToken: string | null;
-    appToken: string | null;
+    bearerToken: string;
+    appToken: string;
 }
 
 interface PullRequestFilters {
@@ -89,10 +89,13 @@ function App(p: AppProps) {
             targetBranch: (pr.targetRefName ?? "").replace("refs/heads/", "")
         }
     })
-    let allFilteredPullRequests = allPullRequestsWithInfo.filter(pr =>
-        (pr.isDefaultBranch || filters.allBranches) &&
-        (!pr.isDraft || (filters.drafts as boolean))
-    );
+    let allFilteredPullRequests = allPullRequestsWithInfo
+        .filter(pr =>
+            (pr.isDefaultBranch || filters.allBranches) &&
+            (!pr.isDraft || (filters.drafts as boolean))
+        )
+        .map(pr => pr as MergeQueuePullRequest);
+    
     allFilteredPullRequests.sort((a, b) => {
         let x = a.pullRequestId || 0;
         let y = b.pullRequestId || 0;
@@ -135,7 +138,7 @@ function App(p: AppProps) {
                 continue;
             }
 
-            let statuses = (await Azdo.getPullRequestStatuses(p.bearerToken as string, tenantInfo, pr.repositoryName, pr.pullRequestId))
+            let statuses = (await Azdo.getPullRequestStatuses(p.bearerToken, tenantInfo, pr.repositoryName, pr.pullRequestId))
                 .value.filter((s: any) => s.context.genre == "pingmint" && s.context.name == "merge-queue");
             let status0 = statuses.length > 0 ? statuses[0] : null;
 
@@ -144,7 +147,7 @@ function App(p: AppProps) {
             if (isFirst) {
                 if (status0?.state != "succeeded") {
                     Azdo.postPullRequestStatus(
-                        p.bearerToken as string,
+                        p.bearerToken,
                         tenantInfo,
                         pr.repositoryName,
                         pr.pullRequestId,
@@ -156,7 +159,7 @@ function App(p: AppProps) {
                     for (let status of statuses) {
                         console.log("Deleting old status for pull request:", pr.pullRequestId, status.id);
                         Azdo.deletePullRequestStatus(
-                            p.bearerToken as string,
+                            p.bearerToken,
                             tenantInfo,
                             pr.repositoryName,
                             pr.pullRequestId,
@@ -168,7 +171,7 @@ function App(p: AppProps) {
                 let statusText = `Merge queue: waiting on #${position - 1}`; // GitHub says: There are ${position - 1} pull requests ahead of this one in the merge queue
                 if (status0?.state != "pending" || status0.description != statusText) {
                     Azdo.postPullRequestStatus(
-                        p.bearerToken as string,
+                        p.bearerToken,
                         tenantInfo,
                         pr.repositoryName,
                         pr.pullRequestId,
@@ -180,7 +183,7 @@ function App(p: AppProps) {
                     for (let status of statuses) {
                         console.log("Deleting old status for pull request:", pr.pullRequestId, status.id);
                         Azdo.deletePullRequestStatus(
-                            p.bearerToken as string,
+                            p.bearerToken,
                             tenantInfo,
                             pr.repositoryName,
                             pr.pullRequestId,
@@ -288,7 +291,7 @@ function App(p: AppProps) {
             }
 
             if (pullRequest.repository && pullRequest.repository.name && pullRequest.repository.url) {
-                let repo: Azdo.Repo = await Azdo.getAzdo(pullRequest.repository.url, p.bearerToken as string);
+                let repo: Azdo.Repo = await Azdo.getAzdo(pullRequest.repository.url, p.bearerToken);
                 console.log("Repo:", pullRequest.repository.name, repo);
                 let newRepo: Azdo.Repo = {
                     id: repo.id,
@@ -480,7 +483,7 @@ function App(p: AppProps) {
         let pullRequest = allFilteredPullRequests.find(pr => pr.pullRequestId == pullRequestId);
         if (pullRequest) {
             Azdo.postPullRequestStatus(
-                p.bearerToken as string,
+                p.bearerToken,
                 tenantInfo,
                 pullRequest.repositoryName,
                 pullRequestId,
@@ -534,7 +537,7 @@ function App(p: AppProps) {
 
         setMergeQueueList(newMergeQueueList);
 
-        await Azdo.deletePullRequestStatuses(p.bearerToken as string, tenantInfo, pullRequestRepoName, pullRequestId);
+        await Azdo.deletePullRequestStatuses(p.bearerToken, tenantInfo, pullRequestRepoName, pullRequestId);
     }
 
     function showToast(message: string) {

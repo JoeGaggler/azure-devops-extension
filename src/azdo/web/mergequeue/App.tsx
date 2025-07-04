@@ -16,9 +16,6 @@ import { Toast } from "azure-devops-ui/Toast";
 import { Toggle } from "azure-devops-ui/Toggle";
 import { type IHostNavigationService } from 'azure-devops-extension-api';
 
-// TODO: removing a PR from the queue should clear all PR statuses
-// TODO: adding a PR status should remove all prior statuses for that PR
-
 interface AppProps {
     bearerToken: string;
     appToken: string;
@@ -68,7 +65,7 @@ function App(p: AppProps) {
     const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
     const [allPullRequests, setAllPullRequests] = React.useState<AllPullRequests>({ pullRequests: [] });
     const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false });
-    const [selectedIds, setSelectedIds] = React.useState<number[]>([]); // TODO: use this
+    const [selectedIds, setSelectedIds] = React.useState<number[]>([]);
 
     const [repoMap, setRepoMap] = React.useState<Record<string, Azdo.Repo>>({});
     const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] }); // TODO use this
@@ -88,7 +85,8 @@ function App(p: AppProps) {
         if (!isDefaultBranch && !filters.allBranches) { return [] } // filter out non-default branches if not enabled
         return pr
     })
-    
+
+    // full list is sorted chronologically, using the id
     allFilteredPullRequests.sort((a, b) => {
         let x = a.pullRequestId || 0;
         let y = b.pullRequestId || 0;
@@ -101,11 +99,11 @@ function App(p: AppProps) {
     let allSelection = new ListSelection(true);
     for (let i = 0; i < allFilteredPullRequests.length; i++) {
         let pr = allFilteredPullRequests[i];
-        if (selectedIds.includes(pr.pullRequestId || 0)) {
+        if (!pr.pullRequestId) { continue; }
+        if (selectedIds.includes(pr.pullRequestId)) {
             allSelection.select(i, 1, true, true);
         }
     }
-    // TODO: if changing the filter hides a selected pull request, we should update the selection to remove it
 
     // rendering the primary queue list
     let primaryQueueItems: MergeQueuePullRequest[] = (mergeQueueList?.queues[0]?.pullRequests || []);
@@ -117,6 +115,45 @@ function App(p: AppProps) {
         if (selectedIds.includes(pr?.pullRequestId || 0)) {
             primaryQueueSelection.select(i, 1, true, true);
         }
+    }
+
+    async function updatePullRequestDetails(pullRequest: MergeQueuePullRequest) {
+        if (!pullRequest) { return; }
+
+        // Update the all pull requests list
+        allPullRequests.pullRequests = allPullRequests.pullRequests.map((p) => {
+            if (p.pullRequestId == pullRequest.pullRequestId) {
+                return {
+                    ...p,
+                    title: pullRequest.title || p.title,
+                    repositoryName: pullRequest.repositoryName || p.repositoryName,
+                    targetRefName: pullRequest.targetRefName || p.targetRefName,
+                    isDraft: pullRequest.isDraft || p.isDraft,
+                    creationDate: pullRequest.creationDate || p.creationDate
+                };
+            }
+            return p;
+        });
+        setAllPullRequests(allPullRequests);
+
+        // Update the primary queue items as well
+        primaryQueueItems = primaryQueueItems.map((p) => {
+            if (p.pullRequestId == pullRequest.pullRequestId) {
+                return {
+                    ...p,
+                    title: pullRequest.title || p.title,
+                    repositoryName: pullRequest.repositoryName || p.repositoryName,
+                    targetRefName: pullRequest.targetRefName || p.targetRefName,
+                    isDraft: pullRequest.isDraft || p.isDraft,
+                    creationDate: pullRequest.creationDate || p.creationDate
+                };
+            }
+            return p;
+        });
+        setMergeQueueList({
+            ...mergeQueueList,
+            queues: [{ pullRequests: primaryQueueItems }] // TODO: support multiple queues
+        });
     }
 
     async function poll() {
@@ -137,8 +174,19 @@ function App(p: AppProps) {
 
             let targetUrl = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apps/hub/pingmint.pingmint-extension.pingmint-pipeline-mergequeue#pr-${pr.pullRequestId}` // TODO: hashtag pr-id
 
+            // refresh the pull request details
+            let pr2 = await Azdo.getPullRequest(p.bearerToken, tenantInfo, pr.repositoryName, pr.pullRequestId);
+            if (pr2) {
+                console.log("Pull Request details:", pr2);
+            }
+            await updatePullRequestDetails(pr2);
+
             if (isFirst) {
-                if (status0?.state != "succeeded") {
+                if (pr2.status != "active") {
+                    console.warn("Pull request is not active:", pr2);
+                    continue; // skip non-active pull requests
+                }
+                else if (status0?.state != "succeeded") {
                     Azdo.postPullRequestStatus(
                         p.bearerToken,
                         tenantInfo,
@@ -161,7 +209,7 @@ function App(p: AppProps) {
                     console.log("Posting success status for pull request:", pr.pullRequestId, status0);
                 }
             } else {
-                let statusText = `Merge queue: waiting on #${position - 1}`; // GitHub says: There are ${position - 1} pull requests ahead of this one in the merge queue
+                let statusText = `Merge queue: waiting at #${position}`;
                 if (status0?.state != "pending" || status0.description != statusText) {
                     Azdo.postPullRequestStatus(
                         p.bearerToken,
@@ -189,27 +237,6 @@ function App(p: AppProps) {
             isFirst = false;
             position++;
         }
-
-        // TODO: sync with server
-        // let pullRequests = await Azdo.getAllPullRequests(tenantInfo);
-        // console.log("Pull Requests value:", pullRequests);
-
-        // // refresh repos
-        // await refreshRepos(pullRequests); // awaited
-
-        // setAllPullRequests(pullRequests);
-
-        // // update merge queue list
-        // let newMergeQueueList: MergeQueueList = {
-        //     queues: [
-        //         // maintain at least one queue
-        //         {
-        //             pullRequests: []
-        //         }
-        //     ]
-        // }
-        // newMergeQueueList = await Azdo.getOrCreateSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)
-        // setMergeQueueList(newMergeQueueList);
     }
 
     // initialize the app
@@ -263,7 +290,7 @@ function App(p: AppProps) {
 
         let sharedMap = await Azdo.getOrCreateSharedDocument(mergeQueueDocumentCollectionId, repoCacheDocumentId, {});
         if (sharedMap) {
-            console.log("Shared repo map:", sharedMap);
+            console.log("Cached repositories:", sharedMap);
         }
 
         for (let pullRequest of value) {
@@ -294,18 +321,15 @@ function App(p: AppProps) {
                 map[pullRequest.repository.name] = newRepo;
                 sharedMap[pullRequest.repository.name] = newRepo;
             } else {
-                // console.warn("No repository found for pull request:", pullRequest);
+                console.warn("No repository found for pull request:", pullRequest);
             }
         }
 
         setRepoMap(map);
-        Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, repoCacheDocumentId, sharedMap);
-
-        console.log("Repo map:", map);
-        console.log("Shared map:", sharedMap);
+        await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, repoCacheDocumentId, sharedMap);
     }
 
-    async function persistFilters(value: PullRequestFilters) {
+    async function saveUserFilters(value: PullRequestFilters) {
         setFilters(value);
 
         let userFiltersDoc = { ...value };
@@ -601,13 +625,13 @@ function App(p: AppProps) {
                         offText={"All branches"}
                         onText={"All branches"}
                         checked={filters.allBranches}
-                        onChange={(_event, value) => { persistFilters({ ...filters, allBranches: value }) }}
+                        onChange={(_event, value) => { saveUserFilters({ ...filters, allBranches: value }) }}
                     />
                     <Toggle
                         offText={"Drafts"}
                         onText={"Drafts"}
                         checked={filters.drafts}
-                        onChange={(_event, value) => { persistFilters({ ...filters, drafts: value }) }}
+                        onChange={(_event, value) => { saveUserFilters({ ...filters, drafts: value }) }}
                     />
                     <Button
                         text="Enqueue"

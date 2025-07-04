@@ -235,6 +235,23 @@ export async function postPullRequestStatus(
     }
 }
 
+export async function getPullRequest(
+    bearerToken: string,
+    tenantInfo: TenantInfo,
+    repository: String,
+    pullRequestId: number
+): Promise<any> {
+    try {
+        let url = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/git/repositories/${repository}/pullRequests/${pullRequestId}?api-version=7.2-preview.2`;
+        let resp = await getAzdo(url, bearerToken);
+        return resp;
+    }
+    catch (error) {
+        console.error("Error fetching pull request:", error);
+        return null;
+    }
+}
+
 export async function getPullRequestStatuses(
     bearerToken: string,
     tenantInfo: TenantInfo,

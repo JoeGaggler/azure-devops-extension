@@ -40,6 +40,14 @@ interface MergeQueue {
 interface MergeQueuePullRequest {
     pullRequestId: number;
     repositoryName: string;
+    title: string;
+    targetRefName: string;
+    isDraft: boolean;
+    creationDate?: string; // ISO date string
+}
+
+interface AllPullRequests {
+    pullRequests: Array<MergeQueuePullRequest>;
 }
 
 interface ToastState {
@@ -58,7 +66,7 @@ function App(p: AppProps) {
     let userPullRequestFiltersDocumentId = "userPullRequestFilters";
 
     const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
-    const [allPullRequests, setAllPullRequests] = React.useState<Array<Azdo.PullRequest>>([]);
+    const [allPullRequests, setAllPullRequests] = React.useState<AllPullRequests>({ pullRequests: [] });
     const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false });
     const [selectedIds, setSelectedIds] = React.useState<number[]>([]); // TODO: use this
 
@@ -72,9 +80,8 @@ function App(p: AppProps) {
     function Resync() { setPollHack(Math.random()); }
 
     // rendering the all pull requests list
-    // TODO: useMemo?
-    let allPullRequestsWithInfo = allPullRequests.flatMap((pr) => {
-        let repo = repoMap[pr.repository.name];
+    let allPullRequestsWithInfo = allPullRequests.pullRequests.flatMap((pr) => {
+        let repo = repoMap[pr.repositoryName];
         if (!repo) { return [] }
         return {
             ...pr,
@@ -105,24 +112,7 @@ function App(p: AppProps) {
     // TODO: if changing the filter hides a selected pull request, we should update the selection to remove it
 
     // rendering the primary queue list
-    let primaryQueueItems: Azdo.PullRequest[] = (mergeQueueList?.queues[0]?.pullRequests || []).flatMap((pr) => {
-        let pullRequest = allPullRequestsWithInfo.find(p => p.pullRequestId == pr.pullRequestId);
-        if (!pullRequest) {
-            console.warn("Pull request not found in all pull requests:", pr);
-            return {
-                pullRequestId: pr.pullRequestId,
-                repository: { name: "UNKNOWN", defaultBranch: "refs/heads/unknown" },
-                targetRefName: "refs/heads/unknown",
-                title: `Invalid Pull Request ID: ${pr.pullRequestId}`,
-                isDraft: false,
-            }
-        }
-        return {
-            ...pullRequest,
-            isDraft: pullRequest.isDraft || false, // ensure isDraft is always defined
-            repository: repoMap[pullRequest.repository.name] || { name: pullRequest.repository.name, defaultBranch: "" }
-        };
-    });
+    let primaryQueueItems: MergeQueuePullRequest[] = (mergeQueueList?.queues[0]?.pullRequests || []);
 
     // rebuild selections from state
     let primaryQueueSelection = new ListSelection(true);
@@ -140,12 +130,12 @@ function App(p: AppProps) {
         let isFirst = true;
         let position = 1;
         for (let pr of prs) {
-            if (!pr.pullRequestId || !pr.repository || !pr.repository.name) {
+            if (!pr.pullRequestId || !pr.repositoryName) {
                 console.warn("Invalid pull request:", pr);
                 continue;
             }
 
-            let statuses = (await Azdo.getPullRequestStatuses(p.bearerToken as string, tenantInfo, pr.repository.name, pr.pullRequestId))
+            let statuses = (await Azdo.getPullRequestStatuses(p.bearerToken as string, tenantInfo, pr.repositoryName, pr.pullRequestId))
                 .value.filter((s: any) => s.context.genre == "pingmint" && s.context.name == "merge-queue");
             let status0 = statuses.length > 0 ? statuses[0] : null;
 
@@ -156,7 +146,7 @@ function App(p: AppProps) {
                     Azdo.postPullRequestStatus(
                         p.bearerToken as string,
                         tenantInfo,
-                        pr.repository.name,
+                        pr.repositoryName,
                         pr.pullRequestId,
                         "succeeded",
                         "Merge queue: ready",
@@ -165,10 +155,10 @@ function App(p: AppProps) {
 
                     for (let status of statuses) {
                         console.log("Deleting old status for pull request:", pr.pullRequestId, status.id);
-                        Azdo.deletePullRequestStatuses(
+                        Azdo.deletePullRequestStatus(
                             p.bearerToken as string,
                             tenantInfo,
-                            pr.repository.name,
+                            pr.repositoryName,
                             pr.pullRequestId,
                             status.id)
                     }
@@ -180,7 +170,7 @@ function App(p: AppProps) {
                     Azdo.postPullRequestStatus(
                         p.bearerToken as string,
                         tenantInfo,
-                        pr.repository.name,
+                        pr.repositoryName,
                         pr.pullRequestId,
                         "pending",
                         statusText,
@@ -189,10 +179,10 @@ function App(p: AppProps) {
 
                     for (let status of statuses) {
                         console.log("Deleting old status for pull request:", pr.pullRequestId, status.id);
-                        Azdo.deletePullRequestStatuses(
+                        Azdo.deletePullRequestStatus(
                             p.bearerToken as string,
                             tenantInfo,
-                            pr.repository.name,
+                            pr.repositoryName,
                             pr.pullRequestId,
                             status.id)
                     }
@@ -237,7 +227,23 @@ function App(p: AppProps) {
 
         refreshRepos(pullRequests); // not awaited
 
-        setAllPullRequests(pullRequests);
+        let pullRequestsArray: MergeQueuePullRequest[] = pullRequests.flatMap((p) => {
+            if (p.pullRequestId && p.repository && p.repository.name) {
+                return {
+                    pullRequestId: p.pullRequestId,
+                    repositoryName: p.repository.name,
+                    title: p.title || "",
+                    targetRefName: p.targetRefName || "",
+                    isDraft: p.isDraft || false
+                };
+            } else {
+                return [];
+            }
+        });
+        setAllPullRequests({
+            ...allPullRequests,
+            pullRequests: pullRequestsArray
+        })
 
         // setup merge queue list
         let newMergeQueueList = await downloadMergeQueuePullRequests();
@@ -256,15 +262,7 @@ function App(p: AppProps) {
         Resync();
     }
 
-    // TODO: FIX THIS
-    // function getPrimaryPullRequests(): Array<any> {
-    //     if (mergeQueueList && mergeQueueList.queues && mergeQueueList.queues.length > 0) {
-    //         return mergeQueueList.queues[0].pullRequests;
-    //     }
-    //     return [];
-    // }
-
-    async function refreshRepos(value: any) {
+    async function refreshRepos(value: Azdo.PullRequest[]) {
         let map = repoMap;
 
         let sharedMap = await Azdo.getOrCreateSharedDocument(mergeQueueDocumentCollectionId, repoCacheDocumentId, {});
@@ -323,9 +321,22 @@ function App(p: AppProps) {
         Azdo.trySaveUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
     }
 
+    function IsDefaultBranch(pullRequest: MergeQueuePullRequest): boolean {
+        let repo = repoMap[pullRequest.repositoryName];
+        if (!repo) {
+            console.warn("No repository found for pull request:", pullRequest);
+            return false;
+        }
+        return pullRequest.targetRefName === repo.defaultBranch;
+    }
+
+    function GetBranchName(pullRequest: MergeQueuePullRequest): string {
+        return pullRequest.targetRefName.replace("refs/heads/", "");
+    }
+
     function renderPullRequestRow(
         index: number,
-        pullRequest: any, // TODO: strongly type this
+        pullRequest: MergeQueuePullRequest,
         details: IListItemDetails<any>,
         key?: string
     ): React.JSX.Element {
@@ -343,7 +354,7 @@ function App(p: AppProps) {
                         key="information"
                         size={StatusSize.m}
                     />
-                    <div className="font-size-m padding-left-8">{pullRequest.repository.name}</div>
+                    <div className="font-size-m padding-left-8">{pullRequest.repositoryName}</div>
                     <div className="font-size-m italic text-neutral-70 text-ellipsis padding-left-8">{pullRequest.title}</div>
                     <PillGroup className="padding-left-16 padding-right-16">
                         {
@@ -352,13 +363,13 @@ function App(p: AppProps) {
                             )
                         }
                         {
-                            !pullRequest.isDefaultBranch && pullRequest.targetBranch && (
-                                <Pill variant={PillVariant.outlined}>{pullRequest.targetBranch}</Pill>
+                            !IsDefaultBranch(pullRequest) && (
+                                <Pill variant={PillVariant.outlined}>{GetBranchName(pullRequest)}</Pill>
                             )
                         }
                     </PillGroup>
                     <div className="font-size-m flex-row flex-grow"><div className="flex-grow" />
-                        <div>{luxon.DateTime.fromISO(pullRequest.creationDate).toRelative()}</div>
+                        <div>{(pullRequest.creationDate) ? (luxon.DateTime.fromISO(pullRequest.creationDate).toRelative()) : ""}</div>
                     </div>
                 </div>
             </ListItem>
@@ -368,10 +379,10 @@ function App(p: AppProps) {
     async function activatePullRequest(_: any, evt: any) {
         console.log("activated pull request: ", evt);
         let idx = evt.index;
-        let data = evt.data;
+        let data: MergeQueuePullRequest = evt.data;
         console.log("activated pull request2: ", idx, data);
         const navService = await SDK.getService<IHostNavigationService>("ms.vss-features.host-navigation-service");
-        let url = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_git/${data.repository.name}/pullrequest/${data.pullRequestId}`;
+        let url = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_git/${data.repositoryName}/pullrequest/${data.pullRequestId}`;
         console.log("url: ", url);
         navService.openNewWindow(url, "");
     }
@@ -438,7 +449,7 @@ function App(p: AppProps) {
             showToast(`Pull request ID: ${pullRequestId} not found in all pull requests.`);
             return;
         }
-        let repositoryName = foundAtAll.repository.name
+        let repositoryName = foundAtAll.repositoryName
         if (!repositoryName) {
             showToast(`Pull request ID: ${pullRequestId} has no repository name.`);
             return;
@@ -446,7 +457,10 @@ function App(p: AppProps) {
 
         pullRequests.push({
             pullRequestId: pullRequestId,
-            repositoryName: repositoryName
+            repositoryName: repositoryName,
+            title: foundAtAll.title,
+            targetRefName: foundAtAll.targetRefName,
+            isDraft: foundAtAll.isDraft
         })
 
         newMergeQueueList = {
@@ -468,7 +482,7 @@ function App(p: AppProps) {
             Azdo.postPullRequestStatus(
                 p.bearerToken as string,
                 tenantInfo,
-                pullRequest.repository.name,
+                pullRequest.repositoryName,
                 pullRequestId,
                 "pending",
                 "Pending on merge queue", // TODO: position in queue
@@ -504,6 +518,7 @@ function App(p: AppProps) {
             showToast(`Pull request ID: ${pullRequestId} no longer in queue.`);
             return;
         }
+        let pullRequestRepoName = pullRequests[pullRequestIndex].repositoryName;
         pullRequests.splice(pullRequestIndex, 1); // remove the pull request
 
         newMergeQueueList = {
@@ -518,6 +533,8 @@ function App(p: AppProps) {
         }
 
         setMergeQueueList(newMergeQueueList);
+
+        await Azdo.deletePullRequestStatuses(p.bearerToken as string, tenantInfo, pullRequestRepoName, pullRequestId);
     }
 
     function showToast(message: string) {

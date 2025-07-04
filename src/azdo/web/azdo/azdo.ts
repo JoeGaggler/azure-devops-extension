@@ -252,7 +252,7 @@ export async function getPullRequestStatuses(
     }
 }
 
-export async function deletePullRequestStatuses(
+export async function deletePullRequestStatus(
     bearerToken: string,
     tenantInfo: TenantInfo,
     repository: String,
@@ -267,6 +267,24 @@ export async function deletePullRequestStatuses(
     catch (error) {
         console.error("Error deleting pull request status:", error);
         return false;
+    }
+}
+
+export async function deletePullRequestStatuses(
+    bearerToken: string,
+    tenantInfo: TenantInfo,
+    repository: String,
+    pullRequestId: number) {
+    let statuses = (await getPullRequestStatuses(bearerToken as string, tenantInfo, repository, pullRequestId))
+        .value.filter((s: any) => s.context.genre == "pingmint" && s.context.name == "merge-queue");
+
+    for (let status of statuses) {
+        deletePullRequestStatus(
+            bearerToken as string,
+            tenantInfo,
+            repository,
+            pullRequestId,
+            status.id)
     }
 }
 

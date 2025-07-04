@@ -132,9 +132,6 @@ function App(p: AppProps) {
     }
 
     async function poll() {
-        var mrl = mergeQueueList
-        let prs: MergeQueuePullRequest[] = (mrl?.queues[0]?.pullRequests || []);
-
         console.log("Polling...");
 
         // UPDATE ALL PULL REQUESTS
@@ -160,26 +157,29 @@ function App(p: AppProps) {
             ...allPullRequests,
             pullRequests: pullRequestsArray
         })
-
+        
         // UPDATE MERGE QUEUE
+
+        var mrl = mergeQueueList
+        let prs: MergeQueuePullRequest[] = (mrl?.queues[0]?.pullRequests || []);
         let repoVisitedSet: Set<string> = new Set();
         let position = 1;
+        let removedPullRequests: number[] = [];
         for (let pr of prs) {
             if (!pr.pullRequestId || !pr.repositoryName) {
                 console.warn("Invalid pull request:", pr);
                 continue;
             }
 
-            let statuses = (await Azdo.getPullRequestStatuses(p.bearerToken, tenantInfo, pr.repositoryName, pr.pullRequestId))
-                .value.filter((s: any) => s.context.genre == "pingmint" && s.context.name == "merge-queue");
-            let status0 = statuses.length > 0 ? statuses[0] : null;
-
-            let targetUrl = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apps/hub/pingmint.pingmint-extension.pingmint-pipeline-mergequeue#pr-${pr.pullRequestId}` // TODO: hashtag pr-id
-
             // refresh the pull request details
             let pr2 = await Azdo.getPullRequest(p.bearerToken, tenantInfo, pr.repositoryName, pr.pullRequestId);
             if (pr2) {
                 console.log("Pull Request details:", pr2);
+                if (pr2.status == "completed") {
+                    console.log("Pull request is completed, removing from queue:", pr2);
+                    removedPullRequests.push(pr.pullRequestId);
+                    continue; // skip completed pull requests
+                }
             }
             pr.title = pr2.title || pr.title,
             pr.repositoryName = pr2.repositoryName || pr.repositoryName,
@@ -193,6 +193,12 @@ function App(p: AppProps) {
                 isFirst = true;
             }
 
+            // update pull request statuses
+            let statuses = (await Azdo.getPullRequestStatuses(p.bearerToken, tenantInfo, pr.repositoryName, pr.pullRequestId))
+                .value.filter((s: any) => s.context.genre == "pingmint" && s.context.name == "merge-queue");
+            let status0 = statuses.length > 0 ? statuses[0] : null;
+
+            let targetUrl = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apps/hub/pingmint.pingmint-extension.pingmint-pipeline-mergequeue#pr-${pr.pullRequestId}` // TODO: hashtag pr-id
             if (isFirst) {
                 pr.ready = true
                 if (pr2.status != "active") {
@@ -251,6 +257,9 @@ function App(p: AppProps) {
             isFirst = false;
             position++;
         }
+
+        // remove completed pull requests
+        prs = prs.filter(pr => !removedPullRequests.includes(pr.pullRequestId)); 
 
         // Update the primary queue items
         setMergeQueueList({
@@ -417,7 +426,6 @@ function App(p: AppProps) {
                 details={details}
             >
                 <div className={className}>
-                    <div className="blank-icon-medium" />
                     <div className="font-size-m flex-row flex-center flex-shrink">
                         {index + 1}
                     </div>

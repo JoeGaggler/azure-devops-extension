@@ -80,21 +80,14 @@ function App(p: AppProps) {
     function Resync() { setPollHack(Math.random()); }
 
     // rendering the all pull requests list
-    let allPullRequestsWithInfo = allPullRequests.pullRequests.flatMap((pr) => {
+    let allFilteredPullRequests = allPullRequests.pullRequests.flatMap((pr) => {
         let repo = repoMap[pr.repositoryName];
         if (!repo) { return [] }
-        return {
-            ...pr,
-            isDefaultBranch: ((pr.targetRefName == repo.defaultBranch) as boolean),
-            targetBranch: (pr.targetRefName ?? "").replace("refs/heads/", "")
-        }
+        if (pr.isDraft && !filters.drafts) { return [] } // filter out drafts if not enabled
+        let isDefaultBranch = ((pr.targetRefName == repo.defaultBranch) as boolean)
+        if (!isDefaultBranch && !filters.allBranches) { return [] } // filter out non-default branches if not enabled
+        return pr
     })
-    let allFilteredPullRequests = allPullRequestsWithInfo
-        .filter(pr =>
-            (pr.isDefaultBranch || filters.allBranches) &&
-            (!pr.isDraft || (filters.drafts as boolean))
-        )
-        .map(pr => pr as MergeQueuePullRequest);
     
     allFilteredPullRequests.sort((a, b) => {
         let x = a.pullRequestId || 0;
@@ -447,7 +440,7 @@ function App(p: AppProps) {
             return;
         }
 
-        let foundAtAll = allPullRequestsWithInfo.find(pr => pr.pullRequestId == pullRequestId);
+        let foundAtAll = allFilteredPullRequests.find(pr => pr.pullRequestId == pullRequestId);
         if (!foundAtAll) {
             showToast(`Pull request ID: ${pullRequestId} not found in all pull requests.`);
             return;

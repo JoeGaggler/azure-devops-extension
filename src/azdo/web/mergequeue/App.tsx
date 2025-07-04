@@ -39,6 +39,7 @@ interface MergeQueue {
 
 interface MergeQueuePullRequest {
     pullRequestId: number;
+    repositoryName: string;
 }
 
 interface ToastState {
@@ -48,7 +49,7 @@ interface ToastState {
 }
 
 function App(p: AppProps) {
-    console.log("AppProps:", p);
+    // console.log("AppProps:", p);
 
     // Extension Document IDs
     let mergeQueueDocumentCollectionId = "mergeQueue";
@@ -72,7 +73,7 @@ function App(p: AppProps) {
 
     // rendering the all pull requests list
     // TODO: useMemo?
-    let allFilteredPullRequests = allPullRequests.flatMap((pr) => {
+    let allPullRequestsWithInfo = allPullRequests.flatMap((pr) => {
         let repo = repoMap[pr.repository.name];
         if (!repo) { return [] }
         return {
@@ -80,7 +81,8 @@ function App(p: AppProps) {
             isDefaultBranch: ((pr.targetRefName == repo.defaultBranch) as boolean),
             targetBranch: (pr.targetRefName ?? "").replace("refs/heads/", "")
         }
-    }).filter(pr =>
+    })
+    let allFilteredPullRequests = allPullRequestsWithInfo.filter(pr =>
         (pr.isDefaultBranch || filters.allBranches) &&
         (!pr.isDraft || (filters.drafts as boolean))
     );
@@ -104,10 +106,16 @@ function App(p: AppProps) {
 
     // rendering the primary queue list
     let primaryQueueItems: Azdo.PullRequest[] = (mergeQueueList?.queues[0]?.pullRequests || []).flatMap((pr) => {
-        let pullRequest = allFilteredPullRequests.find(p => p.pullRequestId == pr.pullRequestId);
+        let pullRequest = allPullRequestsWithInfo.find(p => p.pullRequestId == pr.pullRequestId);
         if (!pullRequest) {
             console.warn("Pull request not found in all pull requests:", pr);
-            return []; // skip this item
+            return {
+                pullRequestId: pr.pullRequestId,
+                repository: { name: "UNKNOWN", defaultBranch: "refs/heads/unknown" },
+                targetRefName: "refs/heads/unknown",
+                title: `Invalid Pull Request ID: ${pr.pullRequestId}`,
+                isDraft: false,
+            }
         }
         return {
             ...pullRequest,
@@ -167,7 +175,7 @@ function App(p: AppProps) {
                     console.log("Posting success status for pull request:", pr.pullRequestId, status0);
                 }
             } else {
-                let statusText = `Merge queue: #${position} in line`;
+                let statusText = `Merge queue: waiting on #${position - 1}`; // GitHub says: There are ${position - 1} pull requests ahead of this one in the merge queue
                 if (status0?.state != "pending" || status0.description != statusText) {
                     Azdo.postPullRequestStatus(
                         p.bearerToken as string,
@@ -232,15 +240,7 @@ function App(p: AppProps) {
         setAllPullRequests(pullRequests);
 
         // setup merge queue list
-        let newMergeQueueList: MergeQueueList = {
-            queues: [
-                // maintain at least one queue
-                {
-                    pullRequests: []
-                }
-            ]
-        }
-        newMergeQueueList = await Azdo.getOrCreateSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)
+        let newMergeQueueList = await downloadMergeQueuePullRequests();
         setMergeQueueList(newMergeQueueList);
 
         // setup user filters
@@ -376,20 +376,8 @@ function App(p: AppProps) {
         navService.openNewWindow(url, "");
     }
 
-    async function enqueuePullRequests() {
-        if (selectedIds.length == 0) {
-            showToast("No pull requests selected to enqueue.");
-            return;
-        }
-        if (selectedIds.length != 1) {
-            showToast("Only one pull request can be enqueued at a time.");
-            return;
-        }
-        let pullRequestId = selectedIds[0];
-        console.log("Enqueuing pull request ID:", pullRequestId);
-        showToast(`Enqueuing pull request ID: ${pullRequestId}`);
-
-        // TODO: already done?
+    async function downloadMergeQueuePullRequests(): Promise<MergeQueueList> {
+        console.log("Loading merge queue list...");
         let newMergeQueueList: MergeQueueList = {
             queues: [
                 // maintain at least one queue
@@ -399,7 +387,6 @@ function App(p: AppProps) {
             ]
         }
         newMergeQueueList = await Azdo.getOrCreateSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)
-        console.log("Old merge queue list:", newMergeQueueList);
 
         let queues: MergeQueue[]
         if (!newMergeQueueList.queues) {
@@ -414,15 +401,52 @@ function App(p: AppProps) {
                 }
             ]
         }
-        let queue = queues[0]; // TODO: support multiple queues
 
+        return newMergeQueueList;
+    }
+
+    async function uploadMergeQueuePullRequests(newMergeQueueList: MergeQueueList): Promise<boolean> {
+        return await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)
+    }
+
+    async function enqueuePullRequests() {
+        if (selectedIds.length == 0) {
+            showToast("No pull requests selected to enqueue.");
+            return;
+        }
+        if (selectedIds.length != 1) {
+            showToast("Only one pull request can be enqueued at a time.");
+            return;
+        }
+        let pullRequestId = selectedIds[0];
+        console.log("Enqueuing pull request ID:", pullRequestId);
+        showToast(`Enqueuing pull request ID: ${pullRequestId}`);
+
+        // TODO: already done?
+        let newMergeQueueList = await downloadMergeQueuePullRequests();
+        console.log("Old merge queue list:", newMergeQueueList);
+
+        let queue = newMergeQueueList.queues[0]; // TODO: support multiple queues
         let pullRequests = queue.pullRequests
         if (pullRequests.findIndex(pr => pr.pullRequestId == pullRequestId) >= 0) {
             showToast(`Pull request ID: ${pullRequestId} is already in the queue.`);
             return;
         }
+
+        let foundAtAll = allPullRequestsWithInfo.find(pr => pr.pullRequestId == pullRequestId);
+        if (!foundAtAll) {
+            showToast(`Pull request ID: ${pullRequestId} not found in all pull requests.`);
+            return;
+        }
+        let repositoryName = foundAtAll.repository.name
+        if (!repositoryName) {
+            showToast(`Pull request ID: ${pullRequestId} has no repository name.`);
+            return;
+        }
+
         pullRequests.push({
-            pullRequestId: pullRequestId
+            pullRequestId: pullRequestId,
+            repositoryName: repositoryName
         })
 
         newMergeQueueList = {
@@ -431,7 +455,7 @@ function App(p: AppProps) {
         };
         console.log("New merge queue list:", newMergeQueueList);
 
-        if (!await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)) {
+        if (!await uploadMergeQueuePullRequests(newMergeQueueList)) {
             showToast("Failed to save the merge queue list.");
             return;
         }
@@ -470,33 +494,10 @@ function App(p: AppProps) {
         console.log("Removing pull request ID:", pullRequestId);
         showToast(`Removing pull request ID: ${pullRequestId}`);
 
-        // TODO: already done?
-        let newMergeQueueList: MergeQueueList = {
-            queues: [
-                // maintain at least one queue
-                {
-                    pullRequests: []
-                }
-            ]
-        }
-        newMergeQueueList = await Azdo.getOrCreateSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)
+        let newMergeQueueList = await downloadMergeQueuePullRequests();
         console.log("Old merge queue list:", newMergeQueueList);
 
-        let queues: MergeQueue[]
-        if (!newMergeQueueList.queues) {
-            newMergeQueueList.queues = [];
-        }
-        queues = newMergeQueueList.queues;
-
-        if (queues.length == 0) {
-            queues = [
-                {
-                    pullRequests: []
-                }
-            ]
-        }
-        let queue = queues[0]; // TODO: support multiple queues
-
+        let queue = newMergeQueueList.queues[0]; // TODO: support multiple queues
         let pullRequests = queue.pullRequests
         let pullRequestIndex = pullRequests.findIndex(pr => pr.pullRequestId == pullRequestId);
         if (pullRequestIndex < 0) {
@@ -511,7 +512,7 @@ function App(p: AppProps) {
         };
         console.log("New merge queue list:", newMergeQueueList);
 
-        if (!await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)) {
+        if (!await uploadMergeQueuePullRequests(newMergeQueueList)) {
             showToast("Failed to save the merge queue list.");
             return;
         }

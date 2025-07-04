@@ -6,12 +6,12 @@ import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Button } from "azure-devops-ui/Button";
 import { Card } from "azure-devops-ui/Card";
 // import { List } from "azure-devops-ui/List";
-// import { Icon } from "azure-devops-ui/Icon";
+import { Icon, IconSize } from "azure-devops-ui/Icon";
 import { ListSelection } from "azure-devops-ui/List";
 import { Pill, PillVariant } from "azure-devops-ui/Pill";
 import { PillGroup } from "azure-devops-ui/PillGroup";
 import { ScrollableList, IListItemDetails, ListItem } from "azure-devops-ui/List";
-import { Status, Statuses, StatusSize } from "azure-devops-ui/Status";
+// import { Status, Statuses, StatusSize } from "azure-devops-ui/Status";
 import { Toast } from "azure-devops-ui/Toast";
 import { Toggle } from "azure-devops-ui/Toggle";
 import { type IHostNavigationService } from 'azure-devops-extension-api';
@@ -34,7 +34,17 @@ interface MergeQueue {
     pullRequests: Array<MergeQueuePullRequest>;
 }
 
-interface MergeQueuePullRequest {
+interface MergeQueuePullRequest extends SomePullRequest {
+    // pullRequestId: number;
+    // repositoryName: string;
+    // title: string;
+    // targetRefName: string;
+    // isDraft: boolean;
+    // creationDate?: string; // ISO date string
+    ready: boolean
+}
+
+interface SomePullRequest {
     pullRequestId: number;
     repositoryName: string;
     title: string;
@@ -44,7 +54,7 @@ interface MergeQueuePullRequest {
 }
 
 interface AllPullRequests {
-    pullRequests: Array<MergeQueuePullRequest>;
+    pullRequests: Array<SomePullRequest>;
 }
 
 interface ToastState {
@@ -117,7 +127,7 @@ function App(p: AppProps) {
         }
     }
 
-    async function updatePullRequestDetails(pullRequest: MergeQueuePullRequest) {
+    async function updatePullRequestDetails(pullRequest: any) {
         if (!pullRequest) { return; }
 
         // Update the all pull requests list
@@ -137,19 +147,26 @@ function App(p: AppProps) {
         setAllPullRequests(allPullRequests);
 
         // Update the primary queue items as well
-        primaryQueueItems = primaryQueueItems.map((p) => {
-            if (p.pullRequestId == pullRequest.pullRequestId) {
-                return {
-                    ...p,
-                    title: pullRequest.title || p.title,
-                    repositoryName: pullRequest.repositoryName || p.repositoryName,
-                    targetRefName: pullRequest.targetRefName || p.targetRefName,
-                    isDraft: pullRequest.isDraft || p.isDraft,
-                    creationDate: pullRequest.creationDate || p.creationDate
-                };
-            }
-            return p;
-        });
+        primaryQueueItems = primaryQueueItems
+            .flatMap((p): MergeQueuePullRequest | readonly MergeQueuePullRequest[] => {
+                if (p.pullRequestId == pullRequest.pullRequestId && pullRequest.status == "completed") {
+                    return []
+                }
+                return p;
+            })
+            .map((p) => {
+                if (p.pullRequestId == pullRequest.pullRequestId) {
+                    return {
+                        ...p,
+                        title: pullRequest.title || p.title,
+                        repositoryName: pullRequest.repositoryName || p.repositoryName,
+                        targetRefName: pullRequest.targetRefName || p.targetRefName,
+                        isDraft: pullRequest.isDraft || p.isDraft,
+                        creationDate: pullRequest.creationDate || p.creationDate
+                    };
+                }
+                return p;
+            });
         setMergeQueueList({
             ...mergeQueueList,
             queues: [{ pullRequests: primaryQueueItems }] // TODO: support multiple queues
@@ -157,10 +174,12 @@ function App(p: AppProps) {
     }
 
     async function poll() {
-        let prs = (primaryQueueItems)
+        var mrl = mergeQueueList
+        let prs: MergeQueuePullRequest[] = (mrl?.queues[0]?.pullRequests || []);
+
         console.log("Polling...");
 
-        let isFirst = true;
+        let repoVisitedSet: Set<string> = new Set();
         let position = 1;
         for (let pr of prs) {
             if (!pr.pullRequestId || !pr.repositoryName) {
@@ -181,7 +200,14 @@ function App(p: AppProps) {
             }
             await updatePullRequestDetails(pr2);
 
+            let isFirst = false
+            if (!repoVisitedSet.has(pr.repositoryName)) {
+                repoVisitedSet.add(pr.repositoryName);
+                isFirst = true;
+            }
+
             if (isFirst) {
+                pr.ready = true
                 if (pr2.status != "active") {
                     console.warn("Pull request is not active:", pr2);
                     continue; // skip non-active pull requests
@@ -209,6 +235,7 @@ function App(p: AppProps) {
                     console.log("Posting success status for pull request:", pr.pullRequestId, status0);
                 }
             } else {
+                pr.ready = false
                 let statusText = `Merge queue: waiting at #${position}`;
                 if (status0?.state != "pending" || status0.description != statusText) {
                     Azdo.postPullRequestStatus(
@@ -237,6 +264,12 @@ function App(p: AppProps) {
             isFirst = false;
             position++;
         }
+
+        // Update the primary queue items
+        setMergeQueueList({
+            ...mrl,
+            queues: [{ pullRequests: prs }] // TODO: support multiple queues
+        });
     }
 
     // initialize the app
@@ -250,7 +283,7 @@ function App(p: AppProps) {
 
         refreshRepos(pullRequests); // not awaited
 
-        let pullRequestsArray: MergeQueuePullRequest[] = pullRequests.flatMap((p) => {
+        let pullRequestsArray: SomePullRequest[] = pullRequests.flatMap((p) => {
             if (p.pullRequestId && p.repository && p.repository.name) {
                 return {
                     pullRequestId: p.pullRequestId,
@@ -341,7 +374,7 @@ function App(p: AppProps) {
         Azdo.trySaveUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
     }
 
-    function IsDefaultBranch(pullRequest: MergeQueuePullRequest): boolean {
+    function IsDefaultBranch(pullRequest: SomePullRequest): boolean {
         let repo = repoMap[pullRequest.repositoryName];
         if (!repo) {
             console.warn("No repository found for pull request:", pullRequest);
@@ -350,8 +383,18 @@ function App(p: AppProps) {
         return pullRequest.targetRefName === repo.defaultBranch;
     }
 
-    function GetBranchName(pullRequest: MergeQueuePullRequest): string {
+    function GetBranchName(pullRequest: SomePullRequest): string {
         return pullRequest.targetRefName.replace("refs/heads/", "");
+    }
+
+    function GetIconForPullRequest(pullRequest: MergeQueuePullRequest): React.JSX.Element {
+        if (pullRequest.ready) {
+            return <Icon
+                iconName="Starburst"
+                size={IconSize.medium}
+            />
+        }
+        return <div className="blank-icon-medium" />
     }
 
     function renderPullRequestRow(
@@ -361,7 +404,7 @@ function App(p: AppProps) {
         key?: string
     ): React.JSX.Element {
         let extra = "";
-        let className = `scroll-hidden flex-row flex-baseline rhythm-horizontal-8 flex-grow padding-4 ${extra}`;
+        let className = `scroll-hidden flex-row flex-center rhythm-horizontal-8 flex-grow padding-4 ${extra}`;
         return (
             <ListItem
                 key={key || "list-item" + index}
@@ -369,12 +412,48 @@ function App(p: AppProps) {
                 details={details}
             >
                 <div className={className}>
-                    <Status
-                        {...(pullRequest.isDraft ? Statuses.Queued : Statuses.Information)}
-                        key="information"
-                        size={StatusSize.m}
-                        className="flex-self-center"
-                    />
+                    {GetIconForPullRequest(pullRequest)}
+                    <div className="font-size-m flex-row flex-center flex-shrink">
+                        {index + 1}
+                    </div>
+                    <div className="font-size-m padding-left-8">{pullRequest.repositoryName}</div>
+                    <div className="font-size-m italic text-neutral-70 text-ellipsis padding-left-8">{pullRequest.title}</div>
+                    <PillGroup className="padding-left-16 padding-right-16">
+                        {
+                            pullRequest.isDraft && (
+                                <Pill>Draft</Pill>
+                            )
+                        }
+                        {
+                            !IsDefaultBranch(pullRequest) && (
+                                <Pill variant={PillVariant.outlined}>{GetBranchName(pullRequest)}</Pill>
+                            )
+                        }
+                    </PillGroup>
+                    <div className="font-size-m flex-row flex-grow"><div className="flex-grow" />
+                        <div>{(pullRequest.creationDate) ? (luxon.DateTime.fromISO(pullRequest.creationDate).toRelative()) : ""}</div>
+                    </div>
+                </div>
+            </ListItem>
+        );
+    };
+
+    function renderSomePullRequestRow(
+        index: number,
+        pullRequest: SomePullRequest,
+        details: IListItemDetails<any>,
+        key?: string
+    ): React.JSX.Element {
+        let extra = "";
+        let className = `scroll-hidden flex-row flex-center rhythm-horizontal-8 flex-grow padding-4 ${extra}`;
+        return (
+            <ListItem
+                key={key || "list-item" + index}
+                index={index}
+                details={details}
+            >
+                <div className={className}>
+                    <div className="blank-icon-medium" />
                     <div className="font-size-m flex-row flex-center flex-shrink">
                         {index + 1}
                     </div>
@@ -484,7 +563,8 @@ function App(p: AppProps) {
             repositoryName: repositoryName,
             title: foundAtAll.title,
             targetRefName: foundAtAll.targetRefName,
-            isDraft: foundAtAll.isDraft
+            isDraft: foundAtAll.isDraft,
+            ready: false
         })
 
         newMergeQueueList = {
@@ -573,7 +653,7 @@ function App(p: AppProps) {
         }
     }
 
-    function onSelectPullRequests(list: Azdo.PullRequest[], listSelection: ListSelection) {
+    function onSelectPullRequests(list: SomePullRequest[], listSelection: ListSelection) {
         if (list.length == 0) {
             setSelectedIds([]);
             return;
@@ -651,7 +731,7 @@ function App(p: AppProps) {
                             selection={allSelection}
                             onSelect={(_evt, _listRow) => { onSelectPullRequests(allFilteredPullRequests, allSelection); }}
                             onActivate={activatePullRequest}
-                            renderRow={renderPullRequestRow}
+                            renderRow={renderSomePullRequestRow}
                             width="100%"
                         />
                     </div>

@@ -317,6 +317,7 @@ export interface PullRequest {
     title?: string;
     isDraft?: boolean;
     creationDate?: string; // ISO date string
+    autoCompleteSetBy?: boolean
 }
 
 export interface Repo {

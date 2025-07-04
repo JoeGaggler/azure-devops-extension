@@ -8,7 +8,7 @@ import { Card } from "azure-devops-ui/Card";
 // import { List } from "azure-devops-ui/List";
 import { Icon, IconSize } from "azure-devops-ui/Icon";
 import { ListSelection } from "azure-devops-ui/List";
-import { Pill, PillVariant } from "azure-devops-ui/Pill";
+import { Pill, PillVariant, PillSize } from "azure-devops-ui/Pill";
 import { PillGroup } from "azure-devops-ui/PillGroup";
 import { ScrollableList, IListItemDetails, ListItem } from "azure-devops-ui/List";
 // import { Status, Statuses, StatusSize } from "azure-devops-ui/Status";
@@ -51,6 +51,7 @@ interface SomePullRequest {
     targetRefName: string;
     isDraft: boolean;
     creationDate: string; // ISO date string
+    autoComplete: boolean;
 }
 
 interface AllPullRequests {
@@ -75,12 +76,12 @@ function App(p: AppProps) {
     // ui state
     const [selectedIds, setSelectedIds] = React.useState<number[]>([]);
     const [toastState, setToastState] = React.useState<ToastState>({ message: "Hi!", visible: false, ref: React.createRef() });
-    
+
     // cached state
     const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
     const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false });
     const [repoMap, setRepoMap] = React.useState<Record<string, Azdo.Repo>>({});
-    
+
     // state if the lists
     const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] }); // TODO use this
     const [allPullRequests, setAllPullRequests] = React.useState<AllPullRequests>({ pullRequests: [] });
@@ -147,7 +148,8 @@ function App(p: AppProps) {
                     title: p.title || "",
                     targetRefName: p.targetRefName || "",
                     isDraft: p.isDraft || false,
-                    creationDate: p.creationDate || "" // ISO date string
+                    creationDate: p.creationDate || "", // ISO date string
+                    autoComplete: p.autoCompleteSetBy || false
                 };
             } else {
                 return [];
@@ -157,7 +159,7 @@ function App(p: AppProps) {
             ...allPullRequests,
             pullRequests: pullRequestsArray
         })
-        
+
         // UPDATE MERGE QUEUE
 
         var mrl = mergeQueueList
@@ -182,10 +184,11 @@ function App(p: AppProps) {
                 }
             }
             pr.title = pr2.title || pr.title,
-            pr.repositoryName = pr2.repositoryName || pr.repositoryName,
-            pr.targetRefName = pr2.targetRefName || pr.targetRefName,
-            pr.isDraft = pr2.isDraft || pr.isDraft,
-            pr.creationDate = pr2.creationDate || pr.creationDate
+                pr.repositoryName = pr2.repositoryName || pr.repositoryName,
+                pr.targetRefName = pr2.targetRefName || pr.targetRefName,
+                pr.isDraft = pr2.isDraft || pr.isDraft,
+                pr.creationDate = pr2.creationDate || pr.creationDate
+            pr.autoComplete = pr2.autoCompleteSetBy || pr.autoComplete;
 
             let isFirst = false
             if (!repoVisitedSet.has(pr.repositoryName)) {
@@ -259,7 +262,7 @@ function App(p: AppProps) {
         }
 
         // remove completed pull requests
-        prs = prs.filter(pr => !removedPullRequests.includes(pr.pullRequestId)); 
+        prs = prs.filter(pr => !removedPullRequests.includes(pr.pullRequestId));
 
         // Update the primary queue items
         setMergeQueueList({
@@ -394,12 +397,17 @@ function App(p: AppProps) {
                     <PillGroup className="padding-left-16 padding-right-16">
                         {
                             pullRequest.isDraft && (
-                                <Pill>Draft</Pill>
+                                <Pill size={PillSize.compact}>Draft</Pill>
                             )
                         }
                         {
                             !IsDefaultBranch(pullRequest) && (
-                                <Pill variant={PillVariant.outlined}>{GetBranchName(pullRequest)}</Pill>
+                                <Pill size={PillSize.compact} variant={PillVariant.outlined}>{GetBranchName(pullRequest)}</Pill>
+                            )
+                        }
+                        {
+                            pullRequest.autoComplete && (
+                                <Pill size={PillSize.compact} color={{ red: 92, green: 128, blue: 92 }}>Auto-Complete</Pill>
                             )
                         }
                     </PillGroup>
@@ -434,12 +442,17 @@ function App(p: AppProps) {
                     <PillGroup className="padding-left-16 padding-right-16">
                         {
                             pullRequest.isDraft && (
-                                <Pill>Draft</Pill>
+                                <Pill size={PillSize.compact}>Draft</Pill>
                             )
                         }
                         {
                             !IsDefaultBranch(pullRequest) && (
-                                <Pill variant={PillVariant.outlined}>{GetBranchName(pullRequest)}</Pill>
+                                <Pill size={PillSize.compact} variant={PillVariant.outlined}>{GetBranchName(pullRequest)}</Pill>
+                            )
+                        }
+                        {
+                            pullRequest.autoComplete && (
+                                <Pill size={PillSize.compact} color={{ red: 92, green: 128, blue: 92 }}>Auto-Complete</Pill>
                             )
                         }
                     </PillGroup>
@@ -537,7 +550,8 @@ function App(p: AppProps) {
             targetRefName: pullRequest.targetRefName,
             isDraft: pullRequest.isDraft,
             creationDate: pullRequest.creationDate,
-            ready: false
+            ready: false,
+            autoComplete: pullRequest.autoComplete
         })
 
         newMergeQueueList = {

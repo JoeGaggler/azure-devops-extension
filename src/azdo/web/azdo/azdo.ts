@@ -319,6 +319,7 @@ export interface PullRequest {
     isDraft?: boolean;
     creationDate?: string; // ISO date string
     autoCompleteSetBy?: boolean
+    mergeStatus?: string;
 }
 
 export interface Repo {

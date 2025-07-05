@@ -52,6 +52,7 @@ interface SomePullRequest {
     isDraft: boolean;
     creationDate: string; // ISO date string
     autoComplete: boolean;
+    mergeStatus: string;
 }
 
 interface AllPullRequests {
@@ -149,7 +150,8 @@ function App(p: AppProps) {
                     targetRefName: p.targetRefName || "",
                     isDraft: p.isDraft || false,
                     creationDate: p.creationDate || "", // ISO date string
-                    autoComplete: p.autoCompleteSetBy || false
+                    autoComplete: p.autoCompleteSetBy || false,
+                    mergeStatus: p.mergeStatus || "notSet"
                 };
             } else {
                 return [];
@@ -384,6 +386,41 @@ function App(p: AppProps) {
         return <div className="blank-icon-medium" />
     }
 
+    function renderPills(pullRequest: SomePullRequest): React.JSX.Element {
+        return <PillGroup className="padding-left-16 padding-right-16">
+            {
+                pullRequest.mergeStatus == "conflicts" && (
+                    <Pill size={PillSize.compact} color={{ red: 192, green: 0, blue: 0 }}>Conflicts</Pill>
+                )
+            }
+            {
+                pullRequest.mergeStatus == "failure" && (
+                    <Pill size={PillSize.compact} color={{ red: 192, green: 0, blue: 0 }}>Failure</Pill>
+                )
+            }
+            {
+                pullRequest.mergeStatus == "rejectedByPolicy" && (
+                    <Pill size={PillSize.compact} color={{ red: 192, green: 0, blue: 0 }}>Rejected</Pill>
+                )
+            }
+            {
+                pullRequest.isDraft && (
+                    <Pill size={PillSize.compact}>Draft</Pill>
+                )
+            }
+            {
+                !IsDefaultBranch(pullRequest) && (
+                    <Pill size={PillSize.compact} variant={PillVariant.outlined}>{GetBranchName(pullRequest)}</Pill>
+                )
+            }
+            {
+                pullRequest.autoComplete && (
+                    <Pill size={PillSize.compact} color={{ red: 92, green: 128, blue: 92 }}>Auto-Complete</Pill>
+                )
+            }
+        </PillGroup>
+    }
+
     function renderPullRequestRow(
         index: number,
         pullRequest: MergeQueuePullRequest,
@@ -405,23 +442,7 @@ function App(p: AppProps) {
                     </div>
                     <div className="font-size-m padding-left-8">{pullRequest.repositoryName}</div>
                     <div className="font-size-m italic text-neutral-70 text-ellipsis padding-left-8">{pullRequest.title}</div>
-                    <PillGroup className="padding-left-16 padding-right-16">
-                        {
-                            pullRequest.isDraft && (
-                                <Pill size={PillSize.compact}>Draft</Pill>
-                            )
-                        }
-                        {
-                            !IsDefaultBranch(pullRequest) && (
-                                <Pill size={PillSize.compact} variant={PillVariant.outlined}>{GetBranchName(pullRequest)}</Pill>
-                            )
-                        }
-                        {
-                            pullRequest.autoComplete && (
-                                <Pill size={PillSize.compact} color={{ red: 92, green: 128, blue: 92 }}>Auto-Complete</Pill>
-                            )
-                        }
-                    </PillGroup>
+                    {renderPills(pullRequest)}
                     <div className="font-size-m flex-row flex-grow"><div className="flex-grow" />
                         <div>{(pullRequest.creationDate) ? (luxon.DateTime.fromISO(pullRequest.creationDate).toRelative()) : ""}</div>
                     </div>
@@ -450,23 +471,7 @@ function App(p: AppProps) {
                     </div>
                     <div className="font-size-m padding-left-8">{pullRequest.repositoryName}</div>
                     <div className="font-size-m italic text-neutral-70 text-ellipsis padding-left-8">{pullRequest.title}</div>
-                    <PillGroup className="padding-left-16 padding-right-16">
-                        {
-                            pullRequest.isDraft && (
-                                <Pill size={PillSize.compact}>Draft</Pill>
-                            )
-                        }
-                        {
-                            !IsDefaultBranch(pullRequest) && (
-                                <Pill size={PillSize.compact} variant={PillVariant.outlined}>{GetBranchName(pullRequest)}</Pill>
-                            )
-                        }
-                        {
-                            pullRequest.autoComplete && (
-                                <Pill size={PillSize.compact} color={{ red: 92, green: 128, blue: 92 }}>Auto-Complete</Pill>
-                            )
-                        }
-                    </PillGroup>
+                    {renderPills(pullRequest)}
                     <div className="font-size-m flex-row flex-grow"><div className="flex-grow" />
                         <div>{(pullRequest.creationDate) ? (luxon.DateTime.fromISO(pullRequest.creationDate).toRelative()) : ""}</div>
                     </div>
@@ -562,7 +567,8 @@ function App(p: AppProps) {
             isDraft: pullRequest.isDraft,
             creationDate: pullRequest.creationDate || "",
             ready: false,
-            autoComplete: pullRequest.autoComplete || false
+            autoComplete: pullRequest.autoComplete || false,
+            mergeStatus: pullRequest.mergeStatus
         })
 
         let newMergeQueueList: MergeQueueList = {

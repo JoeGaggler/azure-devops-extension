@@ -399,7 +399,7 @@ function App(p: AppProps) {
     }
 
     function GetBranchName(pullRequest: SomePullRequest): string {
-        return pullRequest.targetRefName.replace("refs/heads/", "");
+        return pullRequest?.targetRefName?.replace("refs/heads/", "") || "";
     }
 
     function GetIconForPullRequest(pullRequest: MergeQueuePullRequest): React.JSX.Element {
@@ -681,6 +681,54 @@ function App(p: AppProps) {
         console.log("Selected pull request IDs:", pids);
     }
 
+    async function onDemotePullRequest() {
+        if (selectedIds.length == 0) {
+            showToast("No pull requests selected to remove.");
+            return;
+        }
+        if (selectedIds.length != 1) {
+            showToast("Only one pull request can be removed at a time.");
+            return;
+        }
+        let pullRequestId = selectedIds[0];
+        console.log("Demoting pull request ID:", pullRequestId);
+        showToast(`Demoting pull request ID: ${pullRequestId}`);
+
+        let oldMergeQueueList = await downloadMergeQueuePullRequests();
+        console.log("Old merge queue list:", oldMergeQueueList);
+
+        let queue = oldMergeQueueList.queues[0]; // TODO: support multiple queues
+        let pullRequests = queue.pullRequests
+        let pullRequestIndex = pullRequests.findIndex(pr => pr.pullRequestId == pullRequestId);
+        if (pullRequestIndex < 0) {
+            showToast(`Pull request ID: ${pullRequestId} no longer in queue.`);
+            return;
+        }
+        if (pullRequestIndex + 1 >= pullRequests.length) {
+            showToast(`Pull request ID: ${pullRequestId} is already at the end of the queue.`);
+            return;
+        }
+        let pullRequestRepoName = pullRequests[pullRequestIndex].repositoryName;
+        let tmp = pullRequests[pullRequestIndex + 1];
+        pullRequests[pullRequestIndex + 1] = pullRequests[pullRequestIndex];
+        pullRequests[pullRequestIndex] = tmp;
+
+        let newMergeQueueList: MergeQueueList = {
+            ...oldMergeQueueList,
+            queues: [{ ...queue, pullRequests: pullRequests }] // TODO: support multiple queues
+        };
+        console.log("New merge queue list:", newMergeQueueList);
+
+        // save
+        if (!await uploadMergeQueuePullRequests(newMergeQueueList)) {
+            showToast("Failed to save the merge queue list.");
+            return;
+        }
+        setMergeQueueList(newMergeQueueList);
+
+        await Azdo.deletePullRequestStatuses(p.bearerToken, tenantInfo, pullRequestRepoName, pullRequestId);
+    }
+
     return (
         <>
             {toastState.visible && <Toast message={toastState.message} ref={toastState.ref} />}
@@ -689,12 +737,26 @@ function App(p: AppProps) {
                 <div className="padding-8 flex-row flex-baseline rhythm-horizontal-16">
                     <h2>Merge Queue</h2>
                     <div className="flex-grow"></div>
-                    <Button
-                        text="Remove"
-                        danger={true}
-                        disabled={false} // TODO: validation
-                        onClick={removePullRequests}
-                    />
+                    <div className="padding-8 flex-row flex-stretch rhythm-horizontal-16">
+                        <Button
+                            disabled={false} // TODO: validation
+                            onClick={() => showToast("Not implemented yet.")}
+                        >
+                            <Icon iconName="Up" size={IconSize.medium} />
+                        </Button>
+                        <Button
+                            disabled={false} // TODO: validation
+                            onClick={onDemotePullRequest}
+                        >
+                            <Icon iconName="Down" size={IconSize.medium} />
+                        </Button>
+                        <Button
+                            text="Remove"
+                            danger={true}
+                            disabled={false} // TODO: validation
+                            onClick={removePullRequests}
+                        />
+                    </div>
                 </div>
                 <Card className="padding-8">
                     <div className="flex-column">

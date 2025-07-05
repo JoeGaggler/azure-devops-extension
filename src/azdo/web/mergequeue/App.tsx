@@ -162,14 +162,15 @@ function App(p: AppProps) {
 
         // UPDATE MERGE QUEUE
 
-        let mrl = await downloadMergeQueuePullRequests();
-        console.log("Old merge queue list:", mrl);
+        let oldMergeQueueList = await downloadMergeQueuePullRequests();
+        let queue = oldMergeQueueList.queues[0]; // TODO: support multiple queues
+        let pullRequestList: MergeQueuePullRequest[] = (queue?.pullRequests || []);
+        console.log("Old merge queue list:", oldMergeQueueList);
 
-        let prs: MergeQueuePullRequest[] = (mrl.queues[0]?.pullRequests || []);
         let repoVisitedSet: Set<string> = new Set();
         let position = 1;
         let removedPullRequests: number[] = [];
-        for (let pr of prs) {
+        for (let pr of pullRequestList) {
             if (!pr.pullRequestId || !pr.repositoryName) {
                 console.warn("Invalid pull request:", pr);
                 continue;
@@ -264,19 +265,21 @@ function App(p: AppProps) {
         }
 
         // remove completed pull requests
-        prs = prs.filter(pr => !removedPullRequests.includes(pr.pullRequestId));
+        pullRequestList = pullRequestList.filter(pr => !removedPullRequests.includes(pr.pullRequestId));
 
         // Update the primary queue items
         let newMergeQueueList: MergeQueueList = {
-            ...mrl,
-            queues: [{ pullRequests: prs }] // TODO: support multiple queues
+            ...oldMergeQueueList,
+            queues: [{ ...queue, pullRequests: pullRequestList }] // TODO: support multiple queues
         }
-        setMergeQueueList(newMergeQueueList);
+        console.log("New merge queue list:", newMergeQueueList);
 
+        // save
         if (!await uploadMergeQueuePullRequests(newMergeQueueList)) {
             showToast("Failed to save the merge queue list.");
             return;
         }
+        setMergeQueueList(newMergeQueueList);
     }
 
     // initialize the app
@@ -530,10 +533,10 @@ function App(p: AppProps) {
         console.log("Enqueuing pull request ID:", pullRequestId);
         showToast(`Enqueuing pull request ID: ${pullRequestId}`);
 
-        let newMergeQueueList = await downloadMergeQueuePullRequests();
-        console.log("Old merge queue list:", newMergeQueueList);
+        let oldMergeQueueList = await downloadMergeQueuePullRequests();
+        console.log("Old merge queue list:", oldMergeQueueList);
 
-        let queue = newMergeQueueList.queues[0]; // TODO: support multiple queues
+        let queue = oldMergeQueueList.queues[0]; // TODO: support multiple queues
         let pullRequests = queue.pullRequests
         if (pullRequests.findIndex(pr => pr.pullRequestId == pullRequestId) >= 0) {
             showToast(`Pull request ID: ${pullRequestId} is already in the queue.`);
@@ -562,24 +565,17 @@ function App(p: AppProps) {
             autoComplete: pullRequest.autoComplete || false
         })
 
-        newMergeQueueList = {
-            ...newMergeQueueList,
-
-            // TODO: support multiple queues
-            queues: [
-                {
-                    ...queue,
-                    pullRequests: [...pullRequests]
-                }
-            ]
+        let newMergeQueueList: MergeQueueList = {
+            ...oldMergeQueueList,
+            queues: [{ ...queue, pullRequests: pullRequests }] // TODO: support multiple queues
         };
         console.log("New merge queue list:", newMergeQueueList);
 
+        // save
         if (!await uploadMergeQueuePullRequests(newMergeQueueList)) {
             showToast("Failed to save the merge queue list.");
             return;
         }
-
         setMergeQueueList(newMergeQueueList);
 
         // post pull request status
@@ -609,10 +605,10 @@ function App(p: AppProps) {
         console.log("Removing pull request ID:", pullRequestId);
         showToast(`Removing pull request ID: ${pullRequestId}`);
 
-        let newMergeQueueList = await downloadMergeQueuePullRequests();
-        console.log("Old merge queue list:", newMergeQueueList);
+        let oldMergeQueueList = await downloadMergeQueuePullRequests();
+        console.log("Old merge queue list:", oldMergeQueueList);
 
-        let queue = newMergeQueueList.queues[0]; // TODO: support multiple queues
+        let queue = oldMergeQueueList.queues[0]; // TODO: support multiple queues
         let pullRequests = queue.pullRequests
         let pullRequestIndex = pullRequests.findIndex(pr => pr.pullRequestId == pullRequestId);
         if (pullRequestIndex < 0) {
@@ -622,24 +618,17 @@ function App(p: AppProps) {
         let pullRequestRepoName = pullRequests[pullRequestIndex].repositoryName;
         pullRequests.splice(pullRequestIndex, 1); // remove the pull request
 
-        newMergeQueueList = {
-            ...newMergeQueueList,
-
-            // TODO: support multiple queues
-            queues: [
-                {
-                    ...queue,
-                    pullRequests: [...pullRequests]
-                }
-            ]
+        let newMergeQueueList: MergeQueueList = {
+            ...oldMergeQueueList,
+            queues: [{ ...queue, pullRequests: pullRequests }] // TODO: support multiple queues
         };
         console.log("New merge queue list:", newMergeQueueList);
 
+        // save
         if (!await uploadMergeQueuePullRequests(newMergeQueueList)) {
             showToast("Failed to save the merge queue list.");
             return;
         }
-
         setMergeQueueList(newMergeQueueList);
 
         await Azdo.deletePullRequestStatuses(p.bearerToken, tenantInfo, pullRequestRepoName, pullRequestId);

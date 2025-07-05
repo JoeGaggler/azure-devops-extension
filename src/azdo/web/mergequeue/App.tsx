@@ -157,6 +157,7 @@ function App(p: AppProps) {
     }
 
     async function poll() {
+        // TODO: don't save if nothing changed
         console.log("Polling...");
 
         // UPDATE ALL PULL REQUESTS
@@ -681,6 +682,54 @@ function App(p: AppProps) {
         console.log("Selected pull request IDs:", pids);
     }
 
+    async function onPromotePullRequest() {
+        if (selectedIds.length == 0) {
+            showToast("No pull requests selected to remove.");
+            return;
+        }
+        if (selectedIds.length != 1) {
+            showToast("Only one pull request can be removed at a time.");
+            return;
+        }
+        let pullRequestId = selectedIds[0];
+        console.log("Demoting pull request ID:", pullRequestId);
+        showToast(`Demoting pull request ID: ${pullRequestId}`);
+
+        let oldMergeQueueList = await downloadMergeQueuePullRequests();
+        console.log("Old merge queue list:", oldMergeQueueList);
+
+        let queue = oldMergeQueueList.queues[0]; // TODO: support multiple queues
+        let pullRequests = queue.pullRequests
+        let pullRequestIndex = pullRequests.findIndex(pr => pr.pullRequestId == pullRequestId);
+        if (pullRequestIndex < 0) {
+            showToast(`Pull request ID: ${pullRequestId} no longer in queue.`);
+            return;
+        }
+        if (pullRequestIndex == 0) {
+            showToast(`Pull request ID: ${pullRequestId} is already at the start of the queue.`);
+            return;
+        }
+        let pullRequestRepoName = pullRequests[pullRequestIndex].repositoryName;
+        let tmp = pullRequests[pullRequestIndex - 1];
+        pullRequests[pullRequestIndex - 1] = pullRequests[pullRequestIndex];
+        pullRequests[pullRequestIndex] = tmp;
+
+        let newMergeQueueList: MergeQueueList = {
+            ...oldMergeQueueList,
+            queues: [{ ...queue, pullRequests: pullRequests }] // TODO: support multiple queues
+        };
+        console.log("New merge queue list:", newMergeQueueList);
+
+        // save
+        if (!await uploadMergeQueuePullRequests(newMergeQueueList)) {
+            showToast("Failed to save the merge queue list.");
+            return;
+        }
+        setMergeQueueList(newMergeQueueList);
+
+        await Azdo.deletePullRequestStatuses(p.bearerToken, tenantInfo, pullRequestRepoName, pullRequestId);
+    }
+
     async function onDemotePullRequest() {
         if (selectedIds.length == 0) {
             showToast("No pull requests selected to remove.");
@@ -740,7 +789,7 @@ function App(p: AppProps) {
                     <div className="padding-8 flex-row flex-stretch rhythm-horizontal-16">
                         <Button
                             disabled={false} // TODO: validation
-                            onClick={() => showToast("Not implemented yet.")}
+                            onClick={onPromotePullRequest}
                         >
                             <Icon iconName="Up" size={IconSize.medium} />
                         </Button>

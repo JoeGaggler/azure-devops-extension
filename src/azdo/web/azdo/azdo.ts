@@ -77,10 +77,16 @@ export async function postAzdo(url: string, body: any, bearertoken: string): Pro
     }
 }
 
-export async function getAllPullRequests(tenantInfo: TenantInfo): Promise<Array<PullRequest>> {
-    let bearer = await SDK.getAccessToken()
-    let json = await getAzdo(`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/git/pullrequests?api-version=7.2-preview.2`, bearer as string);
-    return json.value
+export async function getAllPullRequests(tenantInfo: TenantInfo): Promise<PullRequest[] | undefined> {
+    try {
+        let bearer = await SDK.getAccessToken()
+        let json = await getAzdo(`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/git/pullrequests?api-version=7.2-preview.2`, bearer as string);
+        return json.value
+    }
+    catch (err) {
+        console.error("Error fetching pull requests:", err);
+        return undefined;
+    }
 }
 
 export async function approveRun(approvalId: string, status: string, comment: string, bearertoken: string): Promise<any> {
@@ -125,7 +131,7 @@ export async function getOrCreateSharedDocument(colId: string, docId: string, do
     return userFiltersDoc;
 }
 
-export async function trySaveSharedDocument(colId: string, docId: string, document: any): Promise<boolean> {
+export async function trySaveSharedDocument<T extends ExtensionDocument>(colId: string, docId: string, document: T): Promise<T | undefined> {
     const accessToken = await SDK.getAccessToken();
     const extDataService = await SDK.getService<IExtensionDataService>("ms.vss-features.extension-data-service");
     const dataManager = await extDataService.getExtensionDataManager(SDK.getExtensionContext().id, accessToken);
@@ -136,10 +142,10 @@ export async function trySaveSharedDocument(colId: string, docId: string, docume
         console.log("Updating Shared Document: ", colId, docId, document);
         let next_document = await dataManager.setDocument(colId, document);
         console.log("Update Shared Document: ", colId, docId, next_document);
-        return true;
+        return next_document;
     } catch (err) {
         console.error("Error updating shared document", err);
-        return false;
+        return undefined;
     }
 }
 
@@ -327,4 +333,9 @@ export interface Repo {
     id?: string;
     name?: string;
     defaultBranch?: string;
+}
+
+export interface ExtensionDocument {
+    id?: string;
+    [key: string]: any; // Allow any additional properties
 }

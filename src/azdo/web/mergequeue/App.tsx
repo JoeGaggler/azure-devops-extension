@@ -157,162 +157,179 @@ function App(p: AppProps) {
     }
 
     async function poll() {
-        console.log("Polling...");
+        try {
+            console.log("Polling...");
 
-        // UPDATE ALL PULL REQUESTS
-        let pullRequests = await Azdo.getAllPullRequests(tenantInfo);
-        console.log("Pull Requests value:", pullRequests);
-        await refreshRepos(pullRequests);
-
-        let pullRequestsArray: SomePullRequest[] = pullRequests.flatMap((p): (SomePullRequest | readonly SomePullRequest[]) => {
-            if (p.pullRequestId && p.repository && p.repository.name) {
-                return {
-                    pullRequestId: p.pullRequestId,
-                    repositoryName: p.repository.name,
-                    title: p.title || "",
-                    targetRefName: p.targetRefName || "",
-                    isDraft: p.isDraft || false,
-                    creationDate: p.creationDate || "", // ISO date string
-                    autoComplete: p.autoCompleteSetBy || false,
-                    mergeStatus: p.mergeStatus || "notSet",
-                    voteStatus: summarizeVotes(p.reviewers || [])
-                };
-            } else {
-                return [];
-            }
-        });
-        setAllPullRequests({
-            ...allPullRequests,
-            pullRequests: pullRequestsArray
-        })
-
-        // UPDATE MERGE QUEUE
-        let didChange = false;
-        let oldMergeQueueList = await downloadMergeQueuePullRequests();
-        let queue = oldMergeQueueList.queues[0]; // TODO: support multiple queues
-        let pullRequestList: MergeQueuePullRequest[] = (queue?.pullRequests || []);
-        console.log("Old merge queue list:", oldMergeQueueList);
-
-        let repoVisitedSet: Set<string> = new Set();
-        let position = 1;
-        let removedPullRequests: number[] = [];
-        for (let pr of pullRequestList) {
-            if (!pr.pullRequestId || !pr.repositoryName) {
-                console.warn("Invalid pull request:", pr);
-                continue;
-            }
-
-            // refresh the pull request details
-            let pr2 = await Azdo.getPullRequest(p.bearerToken, tenantInfo, pr.repositoryName, pr.pullRequestId);
-            if (pr2) {
-                console.log("Pull Request details:", pr2);
-                if (pr2.status == "completed") {
-                    console.log("Pull request is completed, removing from queue:", pr2);
-                    removedPullRequests.push(pr.pullRequestId);
-                    continue; // skip completed pull requests
-                }
-            }
-            if (pr2?.title && pr2.title !== pr.title) { pr.title = pr2.title; didChange = true; }
-            if (pr2?.repositoryName && pr2.repositoryName !== pr.repositoryName) { pr.repositoryName = pr2.repositoryName; didChange = true; }
-            if (pr2?.targetRefName && pr2.targetRefName !== pr.targetRefName) { pr.targetRefName = pr2.targetRefName; didChange = true; }
-            if (pr2?.creationDate && pr2.creationDate !== pr.creationDate) { pr.creationDate = pr2.creationDate; didChange = true; }
-            if (pr2?.mergeStatus && pr2.mergeStatus !== pr.mergeStatus) { pr.mergeStatus = pr2.mergeStatus; didChange = true; }
-            if (pr2?.voteStatus && pr2.voteStatus !== pr.voteStatus) { pr.voteStatus = pr2.voteStatus; didChange = true; }
-            if (typeof pr2?.isDraft !== "undefined" && pr2.isDraft !== pr.isDraft) { pr.isDraft = pr2.isDraft; didChange = true; }
-            if (typeof pr2?.autoCompleteSetBy !== "undefined" && pr2.autoCompleteSetBy !== pr.autoComplete) { pr.autoComplete = pr2.autoCompleteSetBy; didChange = true; }
-
-            let isFirst = false
-            if (!repoVisitedSet.has(pr.repositoryName)) {
-                repoVisitedSet.add(pr.repositoryName);
-                isFirst = true;
-            }
-
-            // update pull request statuses
-            let statuses = (await Azdo.getPullRequestStatuses(p.bearerToken, tenantInfo, pr.repositoryName, pr.pullRequestId))
-                .value.filter((s: any) => s.context.genre == "pingmint" && s.context.name == "merge-queue");
-            let status0 = statuses.length > 0 ? statuses[0] : null;
-
-            let targetUrl = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apps/hub/pingmint.pingmint-extension.pingmint-pipeline-mergequeue#pr-${pr.pullRequestId}` // TODO: hashtag pr-id
-            if (isFirst) {
-                pr.ready = true
-                if (pr2.status != "active") {
-                    console.warn("Pull request is not active:", pr2);
-                    continue; // skip non-active pull requests
-                }
-                else if (status0?.state != "succeeded") {
-                    didChange = true;
-                    Azdo.postPullRequestStatus(
-                        p.bearerToken,
-                        tenantInfo,
-                        pr.repositoryName,
-                        pr.pullRequestId,
-                        "succeeded",
-                        "Merge queue: ready",
-                        targetUrl
-                    );
-
-                    for (let status of statuses) {
-                        console.log("Deleting old status for pull request:", pr.pullRequestId, status.id);
-                        Azdo.deletePullRequestStatus(
-                            p.bearerToken,
-                            tenantInfo,
-                            pr.repositoryName,
-                            pr.pullRequestId,
-                            status.id)
-                    }
-                    console.log("Posting success status for pull request:", pr.pullRequestId, status0);
-                }
-            } else {
-                pr.ready = false
-                let statusText = `Merge queue: waiting at #${position}`;
-                if (status0?.state != "pending" || status0.description != statusText) {
-                    didChange = true;
-                    Azdo.postPullRequestStatus(
-                        p.bearerToken,
-                        tenantInfo,
-                        pr.repositoryName,
-                        pr.pullRequestId,
-                        "pending",
-                        statusText,
-                        targetUrl
-                    );
-
-                    for (let status of statuses) {
-                        console.log("Deleting old status for pull request:", pr.pullRequestId, status.id);
-                        Azdo.deletePullRequestStatus(
-                            p.bearerToken,
-                            tenantInfo,
-                            pr.repositoryName,
-                            pr.pullRequestId,
-                            status.id)
-                    }
-                    console.log("Posting pending status for pull request:", pr.pullRequestId, status0);
-                }
-            }
-
-            isFirst = false;
-            position++;
-        }
-
-        // remove completed pull requests
-        pullRequestList = pullRequestList.filter(pr => !removedPullRequests.includes(pr.pullRequestId));
-
-        // Update the primary queue items
-        let newMergeQueueList: MergeQueueList = {
-            ...oldMergeQueueList,
-            queues: [{ ...queue, pullRequests: pullRequestList }] // TODO: support multiple queues
-        }
-        console.log("New merge queue list:", newMergeQueueList);
-
-        // save
-        if (didChange) {
-            if (!await uploadMergeQueuePullRequests(newMergeQueueList)) {
-                showToast("Failed to save the merge queue list.");
+            if (!tenantInfo.organization || !tenantInfo.project) {
+                console.warn("Tenant info not set, skipping poll.");
                 return;
             }
-            setMergeQueueList(newMergeQueueList);
-        } else {
-            console.log("No changes in merge queue list, not saving.");
+
+            // UPDATE ALL PULL REQUESTS
+            let pullRequests = await Azdo.getAllPullRequests(tenantInfo);
+            if (!pullRequests) {
+                console.warn("Unable to fetch all pull requests.");
+                return;
+            }
+
+            console.log("Pull Requests value:", pullRequests);
+            await refreshRepos(pullRequests);
+
+            let pullRequestsArray: SomePullRequest[] = pullRequests
+                .flatMap((p): (SomePullRequest | readonly SomePullRequest[]) => {
+                    if (p.pullRequestId && p.repository && p.repository.name) {
+                        return {
+                            pullRequestId: p.pullRequestId,
+                            repositoryName: p.repository.name,
+                            title: p.title || "",
+                            targetRefName: p.targetRefName || "",
+                            isDraft: p.isDraft || false,
+                            creationDate: p.creationDate || "", // ISO date string
+                            autoComplete: p.autoCompleteSetBy || false,
+                            mergeStatus: p.mergeStatus || "notSet",
+                            voteStatus: summarizeVotes(p.reviewers || [])
+                        };
+                    } else {
+                        return [];
+                    }
+                });
+            setAllPullRequests({
+                ...allPullRequests,
+                pullRequests: pullRequestsArray
+            })
+
+            // UPDATE MERGE QUEUE
+            let didChange = false;
+            let oldMergeQueueList = await downloadMergeQueuePullRequests();
+            let queue = oldMergeQueueList.queues[0]; // TODO: support multiple queues
+            let pullRequestList: MergeQueuePullRequest[] = (queue?.pullRequests || []);
+            console.log("Old merge queue list:", oldMergeQueueList);
+
+            let repoVisitedSet: Set<string> = new Set();
+            let position = 1;
+            let removedPullRequests: number[] = [];
+            for (let pr of pullRequestList) {
+                if (!pr.pullRequestId || !pr.repositoryName) {
+                    console.warn("Invalid pull request:", pr);
+                    continue;
+                }
+
+                // refresh the pull request details
+                let pr2 = await Azdo.getPullRequest(p.bearerToken, tenantInfo, pr.repositoryName, pr.pullRequestId);
+                if (pr2) {
+                    console.log("Pull Request details:", pr2);
+                    if (pr2.status == "completed") {
+                        console.log("Pull request is completed, removing from queue:", pr2);
+                        removedPullRequests.push(pr.pullRequestId);
+                        continue; // skip completed pull requests
+                    }
+                }
+                if (pr2?.title && pr2.title !== pr.title) { pr.title = pr2.title; didChange = true; }
+                if (pr2?.repositoryName && pr2.repositoryName !== pr.repositoryName) { pr.repositoryName = pr2.repositoryName; didChange = true; }
+                if (pr2?.targetRefName && pr2.targetRefName !== pr.targetRefName) { pr.targetRefName = pr2.targetRefName; didChange = true; }
+                if (pr2?.creationDate && pr2.creationDate !== pr.creationDate) { pr.creationDate = pr2.creationDate; didChange = true; }
+                if (pr2?.mergeStatus && pr2.mergeStatus !== pr.mergeStatus) { pr.mergeStatus = pr2.mergeStatus; didChange = true; }
+                if (pr2?.voteStatus && pr2.voteStatus !== pr.voteStatus) { pr.voteStatus = pr2.voteStatus; didChange = true; }
+                if (typeof pr2?.isDraft !== "undefined" && pr2.isDraft !== pr.isDraft) { pr.isDraft = pr2.isDraft; didChange = true; }
+                if (typeof pr2?.autoCompleteSetBy !== "undefined" && pr2.autoCompleteSetBy !== pr.autoComplete) { pr.autoComplete = pr2.autoCompleteSetBy; didChange = true; }
+
+                let isFirst = false
+                if (!repoVisitedSet.has(pr.repositoryName)) {
+                    repoVisitedSet.add(pr.repositoryName);
+                    isFirst = true;
+                }
+
+                // update pull request statuses
+                let statuses = (await Azdo.getPullRequestStatuses(p.bearerToken, tenantInfo, pr.repositoryName, pr.pullRequestId))
+                    .value.filter((s: any) => s.context.genre == "pingmint" && s.context.name == "merge-queue");
+                let status0 = statuses.length > 0 ? statuses[0] : null;
+
+                let targetUrl = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apps/hub/pingmint.pingmint-extension.pingmint-pipeline-mergequeue#pr-${pr.pullRequestId}` // TODO: hashtag pr-id
+                if (isFirst) {
+                    pr.ready = true
+                    if (pr2.status != "active") {
+                        console.warn("Pull request is not active:", pr2);
+                        continue; // skip non-active pull requests
+                    }
+                    else if (status0?.state != "succeeded") {
+                        didChange = true;
+                        Azdo.postPullRequestStatus(
+                            p.bearerToken,
+                            tenantInfo,
+                            pr.repositoryName,
+                            pr.pullRequestId,
+                            "succeeded",
+                            "Merge queue: ready",
+                            targetUrl
+                        );
+
+                        for (let status of statuses) {
+                            console.log("Deleting old status for pull request:", pr.pullRequestId, status.id);
+                            Azdo.deletePullRequestStatus(
+                                p.bearerToken,
+                                tenantInfo,
+                                pr.repositoryName,
+                                pr.pullRequestId,
+                                status.id)
+                        }
+                        console.log("Posting success status for pull request:", pr.pullRequestId, status0);
+                    }
+                } else {
+                    pr.ready = false
+                    let statusText = `Merge queue: waiting at #${position}`;
+                    if (status0?.state != "pending" || status0.description != statusText) {
+                        didChange = true;
+                        Azdo.postPullRequestStatus(
+                            p.bearerToken,
+                            tenantInfo,
+                            pr.repositoryName,
+                            pr.pullRequestId,
+                            "pending",
+                            statusText,
+                            targetUrl
+                        );
+
+                        for (let status of statuses) {
+                            console.log("Deleting old status for pull request:", pr.pullRequestId, status.id);
+                            Azdo.deletePullRequestStatus(
+                                p.bearerToken,
+                                tenantInfo,
+                                pr.repositoryName,
+                                pr.pullRequestId,
+                                status.id)
+                        }
+                        console.log("Posting pending status for pull request:", pr.pullRequestId, status0);
+                    }
+                }
+
+                isFirst = false;
+                position++;
+            }
+
+            // remove completed pull requests
+            if (pullRequestList.length != (pullRequestList = pullRequestList.filter(pr => !removedPullRequests.includes(pr.pullRequestId))).length) {
+                didChange = true;
+                console.log("Removed completed pull requests:", removedPullRequests);
+            }
+
+            // Update the primary queue items
+            let newMergeQueueList: MergeQueueList = {
+                ...oldMergeQueueList,
+                queues: [{ ...queue, pullRequests: pullRequestList }] // TODO: support multiple queues
+            }
+            console.log("New merge queue list:", newMergeQueueList);
+
+            // save
+            if (!didChange) {
+                return;
+            } else if (await uploadMergeQueuePullRequests(newMergeQueueList)) {
+                console.log("Merge queue list saved successfully");
+                setMergeQueueList(newMergeQueueList);
+            } else {
+                console.warn("Failed to save the merge queue list");
+            }
+        } catch (err) {
+            console.error("Error during polling:", err);
         }
     }
 
@@ -535,9 +552,9 @@ function App(p: AppProps) {
         return newMergeQueueList;
     }
 
-    async function uploadMergeQueuePullRequests(next: MergeQueueList): Promise<boolean> {
+    async function uploadMergeQueuePullRequests(next: MergeQueueList): Promise<MergeQueueList | undefined> {
         console.log("Saving merge queue list:", next);
-        return await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, next as any)
+        return await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, next)
     }
 
     async function enqueuePullRequests() {

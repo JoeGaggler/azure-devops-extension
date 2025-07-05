@@ -53,6 +53,7 @@ interface SomePullRequest {
     creationDate: string; // ISO date string
     autoComplete: boolean;
     mergeStatus: string;
+    voteStatus: string;
 }
 
 interface AllPullRequests {
@@ -133,6 +134,28 @@ function App(p: AppProps) {
         }
     }
 
+    function summarizeVotes(reviewers: any): string {
+        let finalVote = 20;
+        let voters = 0;
+        for (let reviewer of reviewers) {
+            if (reviewer?.vote) {
+                let vote = reviewer?.vote || 0;
+                if (!vote && !reviewer.isRequired) { continue; } // skip non-required reviewers with no vote
+                finalVote = reviewer?.vote > 10 ? 10 : reviewer?.vote;
+                if (!reviewer.isContainer) { voters++; } // count only non-container reviewers
+            }
+        }
+        switch (finalVote) {
+            case 20: return "none"
+            case 10: return voters > 1 ? "approved" : "none" // require at least 2 voters to be tagged "approved"
+            case 5: return voters > 1 ? "suggestions" : "none" // require at least 2 voters to be tagged "approved with suggestions"
+            case 0: return "none"
+            case -5: return "waiting"
+            case -10: return "rejected"
+            default: return "unknown";
+        }
+    }
+
     async function poll() {
         console.log("Polling...");
 
@@ -151,7 +174,8 @@ function App(p: AppProps) {
                     isDraft: p.isDraft || false,
                     creationDate: p.creationDate || "", // ISO date string
                     autoComplete: p.autoCompleteSetBy || false,
-                    mergeStatus: p.mergeStatus || "notSet"
+                    mergeStatus: p.mergeStatus || "notSet",
+                    voteStatus: summarizeVotes(p.reviewers || [])
                 };
             } else {
                 return [];
@@ -188,12 +212,14 @@ function App(p: AppProps) {
                     continue; // skip completed pull requests
                 }
             }
-            pr.title = pr2.title || pr.title;
-            pr.repositoryName = pr2.repositoryName || pr.repositoryName;
-            pr.targetRefName = pr2.targetRefName || pr.targetRefName;
-            pr.isDraft = pr2.isDraft || pr.isDraft;
+            pr.title = pr2.title || pr.title || "";
+            pr.repositoryName = pr2.repositoryName || pr.repositoryName || "";
+            pr.targetRefName = pr2.targetRefName || pr.targetRefName || "";
+            pr.isDraft = pr2.isDraft || pr.isDraft || false;
             pr.creationDate = pr2.creationDate || pr.creationDate || "";
             pr.autoComplete = pr2.autoCompleteSetBy || pr.autoComplete || false;
+            pr.mergeStatus = pr2.mergeStatus || pr.mergeStatus || "notSet";
+            pr.voteStatus = pr2.voteStatus || pr.voteStatus || "unknown";
 
             let isFirst = false
             if (!repoVisitedSet.has(pr.repositoryName)) {
@@ -388,36 +414,19 @@ function App(p: AppProps) {
 
     function renderPills(pullRequest: SomePullRequest): React.JSX.Element {
         return <PillGroup className="padding-left-16 padding-right-16">
-            {
-                pullRequest.mergeStatus == "conflicts" && (
-                    <Pill size={PillSize.compact} color={{ red: 192, green: 0, blue: 0 }}>Conflicts</Pill>
-                )
-            }
-            {
-                pullRequest.mergeStatus == "failure" && (
-                    <Pill size={PillSize.compact} color={{ red: 192, green: 0, blue: 0 }}>Failure</Pill>
-                )
-            }
-            {
-                pullRequest.mergeStatus == "rejectedByPolicy" && (
-                    <Pill size={PillSize.compact} color={{ red: 192, green: 0, blue: 0 }}>Rejected</Pill>
-                )
-            }
-            {
-                pullRequest.isDraft && (
-                    <Pill size={PillSize.compact}>Draft</Pill>
-                )
-            }
-            {
-                !IsDefaultBranch(pullRequest) && (
-                    <Pill size={PillSize.compact} variant={PillVariant.outlined}>{GetBranchName(pullRequest)}</Pill>
-                )
-            }
-            {
-                pullRequest.autoComplete && (
-                    <Pill size={PillSize.compact} color={{ red: 92, green: 128, blue: 92 }}>Auto-Complete</Pill>
-                )
-            }
+            {pullRequest.mergeStatus == "conflicts" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Conflicts</Pill>)}
+            {pullRequest.mergeStatus == "failure" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Failure</Pill>)}
+            {pullRequest.mergeStatus == "rejectedByPolicy" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Policy</Pill>)}
+
+            {pullRequest.voteStatus == "approved" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 128, blue: 64 }}>Approved</Pill>)}
+            {pullRequest.voteStatus == "suggestions" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 64, blue: 128 }}>Suggestions</Pill>)}
+            {pullRequest.voteStatus == "waiting" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 169, green: 154, blue: 60 }}>Waiting</Pill>)}
+            {pullRequest.voteStatus == "rejected" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Rejected</Pill>)}
+
+            {pullRequest.isDraft && (<Pill size={PillSize.compact}>Draft</Pill>)}
+            {pullRequest.autoComplete && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 92, green: 128, blue: 92 }}>Auto-Complete</Pill>)}
+
+            {!IsDefaultBranch(pullRequest) && (<Pill size={PillSize.compact} variant={PillVariant.outlined}>{GetBranchName(pullRequest)}</Pill>)}
         </PillGroup>
     }
 
@@ -568,7 +577,8 @@ function App(p: AppProps) {
             creationDate: pullRequest.creationDate || "",
             ready: false,
             autoComplete: pullRequest.autoComplete || false,
-            mergeStatus: pullRequest.mergeStatus
+            mergeStatus: pullRequest.mergeStatus,
+            voteStatus: pullRequest.voteStatus,
         })
 
         let newMergeQueueList: MergeQueueList = {

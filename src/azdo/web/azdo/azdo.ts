@@ -320,6 +320,7 @@ export interface PullRequest {
     creationDate?: string; // ISO date string
     autoCompleteSetBy?: boolean
     mergeStatus?: string;
+    reviewers?: Array<any>; // TODO: reviewer type
 }
 
 export interface Repo {

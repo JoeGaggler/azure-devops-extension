@@ -157,7 +157,6 @@ function App(p: AppProps) {
     }
 
     async function poll() {
-        // TODO: don't save if nothing changed
         console.log("Polling...");
 
         // UPDATE ALL PULL REQUESTS
@@ -188,7 +187,7 @@ function App(p: AppProps) {
         })
 
         // UPDATE MERGE QUEUE
-
+        let didChange = false;
         let oldMergeQueueList = await downloadMergeQueuePullRequests();
         let queue = oldMergeQueueList.queues[0]; // TODO: support multiple queues
         let pullRequestList: MergeQueuePullRequest[] = (queue?.pullRequests || []);
@@ -213,14 +212,14 @@ function App(p: AppProps) {
                     continue; // skip completed pull requests
                 }
             }
-            pr.title = pr2.title || pr.title || "";
-            pr.repositoryName = pr2.repositoryName || pr.repositoryName || "";
-            pr.targetRefName = pr2.targetRefName || pr.targetRefName || "";
-            pr.isDraft = pr2.isDraft || pr.isDraft || false;
-            pr.creationDate = pr2.creationDate || pr.creationDate || "";
-            pr.autoComplete = pr2.autoCompleteSetBy || pr.autoComplete || false;
-            pr.mergeStatus = pr2.mergeStatus || pr.mergeStatus || "notSet";
-            pr.voteStatus = pr2.voteStatus || pr.voteStatus || "unknown";
+            if (pr2?.title && pr2.title !== pr.title) { pr.title = pr2.title; didChange = true; }
+            if (pr2?.repositoryName && pr2.repositoryName !== pr.repositoryName) { pr.repositoryName = pr2.repositoryName; didChange = true; }
+            if (pr2?.targetRefName && pr2.targetRefName !== pr.targetRefName) { pr.targetRefName = pr2.targetRefName; didChange = true; }
+            if (pr2?.creationDate && pr2.creationDate !== pr.creationDate) { pr.creationDate = pr2.creationDate; didChange = true; }
+            if (pr2?.mergeStatus && pr2.mergeStatus !== pr.mergeStatus) { pr.mergeStatus = pr2.mergeStatus; didChange = true; }
+            if (pr2?.voteStatus && pr2.voteStatus !== pr.voteStatus) { pr.voteStatus = pr2.voteStatus; didChange = true; }
+            if (typeof pr2?.isDraft !== "undefined" && pr2.isDraft !== pr.isDraft) { pr.isDraft = pr2.isDraft; didChange = true; }
+            if (typeof pr2?.autoCompleteSetBy !== "undefined" && pr2.autoCompleteSetBy !== pr.autoComplete) { pr.autoComplete = pr2.autoCompleteSetBy; didChange = true; }
 
             let isFirst = false
             if (!repoVisitedSet.has(pr.repositoryName)) {
@@ -241,6 +240,7 @@ function App(p: AppProps) {
                     continue; // skip non-active pull requests
                 }
                 else if (status0?.state != "succeeded") {
+                    didChange = true;
                     Azdo.postPullRequestStatus(
                         p.bearerToken,
                         tenantInfo,
@@ -266,6 +266,7 @@ function App(p: AppProps) {
                 pr.ready = false
                 let statusText = `Merge queue: waiting at #${position}`;
                 if (status0?.state != "pending" || status0.description != statusText) {
+                    didChange = true;
                     Azdo.postPullRequestStatus(
                         p.bearerToken,
                         tenantInfo,
@@ -304,11 +305,15 @@ function App(p: AppProps) {
         console.log("New merge queue list:", newMergeQueueList);
 
         // save
-        if (!await uploadMergeQueuePullRequests(newMergeQueueList)) {
-            showToast("Failed to save the merge queue list.");
-            return;
+        if (didChange) {
+            if (!await uploadMergeQueuePullRequests(newMergeQueueList)) {
+                showToast("Failed to save the merge queue list.");
+                return;
+            }
+            setMergeQueueList(newMergeQueueList);
+        } else {
+            console.log("No changes in merge queue list, not saving.");
         }
-        setMergeQueueList(newMergeQueueList);
     }
 
     // initialize the app

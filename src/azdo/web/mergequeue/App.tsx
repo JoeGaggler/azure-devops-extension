@@ -83,7 +83,7 @@ function App(p: AppProps) {
     const [repoMap, setRepoMap] = React.useState<Record<string, Azdo.Repo>>({});
 
     // state if the lists
-    const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [] }); // TODO use this
+    const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [{ pullRequests: [] }] }); // TODO use this
     const [allPullRequests, setAllPullRequests] = React.useState<AllPullRequests>({ pullRequests: [] });
 
     // HACK: force rerendering for server sync
@@ -140,7 +140,7 @@ function App(p: AppProps) {
         console.log("Pull Requests value:", pullRequests);
         await refreshRepos(pullRequests);
 
-        let pullRequestsArray: SomePullRequest[] = pullRequests.flatMap((p) => {
+        let pullRequestsArray: SomePullRequest[] = pullRequests.flatMap((p): (SomePullRequest | readonly SomePullRequest[]) => {
             if (p.pullRequestId && p.repository && p.repository.name) {
                 return {
                     pullRequestId: p.pullRequestId,
@@ -162,8 +162,10 @@ function App(p: AppProps) {
 
         // UPDATE MERGE QUEUE
 
-        var mrl = mergeQueueList
-        let prs: MergeQueuePullRequest[] = (mrl?.queues[0]?.pullRequests || []);
+        let mrl = await downloadMergeQueuePullRequests();
+        console.log("Old merge queue list:", mrl);
+
+        let prs: MergeQueuePullRequest[] = (mrl.queues[0]?.pullRequests || []);
         let repoVisitedSet: Set<string> = new Set();
         let position = 1;
         let removedPullRequests: number[] = [];
@@ -183,12 +185,12 @@ function App(p: AppProps) {
                     continue; // skip completed pull requests
                 }
             }
-            pr.title = pr2.title || pr.title,
-                pr.repositoryName = pr2.repositoryName || pr.repositoryName,
-                pr.targetRefName = pr2.targetRefName || pr.targetRefName,
-                pr.isDraft = pr2.isDraft || pr.isDraft,
-                pr.creationDate = pr2.creationDate || pr.creationDate
-            pr.autoComplete = pr2.autoCompleteSetBy || pr.autoComplete;
+            pr.title = pr2.title || pr.title;
+            pr.repositoryName = pr2.repositoryName || pr.repositoryName;
+            pr.targetRefName = pr2.targetRefName || pr.targetRefName;
+            pr.isDraft = pr2.isDraft || pr.isDraft;
+            pr.creationDate = pr2.creationDate || pr.creationDate || "";
+            pr.autoComplete = pr2.autoCompleteSetBy || pr.autoComplete || false;
 
             let isFirst = false
             if (!repoVisitedSet.has(pr.repositoryName)) {
@@ -265,10 +267,16 @@ function App(p: AppProps) {
         prs = prs.filter(pr => !removedPullRequests.includes(pr.pullRequestId));
 
         // Update the primary queue items
-        setMergeQueueList({
+        let newMergeQueueList: MergeQueueList = {
             ...mrl,
             queues: [{ pullRequests: prs }] // TODO: support multiple queues
-        });
+        }
+        setMergeQueueList(newMergeQueueList);
+
+        if (!await uploadMergeQueuePullRequests(newMergeQueueList)) {
+            showToast("Failed to save the merge queue list.");
+            return;
+        }
     }
 
     // initialize the app
@@ -504,8 +512,9 @@ function App(p: AppProps) {
         return newMergeQueueList;
     }
 
-    async function uploadMergeQueuePullRequests(newMergeQueueList: MergeQueueList): Promise<boolean> {
-        return await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, newMergeQueueList)
+    async function uploadMergeQueuePullRequests(next: MergeQueueList): Promise<boolean> {
+        console.log("Saving merge queue list:", next);
+        return await Azdo.trySaveSharedDocument(mergeQueueDocumentCollectionId, mergeQueueListDocumentId, next as any)
     }
 
     async function enqueuePullRequests() {
@@ -521,7 +530,6 @@ function App(p: AppProps) {
         console.log("Enqueuing pull request ID:", pullRequestId);
         showToast(`Enqueuing pull request ID: ${pullRequestId}`);
 
-        // TODO: already done?
         let newMergeQueueList = await downloadMergeQueuePullRequests();
         console.log("Old merge queue list:", newMergeQueueList);
 
@@ -549,14 +557,21 @@ function App(p: AppProps) {
             title: pullRequest.title,
             targetRefName: pullRequest.targetRefName,
             isDraft: pullRequest.isDraft,
-            creationDate: pullRequest.creationDate,
+            creationDate: pullRequest.creationDate || "",
             ready: false,
-            autoComplete: pullRequest.autoComplete
+            autoComplete: pullRequest.autoComplete || false
         })
 
         newMergeQueueList = {
             ...newMergeQueueList,
-            queues: [queue] // TODO: support multiple queues
+
+            // TODO: support multiple queues
+            queues: [
+                {
+                    ...queue,
+                    pullRequests: [...pullRequests]
+                }
+            ]
         };
         console.log("New merge queue list:", newMergeQueueList);
 
@@ -568,7 +583,7 @@ function App(p: AppProps) {
         setMergeQueueList(newMergeQueueList);
 
         // post pull request status
-        Azdo.postPullRequestStatus(
+        await Azdo.postPullRequestStatus(
             p.bearerToken,
             tenantInfo,
             pullRequest.repositoryName,
@@ -577,7 +592,6 @@ function App(p: AppProps) {
             "Pending on merge queue", // TODO: position in queue
             `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apps/hub/pingmint.pingmint-extension.pingmint-pipeline-mergequeue#pr-${pullRequestId}` // TODO: hashtag pr-id
         );
-
 
         console.log("Pull request status posted for ID:", pullRequestId);
     }
@@ -610,7 +624,14 @@ function App(p: AppProps) {
 
         newMergeQueueList = {
             ...newMergeQueueList,
-            queues: [queue] // TODO: support multiple queues
+
+            // TODO: support multiple queues
+            queues: [
+                {
+                    ...queue,
+                    pullRequests: [...pullRequests]
+                }
+            ]
         };
         console.log("New merge queue list:", newMergeQueueList);
 

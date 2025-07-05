@@ -133,8 +133,9 @@ export async function trySaveSharedDocument(colId: string, docId: string, docume
     document.id = docId;
 
     try {
-        document = await dataManager.setDocument(colId, document);
-        console.log("Update Shared Document: ", colId, docId, document);
+        console.log("Updating Shared Document: ", colId, docId, document);
+        let next_document = await dataManager.setDocument(colId, document);
+        console.log("Update Shared Document: ", colId, docId, next_document);
         return true;
     } catch (err) {
         console.error("Error updating shared document", err);

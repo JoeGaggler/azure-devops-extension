@@ -1,3 +1,4 @@
+@use "../node_modules/azure-devops-ui/Core/override.scss" as *;
 @use "../node_modules/azure-devops-ui/Core/core.scss" as azdo;
 
 :root {
@@ -10,6 +11,16 @@ body {
 
 #extension_root_div {
     padding: 8px;
+}
+
+.repoDropdown {
+    width: 350px;
+    background-color: azdo.$neutral-2;
+    color: azdo.$neutral-70;
+}
+
+.repoDropdown input {
+    color: azdo.$primary-text;
 }
 
 .blank-icon-medium {

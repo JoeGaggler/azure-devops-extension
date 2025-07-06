@@ -1,24 +1,32 @@
 import React from "react";
+import "../lib.ts";
 import * as SDK from 'azure-devops-extension-sdk';
 import * as Azdo from '../azdo/azdo.ts';
 import * as luxon from 'luxon'
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Button } from "azure-devops-ui/Button";
 import { Card } from "azure-devops-ui/Card";
-// import { List } from "azure-devops-ui/List";
+import { Dropdown } from "azure-devops-ui/Dropdown";
+import { DropdownMultiSelection } from "azure-devops-ui/Utilities/DropdownSelection";
 import { Icon, IconSize } from "azure-devops-ui/Icon";
+import { IListBoxItem } from "azure-devops-ui/ListBox";
 import { ListSelection } from "azure-devops-ui/List";
 import { Pill, PillVariant, PillSize } from "azure-devops-ui/Pill";
 import { PillGroup } from "azure-devops-ui/PillGroup";
 import { ScrollableList, IListItemDetails, ListItem } from "azure-devops-ui/List";
-// import { Status, Statuses, StatusSize } from "azure-devops-ui/Status";
 import { Toast } from "azure-devops-ui/Toast";
 import { Toggle } from "azure-devops-ui/Toggle";
 import { type IHostNavigationService } from 'azure-devops-extension-api';
+import { applySelections, sortBy } from "../lib.ts";
+
+interface AppSingleton {
+    repositoryFilterDropdownMultiSelection: DropdownMultiSelection;
+}
 
 interface AppProps {
     bearerToken: string;
     appToken: string;
+    singleton: AppSingleton;
 }
 
 interface PullRequestFilters {
@@ -35,12 +43,6 @@ interface MergeQueue {
 }
 
 interface MergeQueuePullRequest extends SomePullRequest {
-    // pullRequestId: number;
-    // repositoryName: string;
-    // title: string;
-    // targetRefName: string;
-    // isDraft: boolean;
-    // creationDate?: string; // ISO date string
     ready: boolean
 }
 
@@ -77,6 +79,7 @@ function App(p: AppProps) {
 
     // ui state
     const [selectedIds, setSelectedIds] = React.useState<number[]>([]);
+    const [selectedRepos, setSelectedRepos] = React.useState<string[]>([]);
     const [toastState, setToastState] = React.useState<ToastState>({ message: "Hi!", visible: false, ref: React.createRef() });
 
     // cached state
@@ -93,11 +96,29 @@ function App(p: AppProps) {
     React.useEffect(() => { poll(); }, [pollHack]);
     function Resync() { setPollHack(Math.random()); }
 
+    // dropdown filter
+    let filterRepoItems: IListBoxItem[] = [];
+    for (let repoName in repoMap) {
+        let repo = repoMap[repoName];
+        if (repo) {
+            filterRepoItems.push({
+                id: repoName,
+                text: repoName,
+                iconProps: { iconName: "Code" },
+                enforceSingleSelect: false,
+            });
+        }
+    };
+    sortBy(filterRepoItems, (i: any) => i.text);
+
+    applySelections(p.singleton.repositoryFilterDropdownMultiSelection, filterRepoItems, (i: any) => i.id, selectedRepos);
+
     // rendering the all pull requests list
     let allFilteredPullRequests = allPullRequests.pullRequests.flatMap((pr) => {
         let repo = repoMap[pr.repositoryName];
         if (!repo) { return [] }
         if (pr.isDraft && !filters.drafts) { return [] } // filter out drafts if not enabled
+        if (selectedRepos.length > 0 && !selectedRepos.some((item) => item == pr.repositoryName)) { return [] }
         let isDefaultBranch = ((pr.targetRefName == repo.defaultBranch) as boolean)
         if (!isDefaultBranch && !filters.allBranches) { return [] } // filter out non-default branches if not enabled
         return pr
@@ -704,6 +725,24 @@ function App(p: AppProps) {
         console.log("Selected pull request IDs:", pids);
     }
 
+    function onSelectRepository(list: IListBoxItem[], listSelection: ListSelection, _item: IListBoxItem<{}>) {
+        let newSelectedRepos: string[] = [];
+
+        for (let i = 0; i < listSelection.value.length; i++) {
+            let selRange = listSelection.value[i];
+            for (let j = selRange.beginIndex; j <= selRange.endIndex; j++) {
+                let item = list[j];
+                if (item && item.id) {
+                    newSelectedRepos.push(item.id);
+                    console.log("Selected repository:", item.id);
+                }
+            }
+        }
+
+        setSelectedRepos(newSelectedRepos);
+        console.log("New Selected repositories:", newSelectedRepos);
+    }
+
     async function onPromotePullRequest() {
         if (selectedIds.length == 0) {
             showToast("No pull requests selected to remove.");
@@ -844,9 +883,28 @@ function App(p: AppProps) {
 
                 <br />
 
-                <div className="padding-8 flex-row flex-baseline rhythm-horizontal-16">
+                <div className="padding-8 flex-row flex-center rhythm-horizontal-16">
                     <h2>All Pull Requests</h2>
                     <div className="flex-grow"></div>
+                    <Dropdown
+                        actions={[
+                            {
+                                className: "bolt-dropdown-action-right-button",
+                                disabled: false, // TODO
+                                iconProps: { iconName: "Clear" },
+                                text: "Clear",
+                                onClick: () => {
+                                    setSelectedRepos([]);
+                                }
+                            }
+                        ]}
+                        className="repoDropdown"
+                        items={filterRepoItems}
+                        selection={p.singleton.repositoryFilterDropdownMultiSelection}
+                        placeholder="Repositories"
+                        showFilterBox={true}
+                        onSelect={(_evt, row) => { onSelectRepository(filterRepoItems, p.singleton.repositoryFilterDropdownMultiSelection, row); }}
+                    />
                     <Toggle
                         offText={"All branches"}
                         onText={"All branches"}
@@ -884,4 +942,4 @@ function App(p: AppProps) {
 }
 
 export { App };
-export type { AppProps };
+export type { AppProps, AppSingleton };

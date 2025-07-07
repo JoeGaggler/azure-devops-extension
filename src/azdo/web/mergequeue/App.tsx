@@ -184,7 +184,7 @@ function App(p: AppProps) {
                             title: p.title || "Untitled Pull Request",
                             status: p.status || "active",
                             targetRefName: p.targetRefName || "",
-                            isDraft: p.isDraft || true,
+                            isDraft: p.isDraft || false,
                             creationDate: p.creationDate || "2000-01-01T01:01:01Z", // ISO date string
                             autoComplete: p.autoCompleteSetBy || false,
                             mergeStatus: p.mergeStatus || "notSet",
@@ -439,6 +439,7 @@ function App(p: AppProps) {
     }
 
     function renderPills(pullRequest: SomePullRequest): React.JSX.Element {
+        // TODO: approved by YOU!
         return <PillGroup className="padding-left-16 padding-right-16">
             {pullRequest.mergeStatus == "conflicts" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Conflicts</Pill>)}
             {pullRequest.mergeStatus == "failure" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Failure</Pill>)}
@@ -571,7 +572,6 @@ function App(p: AppProps) {
         }
         let pullRequestId = selectedIds[0];
         console.log("Enqueuing pull request ID:", pullRequestId);
-        showToast(`Enqueuing pull request ID: ${pullRequestId}`);
 
         let oldMergeQueueList = await downloadMergeQueuePullRequests();
         console.log("Old merge queue list:", oldMergeQueueList);
@@ -646,7 +646,6 @@ function App(p: AppProps) {
         }
         let pullRequestId = selectedIds[0];
         console.log("Removing pull request ID:", pullRequestId);
-        showToast(`Removing pull request ID: ${pullRequestId}`);
 
         let oldMergeQueueList = await downloadMergeQueuePullRequests();
         console.log("Old merge queue list:", oldMergeQueueList);

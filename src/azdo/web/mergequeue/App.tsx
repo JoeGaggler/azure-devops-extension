@@ -226,13 +226,14 @@ function App(p: AppProps) {
                     }
                 }
                 if (pr2?.title && pr2.title !== pr.title) { pr.title = pr2.title; didChange = true; }
+                if (pr2?.status && pr2.status !== pr.status) { pr.status = pr2.status; didChange = true; }
                 if (pr2?.repositoryName && pr2.repositoryName !== pr.repositoryName) { pr.repositoryName = pr2.repositoryName; didChange = true; }
                 if (pr2?.targetRefName && pr2.targetRefName !== pr.targetRefName) { pr.targetRefName = pr2.targetRefName; didChange = true; }
-                if (pr2?.creationDate && pr2.creationDate !== pr.creationDate) { pr.creationDate = pr2.creationDate; didChange = true; }
+                if (pr2?.creationDate && pr2.creationDate !== pr.creationDate) { pr.creationDate = pr2.creationDate; /* didChange = true; */ } // HACK: fix precision issues
                 if (pr2?.mergeStatus && pr2.mergeStatus !== pr.mergeStatus) { pr.mergeStatus = pr2.mergeStatus; didChange = true; }
                 if (pr2?.voteStatus && pr2.voteStatus !== pr.voteStatus) { pr.voteStatus = pr2.voteStatus; didChange = true; }
                 if (typeof pr2?.isDraft !== "undefined" && pr2.isDraft !== pr.isDraft) { pr.isDraft = pr2.isDraft; didChange = true; }
-                if (typeof pr2?.autoCompleteSetBy !== "undefined" && pr2.autoCompleteSetBy !== pr.autoComplete) { pr.autoComplete = pr2.autoCompleteSetBy; didChange = true; }
+                if ((typeof pr2?.autoCompleteSetBy !== "undefined") !== pr.autoComplete) { pr.autoComplete = (typeof pr2?.autoCompleteSetBy !== "undefined"); didChange = true; }
 
                 let isFirst = false
                 if (!repoVisitedSet.has(pr.repositoryName)) {
@@ -248,11 +249,12 @@ function App(p: AppProps) {
                 let targetUrl = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apps/hub/pingmint.pingmint-extension.pingmint-pipeline-mergequeue#pr-${pr.pullRequestId}` // TODO: hashtag pr-id
                 if (isFirst) {
                     pr.ready = true
+                    let statusText = `Merge queue: ready at #${position}`;
                     if (pr2.status != "active") {
                         console.warn("Pull request is not active:", pr2);
                         continue; // skip non-active pull requests
                     }
-                    else if (status0?.state != "succeeded") {
+                    else if (status0?.state != "succeeded" || status0.description != statusText) {
                         didChange = true;
                         Azdo.postPullRequestStatus(
                             p.bearerToken,
@@ -260,7 +262,7 @@ function App(p: AppProps) {
                             pr.repositoryName,
                             pr.pullRequestId,
                             "succeeded",
-                            "Merge queue: ready",
+                            statusText,
                             targetUrl
                         );
 
@@ -280,6 +282,7 @@ function App(p: AppProps) {
                     let statusText = `Merge queue: waiting at #${position}`;
                     if (status0?.state != "pending" || status0.description != statusText) {
                         didChange = true;
+
                         Azdo.postPullRequestStatus(
                             p.bearerToken,
                             tenantInfo,

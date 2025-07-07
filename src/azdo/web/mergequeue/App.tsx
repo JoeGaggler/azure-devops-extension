@@ -32,6 +32,7 @@ interface AppProps {
 interface PullRequestFilters {
     drafts: boolean;
     allBranches: boolean;
+    repositories: string[];
 }
 
 interface MergeQueueList {
@@ -79,12 +80,11 @@ function App(p: AppProps) {
 
     // ui state
     const [selectedIds, setSelectedIds] = React.useState<number[]>([]);
-    const [selectedRepos, setSelectedRepos] = React.useState<string[]>([]);
     const [toastState, setToastState] = React.useState<ToastState>({ message: "Hi!", visible: false, ref: React.createRef() });
 
     // cached state
     const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
-    const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false });
+    const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false, repositories: [] });
     const [repoMap, setRepoMap] = React.useState<Record<string, Azdo.Repo>>({});
 
     // state if the lists
@@ -95,6 +95,8 @@ function App(p: AppProps) {
     const [pollHack, setPollHack] = React.useState(Math.random());
     React.useEffect(() => { poll(); }, [pollHack]);
     function Resync() { setPollHack(Math.random()); }
+
+    let selectedRepos: string[] = filters.repositories || [];
 
     // dropdown filter
     let filterRepoItems: IListBoxItem[] = [];
@@ -110,7 +112,6 @@ function App(p: AppProps) {
         }
     };
     joe.sortByString(filterRepoItems, (i: any) => i.text);
-
     joe.applySelections(p.singleton.repositoryFilterDropdownMultiSelection, filterRepoItems, (i: any) => i.id, selectedRepos);
 
     // rendering the all pull requests list
@@ -123,8 +124,6 @@ function App(p: AppProps) {
         if (!isDefaultBranch && !filters.allBranches) { return [] } // filter out non-default branches if not enabled
         return pr
     })
-
-    // full list is sorted chronologically, using the id
     joe.sortByNumber(allFilteredPullRequests, i => -i.pullRequestId || 0);
 
     // rebuild selections from state
@@ -344,9 +343,10 @@ function App(p: AppProps) {
         setMergeQueueList(newMergeQueueList);
 
         // setup user filters
-        let userFiltersDoc = {
+        let userFiltersDoc: PullRequestFilters = {
             drafts: false,
-            allBranches: false
+            allBranches: false,
+            repositories: []
         }
         userFiltersDoc = await Azdo.getOrCreateUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc)
         setFilters({ ...userFiltersDoc });
@@ -408,6 +408,7 @@ function App(p: AppProps) {
 
         userFiltersDoc.drafts = value.drafts;
         userFiltersDoc.allBranches = value.allBranches;
+        userFiltersDoc.repositories = value.repositories;
 
         Azdo.trySaveUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
     }
@@ -704,7 +705,7 @@ function App(p: AppProps) {
         console.log("Selected pull request IDs:", pids);
     }
 
-    function onSelectRepository(list: IListBoxItem[], listSelection: ListSelection, _item: IListBoxItem<{}>) {
+    function onSelectRepository(list: IListBoxItem[], listSelection: ListSelection) {
         let newSelectedRepos: string[] = [];
 
         for (let i = 0; i < listSelection.value.length; i++) {
@@ -718,8 +719,8 @@ function App(p: AppProps) {
             }
         }
 
-        setSelectedRepos(newSelectedRepos);
         console.log("New Selected repositories:", newSelectedRepos);
+        saveUserFilters({ ...filters, repositories: newSelectedRepos })
     }
 
     async function onPromotePullRequest() {
@@ -732,8 +733,7 @@ function App(p: AppProps) {
             return;
         }
         let pullRequestId = selectedIds[0];
-        console.log("Demoting pull request ID:", pullRequestId);
-        showToast(`Demoting pull request ID: ${pullRequestId}`);
+        console.log("Promoting pull request ID:", pullRequestId);
 
         let oldMergeQueueList = await downloadMergeQueuePullRequests();
         console.log("Old merge queue list:", oldMergeQueueList);
@@ -781,7 +781,6 @@ function App(p: AppProps) {
         }
         let pullRequestId = selectedIds[0];
         console.log("Demoting pull request ID:", pullRequestId);
-        showToast(`Demoting pull request ID: ${pullRequestId}`);
 
         let oldMergeQueueList = await downloadMergeQueuePullRequests();
         console.log("Old merge queue list:", oldMergeQueueList);
@@ -873,7 +872,7 @@ function App(p: AppProps) {
                                 iconProps: { iconName: "Clear" },
                                 text: "Clear",
                                 onClick: () => {
-                                    setSelectedRepos([]);
+                                    saveUserFilters({ ...filters, repositories: [] })
                                 }
                             }
                         ]}
@@ -882,7 +881,7 @@ function App(p: AppProps) {
                         selection={p.singleton.repositoryFilterDropdownMultiSelection}
                         placeholder="Repositories"
                         showFilterBox={true}
-                        onSelect={(_evt, row) => { onSelectRepository(filterRepoItems, p.singleton.repositoryFilterDropdownMultiSelection, row); }}
+                        onSelect={(_evt, _row) => { onSelectRepository(filterRepoItems, p.singleton.repositoryFilterDropdownMultiSelection); }}
                     />
                     <Toggle
                         offText={"All branches"}

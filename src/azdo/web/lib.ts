@@ -1,6 +1,6 @@
 import { ListSelection } from "azure-devops-ui/List";
 
-export function sortBy<T>(array: T[], f: (i: T) => string) {
+export function sortByString<T>(array: T[], f: (i: T) => string) {
     array.sort((a, b) => {
         let x = f(a);
         let y = f(b);
@@ -14,6 +14,23 @@ export function sortBy<T>(array: T[], f: (i: T) => string) {
             return -1;
         }
         return x.localeCompare(y);
+    });
+}
+
+export function sortByNumber<T>(array: T[], f: (i: T) => number) {
+    array.sort((a, b) => {
+        let x = f(a);
+        let y = f(b);
+        if (x === y) {
+            return 0;
+        }
+        if (x === undefined || x === null) {
+            return 1;
+        }
+        if (y === undefined || y === null) {
+            return -1;
+        }
+        return x - y;
     });
 }
 

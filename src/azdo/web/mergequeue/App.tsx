@@ -1,5 +1,5 @@
 import React from "react";
-import "../lib.ts";
+import * as joe from "../lib.ts";
 import * as SDK from 'azure-devops-extension-sdk';
 import * as Azdo from '../azdo/azdo.ts';
 import * as luxon from 'luxon'
@@ -11,13 +11,13 @@ import { DropdownMultiSelection } from "azure-devops-ui/Utilities/DropdownSelect
 import { Icon, IconSize } from "azure-devops-ui/Icon";
 import { IListBoxItem } from "azure-devops-ui/ListBox";
 import { ListSelection } from "azure-devops-ui/List";
+import { Page } from "azure-devops-ui/Page";
 import { Pill, PillVariant, PillSize } from "azure-devops-ui/Pill";
 import { PillGroup } from "azure-devops-ui/PillGroup";
 import { ScrollableList, IListItemDetails, ListItem } from "azure-devops-ui/List";
 import { Toast } from "azure-devops-ui/Toast";
 import { Toggle } from "azure-devops-ui/Toggle";
 import { type IHostNavigationService } from 'azure-devops-extension-api';
-import { applySelections, sortBy } from "../lib.ts";
 
 interface AppSingleton {
     repositoryFilterDropdownMultiSelection: DropdownMultiSelection;
@@ -109,9 +109,9 @@ function App(p: AppProps) {
             });
         }
     };
-    sortBy(filterRepoItems, (i: any) => i.text);
+    joe.sortByString(filterRepoItems, (i: any) => i.text);
 
-    applySelections(p.singleton.repositoryFilterDropdownMultiSelection, filterRepoItems, (i: any) => i.id, selectedRepos);
+    joe.applySelections(p.singleton.repositoryFilterDropdownMultiSelection, filterRepoItems, (i: any) => i.id, selectedRepos);
 
     // rendering the all pull requests list
     let allFilteredPullRequests = allPullRequests.pullRequests.flatMap((pr) => {
@@ -125,35 +125,14 @@ function App(p: AppProps) {
     })
 
     // full list is sorted chronologically, using the id
-    allFilteredPullRequests.sort((a, b) => {
-        let x = a.pullRequestId || 0;
-        let y = b.pullRequestId || 0;
-        if (x < y) { return 1; }
-        else if (x > y) { return -1; }
-        else { return 0; }
-    })
+    joe.sortByNumber(allFilteredPullRequests, i => -i.pullRequestId || 0);
 
     // rebuild selections from state
-    let allSelection = new ListSelection(true);
-    for (let i = 0; i < allFilteredPullRequests.length; i++) {
-        let pr = allFilteredPullRequests[i];
-        if (!pr.pullRequestId) { continue; }
-        if (selectedIds.includes(pr.pullRequestId)) {
-            allSelection.select(i, 1, true, true);
-        }
-    }
-
-    // rendering the primary queue list
     let primaryQueueItems: MergeQueuePullRequest[] = (mergeQueueList?.queues[0]?.pullRequests || []);
-
-    // rebuild selections from state
     let primaryQueueSelection = new ListSelection(true);
-    for (let i = 0; i < primaryQueueItems.length; i++) {
-        let pr = primaryQueueItems[i];
-        if (selectedIds.includes(pr?.pullRequestId || 0)) {
-            primaryQueueSelection.select(i, 1, true, true);
-        }
-    }
+    let allSelection = new ListSelection(true);
+    joe.applySelections(allSelection, allFilteredPullRequests, i => i.pullRequestId, selectedIds);
+    joe.applySelections(primaryQueueSelection, primaryQueueItems, i => i.pullRequestId, selectedIds);
 
     function summarizeVotes(reviewers: any): string {
         let finalVote = 20;
@@ -840,7 +819,7 @@ function App(p: AppProps) {
     }
 
     return (
-        <>
+        <Page>
             {toastState.visible && <Toast message={toastState.message} ref={toastState.ref} />}
             <div className="padding-8 margin-8">
 
@@ -937,7 +916,7 @@ function App(p: AppProps) {
                     </div>
                 </Card>
             </div>
-        </>
+        </Page>
     )
 }
 

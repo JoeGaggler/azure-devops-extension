@@ -322,6 +322,7 @@ export interface PullRequest {
     repository?: any;
     targetRefName?: string;
     title?: string;
+    status?: string;
     isDraft?: boolean;
     creationDate?: string; // ISO date string
     autoCompleteSetBy?: boolean

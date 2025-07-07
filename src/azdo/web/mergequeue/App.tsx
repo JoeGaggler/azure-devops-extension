@@ -49,6 +49,7 @@ interface MergeQueuePullRequest extends SomePullRequest {
 
 interface SomePullRequest {
     pullRequestId: number;
+    status: string;
     repositoryName: string;
     title: string;
     targetRefName: string;
@@ -180,10 +181,11 @@ function App(p: AppProps) {
                         return {
                             pullRequestId: p.pullRequestId,
                             repositoryName: p.repository.name,
-                            title: p.title || "",
+                            title: p.title || "Untitled Pull Request",
+                            status: p.status || "active",
                             targetRefName: p.targetRefName || "",
-                            isDraft: p.isDraft || false,
-                            creationDate: p.creationDate || "", // ISO date string
+                            isDraft: p.isDraft || true,
+                            creationDate: p.creationDate || "2000-01-01T01:01:01Z", // ISO date string
                             autoComplete: p.autoCompleteSetBy || false,
                             mergeStatus: p.mergeStatus || "notSet",
                             voteStatus: summarizeVotes(p.reviewers || [])
@@ -596,6 +598,7 @@ function App(p: AppProps) {
             pullRequestId: pullRequestId,
             repositoryName: repositoryName,
             title: pullRequest.title,
+            status: pullRequest.status,
             targetRefName: pullRequest.targetRefName,
             isDraft: pullRequest.isDraft,
             creationDate: pullRequest.creationDate || "",

@@ -10,4 +10,5 @@ for file in dist/assets/*.css; do
   fi
 done
 
-tfx extension create --json --root . --manifest-globs vss-extension.json --loc-root ../../ --output-path ../../bin/pingmint.vsix
+TOKEN=$(az account get-access-token --query accessToken --output tsv)
+tfx extension publish --publisher pingmint --vsix ../../bin/pingmint.vsix --auth-type pat -t "$TOKEN"

@@ -219,7 +219,7 @@ function App(p: AppProps) {
                 let pr2 = await Azdo.getPullRequest(p.bearerToken, tenantInfo, pr.repositoryName, pr.pullRequestId);
                 if (pr2) {
                     console.log("Pull Request details:", pr2);
-                    if (pr2.status == "completed") {
+                    if (pr2.status == "completed" || pr2.status == "abandoned") {
                         console.log("Pull request is completed, removing from queue:", pr2);
                         removedPullRequests.push(pr.pullRequestId);
                         continue; // skip completed pull requests
@@ -357,7 +357,7 @@ function App(p: AppProps) {
         setFilters({ ...userFiltersDoc });
 
         // Refresh from server
-        setInterval(() => { Resync(); }, 1000 * 10);
+        setInterval(() => { Resync(); }, 1000 * 20);
         Resync();
     }
 
@@ -871,6 +871,15 @@ function App(p: AppProps) {
                     <div className="flex-grow"></div>
                     <Dropdown
                         actions={[
+                            {
+                                className: "bolt-dropdown-action-right-button",
+                                disabled: false, // TODO
+                                iconProps: { iconName: "Select All" },
+                                text: "All",
+                                onClick: () => {
+                                    saveUserFilters({ ...filters, repositories: filterRepoItems.map(item => item.id) })
+                                }
+                            },
                             {
                                 className: "bolt-dropdown-action-right-button",
                                 disabled: false, // TODO

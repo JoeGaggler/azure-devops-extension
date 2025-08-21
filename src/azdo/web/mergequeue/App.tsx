@@ -17,6 +17,7 @@ import { PillGroup } from "azure-devops-ui/PillGroup";
 import { ScrollableList, IListItemDetails, ListItem } from "azure-devops-ui/List";
 import { Toast } from "azure-devops-ui/Toast";
 import { Toggle } from "azure-devops-ui/Toggle";
+import { VssPersona } from "azure-devops-ui/VssPersona";
 import { type IHostNavigationService } from 'azure-devops-extension-api';
 
 interface AppSingleton {
@@ -52,6 +53,8 @@ interface SomePullRequest {
     status: string;
     repositoryName: string;
     title: string;
+    authorName: string;
+    authorImageUrl?: string;
     targetRefName: string;
     isDraft: boolean;
     creationDate: string; // ISO date string
@@ -183,6 +186,8 @@ function App(p: AppProps) {
                             repositoryName: p.repository.name,
                             title: p.title || "Untitled Pull Request",
                             status: p.status || "active",
+                            authorName: p.createdBy?.displayName || "Unknown User",
+                            authorImageUrl: p.createdBy?.imageUrl || undefined,
                             targetRefName: p.targetRefName || "",
                             isDraft: p.isDraft || false,
                             creationDate: p.creationDate || "2000-01-01T01:01:01Z", // ISO date string
@@ -224,16 +229,19 @@ function App(p: AppProps) {
                         removedPullRequests.push(pr.pullRequestId);
                         continue; // skip completed pull requests
                     }
+
+                    if (pr2.title && pr2.title !== pr.title) { pr.title = pr2.title; didChange = true; }
+                    if (pr2.status && pr2.status !== pr.status) { pr.status = pr2.status; didChange = true; }
+                    if (pr2.createdBy?.displayName && pr2.createdBy?.displayName !== pr.authorName) { pr.authorName = pr2.createdBy.displayName; didChange = true; }
+                    if (pr2.createdBy?.imageUrl && pr2.createdBy?.imageUrl !== pr.authorImageUrl) { pr.authorImageUrl = pr2.createdBy.imageUrl; didChange = true; }
+                    // if (pr2?.repositoryName && pr2.repositoryName !== pr.repositoryName) { pr.repositoryName = pr2.repositoryName; didChange = true; }
+                    if (pr2.targetRefName && pr2.targetRefName !== pr.targetRefName) { pr.targetRefName = pr2.targetRefName; didChange = true; }
+                    if (pr2.creationDate && pr2.creationDate !== pr.creationDate) { pr.creationDate = pr2.creationDate; /* didChange = true; */ } // HACK: fix precision issues
+                    if (pr2.mergeStatus && pr2.mergeStatus !== pr.mergeStatus) { pr.mergeStatus = pr2.mergeStatus; didChange = true; }
+                    // if (pr2?.voteStatus && pr2.voteStatus !== pr.voteStatus) { pr.voteStatus = pr2.voteStatus; didChange = true; } // TODO: pr2 doesn't have vote status
+                    if (typeof pr2.isDraft !== "undefined" && pr2.isDraft !== pr.isDraft) { pr.isDraft = pr2.isDraft; didChange = true; }
+                    if ((typeof pr2.autoCompleteSetBy !== "undefined") !== pr.autoComplete) { pr.autoComplete = (typeof pr2?.autoCompleteSetBy !== "undefined"); didChange = true; }
                 }
-                if (pr2?.title && pr2.title !== pr.title) { pr.title = pr2.title; didChange = true; }
-                if (pr2?.status && pr2.status !== pr.status) { pr.status = pr2.status; didChange = true; }
-                if (pr2?.repositoryName && pr2.repositoryName !== pr.repositoryName) { pr.repositoryName = pr2.repositoryName; didChange = true; }
-                if (pr2?.targetRefName && pr2.targetRefName !== pr.targetRefName) { pr.targetRefName = pr2.targetRefName; didChange = true; }
-                if (pr2?.creationDate && pr2.creationDate !== pr.creationDate) { pr.creationDate = pr2.creationDate; /* didChange = true; */ } // HACK: fix precision issues
-                if (pr2?.mergeStatus && pr2.mergeStatus !== pr.mergeStatus) { pr.mergeStatus = pr2.mergeStatus; didChange = true; }
-                if (pr2?.voteStatus && pr2.voteStatus !== pr.voteStatus) { pr.voteStatus = pr2.voteStatus; didChange = true; }
-                if (typeof pr2?.isDraft !== "undefined" && pr2.isDraft !== pr.isDraft) { pr.isDraft = pr2.isDraft; didChange = true; }
-                if ((typeof pr2?.autoCompleteSetBy !== "undefined") !== pr.autoComplete) { pr.autoComplete = (typeof pr2?.autoCompleteSetBy !== "undefined"); didChange = true; }
 
                 let isFirst = false
                 if (!repoVisitedSet.has(pr.repositoryName)) {
@@ -250,7 +258,7 @@ function App(p: AppProps) {
                 if (isFirst) {
                     pr.ready = true
                     let statusText = `Merge queue: ready at #${position}`;
-                    if (pr2.status != "active") {
+                    if (pr2?.status != "active") {
                         console.warn("Pull request is not active:", pr2);
                         continue; // skip non-active pull requests
                     }
@@ -468,6 +476,14 @@ function App(p: AppProps) {
     ): React.JSX.Element {
         let extra = "";
         let className = `scroll-hidden flex-row flex-center rhythm-horizontal-8 flex-grow padding-4 ${extra}`;
+        let initialsIdentityProvider = {
+            getDisplayName() {
+                return pullRequest.authorName || "Unknown User";
+            },
+            getIdentityImageUrl(_size: number) {
+                return pullRequest.authorImageUrl || undefined;
+            }
+        }
         return (
             <ListItem
                 key={key || "list-item" + index}
@@ -479,10 +495,13 @@ function App(p: AppProps) {
                     <div className="font-size-m flex-row flex-center flex-shrink">
                         {index + 1}
                     </div>
-                    <div className="font-size-m padding-left-8">{pullRequest.repositoryName}</div>
-                    <div className="font-size-m italic text-neutral-70 text-ellipsis padding-left-8">{pullRequest.title}</div>
+                    {
+                        (pullRequest.authorName || pullRequest.authorImageUrl) && <VssPersona size={"extra-small"} identityDetailsProvider={initialsIdentityProvider} />
+                    }
+                    <div className="font-size-m">{pullRequest.repositoryName}</div>
+                    <div className="font-size-m italic text-neutral-70 text-ellipsis">{pullRequest.title}</div>
                     {renderPills(pullRequest)}
-                    <div className="font-size-m flex-row flex-grow"><div className="flex-grow" />
+                    <div className="font-size-m flex-row flex-center flex-grow rhythm-horizontal-8"><div className="flex-grow" />
                         <div>{(pullRequest.creationDate) ? (luxon.DateTime.fromISO(pullRequest.creationDate).toRelative()) : ""}</div>
                     </div>
                 </div>
@@ -498,6 +517,14 @@ function App(p: AppProps) {
     ): React.JSX.Element {
         let extra = "";
         let className = `scroll-hidden flex-row flex-center rhythm-horizontal-8 flex-grow padding-4 ${extra}`;
+        let initialsIdentityProvider = {
+            getDisplayName() {
+                return pullRequest.authorName || "Unknown User";
+            },
+            getIdentityImageUrl(_size: number) {
+                return pullRequest.authorImageUrl || undefined;
+            }
+        }
         return (
             <ListItem
                 key={key || "list-item" + index}
@@ -508,8 +535,11 @@ function App(p: AppProps) {
                     <div className="font-size-m flex-row flex-center flex-shrink">
                         {index + 1}
                     </div>
-                    <div className="font-size-m padding-left-8">{pullRequest.repositoryName}</div>
-                    <div className="font-size-m italic text-neutral-70 text-ellipsis padding-left-8">{pullRequest.title}</div>
+                    {
+                        (pullRequest.authorName || pullRequest.authorImageUrl) && <VssPersona size={"extra-small"} identityDetailsProvider={initialsIdentityProvider} />
+                    }
+                    <div className="font-size-m">{pullRequest.repositoryName}</div>
+                    <div className="font-size-m italic text-neutral-70 text-ellipsis">{pullRequest.title}</div>
                     {renderPills(pullRequest)}
                     <div className="font-size-m flex-row flex-grow"><div className="flex-grow" />
                         <div>{(pullRequest.creationDate) ? (luxon.DateTime.fromISO(pullRequest.creationDate).toRelative()) : ""}</div>
@@ -601,6 +631,8 @@ function App(p: AppProps) {
             pullRequestId: pullRequestId,
             repositoryName: repositoryName,
             title: pullRequest.title,
+            authorName: pullRequest.authorName,
+            authorImageUrl: pullRequest.authorImageUrl || undefined,
             status: pullRequest.status,
             targetRefName: pullRequest.targetRefName,
             isDraft: pullRequest.isDraft,

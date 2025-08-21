@@ -247,7 +247,7 @@ export async function getPullRequest(
     tenantInfo: TenantInfo,
     repository: String,
     pullRequestId: number
-): Promise<any> {
+): Promise<PullRequest | undefined> {
     try {
         let url = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/git/repositories/${repository}/pullRequests/${pullRequestId}?api-version=7.2-preview.2`;
         let resp = await getAzdo(url, bearerToken);
@@ -255,7 +255,7 @@ export async function getPullRequest(
     }
     catch (error) {
         console.error("Error fetching pull request:", error);
-        return null;
+        return undefined;
     }
 }
 
@@ -323,6 +323,7 @@ export interface PullRequest {
     targetRefName?: string;
     title?: string;
     status?: string;
+    createdBy?: any; // TODO: user type
     isDraft?: boolean;
     creationDate?: string; // ISO date string
     autoCompleteSetBy?: boolean

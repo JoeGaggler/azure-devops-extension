@@ -29,7 +29,7 @@ function Run(p: RunProps) {
 }
 
 function GetRunStatusType(state: string | undefined, result: string | undefined): StatusType {
-    if (state == "pending") {
+    if (state == "notStarted" || state == "postponed") {
         return "Waiting";
     }
     if (state == "inProgress") {

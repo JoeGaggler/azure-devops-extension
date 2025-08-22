@@ -82,7 +82,7 @@ export async function postAzdo(url: string, body: any, bearertoken: string): Pro
 export async function getTopRecentBuilds(tenantInfo: TenantInfo): Promise<TopBuild[] | undefined> {
     try {
         let bearer = await SDK.getAccessToken()
-        let json = await getAzdo(`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/build/builds?$top=100&queryOrder=queueTimeDescending&api-version=7.2-preview.7`, bearer as string);
+        let json = await getAzdo(`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/build/builds?$top=1000&queryOrder=queueTimeDescending&api-version=7.2-preview.7`, bearer as string);
         return json.value.flatMap((b: any): (TopBuild | readonly TopBuild[]) => {
             return {
                 pipelineId: b.definition?.id,

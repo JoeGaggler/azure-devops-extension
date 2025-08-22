@@ -117,8 +117,8 @@ function App(p: AppProps) {
         }
 
         let top = await getTopBuilds();
-        let ccc: CurrentRun[] = [];
-        for (let i = 0; i < top.length && i < 10; i++) {
+        let tempRuns: CurrentRun[] = currentRuns.slice();
+        for (let i = 0; i < top.length; i++) {
             let it = top[i];
 
             let queueDateTime = it.queueTime && luxon.DateTime.fromISO(it.queueTime);
@@ -127,15 +127,84 @@ function App(p: AppProps) {
                 continue;
             }
 
-            let sortOrder = queueDateTime.toUnixInteger();
-            ccc.push({
-                ...it,
-                sortOrder: sortOrder,
-                comment: `${sortOrder} - ${luxon.DateTime.fromSeconds(sortOrder, { zone: "utc" }).toISO({})} - ${it.queueTime}`,
-            });
-            console.log("Current Run", ccc[i]);
+            let j = tempRuns.findIndex((r) => (r.buildId === it.buildId));
+            if (j >= 0) {
+                // TODO: does this work?
+                top[i] = {
+                    ...tempRuns[j], // existing data
+                    ...it, // new data
+                    // TODO: update comment?
+                }
+            } else {
+                let sortOrder = queueDateTime.toUnixInteger();
+                tempRuns.push({
+                    ...it,
+                    sortOrder: sortOrder,
+                    comment: `${sortOrder} - ${luxon.DateTime.fromSeconds(sortOrder, { zone: "utc" }).toISO({})} - ${it.queueTime}`,
+                });
+            }
+            console.log("Current Run", tempRuns[i]);
         }
-        setCurrentRuns(ccc);
+
+        tempRuns = cleanRuns(tempRuns)
+
+        setCurrentRuns(tempRuns);
+    }
+
+    function cleanRuns(runs: CurrentRun[]): CurrentRun[] {
+        joe.sortByNumber(runs, (r) => -(r.sortOrder || 0)); // newest first
+
+        for (let i = 0; i < runs.length; i++) {
+            let it = runs[i];
+            // let it_id = it.buildId;
+            let it_p = it.pipelineId;
+            let hasCompleted = false;
+            let hasSucceeded = false;
+            for (let j = 0; j < runs.length; /* NO INCREMENT */) {
+                let jt = runs[j];
+
+                // skip other pipelines
+                let jt_p = jt.pipelineId;
+                if (it_p !== jt_p) { j++; continue; }
+
+                let s = jt.status;
+                let r = jt.result;
+
+                // remove invalid entries
+                if (!s) {
+                    console.warn("Removing invalid run:", jt);
+                    runs.splice(j, 1); continue;
+                }
+
+                // keep unfinished runs
+                if (s !== "completed") {
+                    j++;
+                    continue;
+                }
+
+                // done with this pipeline
+                if (hasSucceeded) {
+                    console.warn("Removing run after succeeded:", jt);
+                    runs.splice(j, 1); continue;
+                }
+
+                if (!hasCompleted && r) {
+                    hasCompleted = true;
+                    if (r === "succeeded" || r === "partiallySucceeded" || r === "succeededWithIssues") {
+                        hasSucceeded = true;
+                    }
+
+                    j++;
+                    continue;
+                }
+
+                console.warn("Removing run after completed:", jt);
+                runs.splice(j, 1);
+                continue;
+            }
+        }
+
+        return runs;
     }
 
     async function getTopBuilds(): Promise<Azdo.TopBuild[]> {

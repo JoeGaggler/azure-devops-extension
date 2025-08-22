@@ -9,6 +9,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         // index: './web/index.html',
+        currentruns: './web/currentruns/index.html',
         mergequeue: './web/mergequeue/index.html'
       },
     }

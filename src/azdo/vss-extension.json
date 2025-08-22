@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "pingmint-extension",
-  "version": "0.0.597",
+  "version": "0.1.1",
   "name": "Merge Queue",
   "description": "Pingmint",
   "publisher": "pingmint",
@@ -29,6 +29,20 @@
         "name": "Merge Queue",
         "order": 313,
         "uri": "dist/web/mergequeue/index.html"
+      }
+    },
+    {
+      "id": "pingmint-pipeline-currentruns",
+      "type": "ms.vss-web.hub",
+      "description": "Current Runs",
+      "targets": [
+        "ms.vss-build-web.build-release-hub-group"
+      ],
+      "properties": {
+        "icon": "images/robotbig.png",
+        "name": "Current Runs",
+        "order": 312,
+        "uri": "dist/web/currentruns/index.html"
       }
     }
   ],

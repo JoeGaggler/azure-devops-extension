@@ -1,5 +1,5 @@
 # az login --allow-no-subscriptions
-jq -r '.version |= "0.0." + (((split(".")[2] | tonumber) + 1) | tostring)' vss-extension.json > vss-extension.json.tmp
+jq -r '.version |= "0.1." + (((split(".")[2] | tonumber) + 1) | tostring)' vss-extension.json > vss-extension.json.tmp
 mv vss-extension.json.tmp vss-extension.json
 npm ci
 npm run build

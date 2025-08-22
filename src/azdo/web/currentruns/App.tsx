@@ -1,8 +1,8 @@
 import React from "react";
-// import * as joe from "../lib.ts";
+import * as joe from "../lib.ts";
 import * as SDK from 'azure-devops-extension-sdk';
 import * as Azdo from '../azdo/azdo.ts';
-// import * as luxon from 'luxon'
+import * as luxon from 'luxon'
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 // import { Button } from "azure-devops-ui/Button";
 import { Card } from "azure-devops-ui/Card";
@@ -41,6 +41,10 @@ interface CurrentRun {
     status?: string;
     result?: string;
     webUrl?: string;
+    queueTime?: string;
+
+    sortOrder?: number;
+    comment?: string;
 }
 
 function App(p: AppProps) {
@@ -57,8 +61,10 @@ function App(p: AppProps) {
     React.useEffect(() => { poll(); }, [pollHack]);
     function Resync() { setPollHack(Math.random()); }
 
-    //
+    // state
     let currentRunsItems: CurrentRun[] = (currentRuns || []);
+    joe.sortByNumber(currentRunsItems, (i) => -(i.sortOrder || 0)); // newest first
+
     let currentRunsSelection = new ListSelection(true);
     let currentRunsIndex = (selectedRunId) ?
         currentRuns.findIndex((r: CurrentRun) => r.buildId === selectedRunId) :
@@ -113,7 +119,21 @@ function App(p: AppProps) {
         let top = await getTopBuilds();
         let ccc: CurrentRun[] = [];
         for (let i = 0; i < top.length && i < 10; i++) {
-            ccc.push(top[i]);
+            let it = top[i];
+
+            let queueDateTime = it.queueTime && luxon.DateTime.fromISO(it.queueTime);
+            if (!queueDateTime || !queueDateTime.isValid) {
+                console.warn("Invalid queue time for build:", it);
+                continue;
+            }
+
+            let sortOrder = queueDateTime.toUnixInteger();
+            ccc.push({
+                ...it,
+                sortOrder: sortOrder,
+                comment: `${sortOrder} - ${luxon.DateTime.fromSeconds(sortOrder, { zone: "utc" }).toISO({})} - ${it.queueTime}`,
+            });
+            console.log("Current Run", ccc[i]);
         }
         setCurrentRuns(ccc);
     }
@@ -179,7 +199,7 @@ function App(p: AppProps) {
                 <Run
                     name={run.buildNumber || "?"}
                     status={topBuildToStatus(run)}
-                    comment={`comment`}
+                    comment={run.comment || ""}
                     started={null}
                     isAlternate={isAlternate(run)}
                 />

@@ -92,7 +92,8 @@ export async function getTopRecentBuilds(tenantInfo: TenantInfo): Promise<TopBui
                 definitionName: b.definition?.name,
                 status: b.status,
                 result: b.result,
-                webUrl: b._links?.web?.href
+                webUrl: b._links?.web?.href,
+                queueTime: b.queueTime,
             }
         });
     }
@@ -111,6 +112,7 @@ export interface TopBuild {
     status?: string;
     result?: string;
     webUrl?: string;
+    queueTime?: string;
 
     // pullRequestId?: number;
     // repository?: any;

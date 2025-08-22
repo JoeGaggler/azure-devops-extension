@@ -43,6 +43,7 @@ interface CurrentRun {
     webUrl?: string;
     queueTime?: string;
 
+    queueTimestamp?: number;
     sortOrder?: number;
     comment?: string;
 }
@@ -136,11 +137,12 @@ function App(p: AppProps) {
                     // TODO: update comment?
                 }
             } else {
-                let sortOrder = queueDateTime.toUnixInteger();
+                let queueTimestamp = queueDateTime.toUnixInteger();
                 tempRuns.push({
                     ...it,
-                    sortOrder: sortOrder,
-                    comment: `${sortOrder} - ${luxon.DateTime.fromSeconds(sortOrder, { zone: "utc" }).toISO({})} - ${it.queueTime}`,
+                    sortOrder: queueTimestamp,
+                    queueTimestamp: queueTimestamp,
+                    comment: `${queueTimestamp} - ${luxon.DateTime.fromSeconds(queueTimestamp, { zone: "utc" }).toISO({})} - ${it.queueTime}`,
                 });
             }
             console.log("Current Run", tempRuns[i]);
@@ -184,7 +186,7 @@ function App(p: AppProps) {
 
                 // done with this pipeline
                 if (hasSucceeded) {
-                    console.warn("Removing run after succeeded:", jt);
+                    // console.warn("Removing run after succeeded:", jt);
                     runs.splice(j, 1); continue;
                 }
 
@@ -198,7 +200,7 @@ function App(p: AppProps) {
                     continue;
                 }
 
-                console.warn("Removing run after completed:", jt);
+                // console.warn("Removing run after completed:", jt);
                 runs.splice(j, 1);
                 continue;
             }
@@ -255,7 +257,7 @@ function App(p: AppProps) {
                     name={run.buildNumber || "?"}
                     status={topBuildToStatus(run)}
                     comment={run.comment || ""}
-                    started={null}
+                    started={run.sortOrder || null}
                     isAlternate={isAlternate(run)}
                 />
             </ListItem>

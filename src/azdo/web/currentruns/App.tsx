@@ -32,10 +32,22 @@ interface AppProps {
     singleton: AppSingleton;
 }
 
+interface CurrentRun {
+    pipelineId?: number;
+    buildId?: number;
+    buildNumber?: string;
+    repositoryName?: string;
+    definitionName?: string;
+    status?: string;
+    result?: string;
+    webUrl?: string;
+}
+
 function App(p: AppProps) {
     console.log("App render", p);
 
     const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
+    const [currentRuns, setCurrentRuns] = React.useState<CurrentRun[]>([]);
     const [allTopBuilds, setAllTopBuilds] = React.useState<Azdo.TopBuild[]>([]);
     const [selectedRunId, setSelectedRunId] = React.useState<number | null>(null);
     const [selectedPipelineId, setSelectedPipelineId] = React.useState<number | null>(null);
@@ -44,6 +56,16 @@ function App(p: AppProps) {
     const [pollHack, setPollHack] = React.useState(Math.random());
     React.useEffect(() => { poll(); }, [pollHack]);
     function Resync() { setPollHack(Math.random()); }
+
+    //
+    let currentRunsItems: CurrentRun[] = (currentRuns || []);
+    let currentRunsSelection = new ListSelection(true);
+    let currentRunsIndex = (selectedRunId) ?
+        currentRuns.findIndex((r: CurrentRun) => r.buildId === selectedRunId) :
+        (-1);
+    if (currentRunsIndex >= 0) {
+        currentRunsSelection.select(currentRunsIndex);
+    }
 
     // state
     let topBuildsQueueItems: Azdo.TopBuild[] = (allTopBuilds || []);
@@ -88,19 +110,39 @@ function App(p: AppProps) {
             return;
         }
 
-        await getTopBuilds();
+        let top = await getTopBuilds();
+        let ccc: CurrentRun[] = [];
+        for (let i = 0; i < top.length && i < 10; i++) {
+            ccc.push(top[i]);
+        }
+        setCurrentRuns(ccc);
     }
 
-    async function getTopBuilds() {
+    async function getTopBuilds(): Promise<Azdo.TopBuild[]> {
         const ti = tenantInfo;
         if (!ti.organization || !ti.project) {
             console.warn("Tenant info not set, skipping getTopBuilds.");
-            return;
+            return [];
         }
-        let pullRequests = await Azdo.getTopRecentBuilds(ti);
+        let pullRequests = (await Azdo.getTopRecentBuilds(ti)) || [];
         console.log("Top Recent Builds", pullRequests);
 
-        setAllTopBuilds(pullRequests || []);
+        setAllTopBuilds(pullRequests);
+        return pullRequests;
+    }
+
+    async function activateCurrentRun(_: any, evt: any) {
+        console.log("activated: ", evt);
+        let idx = evt.index;
+        let data: CurrentRun = evt.data;
+        console.log("activated: ", idx, data);
+        const navService = await SDK.getService<IHostNavigationService>("ms.vss-features.host-navigation-service");
+        let url = data.webUrl //`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_git/${data.repositoryName}/pullrequest/${data.pullRequestId}`;
+        console.log("url: ", url);
+        if (!url) {
+            return;
+        }
+        navService.openNewWindow(url, "");
     }
 
     async function activateTopBuild(_: any, evt: any) {
@@ -121,6 +163,29 @@ function App(p: AppProps) {
     function topBuildToStatus(topBuild: Azdo.TopBuild): StatusType {
         return GetRunStatusType(topBuild.status, topBuild.result);
     }
+
+    function renderCurrentRunRow(
+        index: number,
+        run: CurrentRun,
+        details: IListItemDetails<any>,
+        key?: string
+    ): React.JSX.Element {
+        return (
+            <ListItem
+                key={key || "list-item" + index}
+                index={index}
+                details={details}
+            >
+                <Run
+                    name={run.buildNumber || "?"}
+                    status={topBuildToStatus(run)}
+                    comment={`comment`}
+                    started={null}
+                    isAlternate={isAlternate(run)}
+                />
+            </ListItem>
+        );
+    };
 
     function renderTopBuildRow(
         index: number,
@@ -156,6 +221,32 @@ function App(p: AppProps) {
         return true;
     }
 
+    function onSelectCurrentRun(list: CurrentRun[], listSelection: ListSelection) {
+        if (list.length == 0) {
+            // setSelectedIds([]);
+            setSelectedPipelineId(null);
+            setSelectedRunId(null);
+            return;
+        }
+
+        // let pids: number[] = []
+        for (let selRange of listSelection.value) {
+            for (let i = selRange.beginIndex; i <= selRange.endIndex; i++) {
+                let b = list[i];
+                if (b && b.buildId && b.pipelineId) {
+                    console.log("Selected run ID:", b.buildId, "Pipeline ID:", b.pipelineId);
+                    setSelectedRunId(b.buildId);
+                    setSelectedPipelineId(b.pipelineId);
+                }
+                // if (pr && pr.pullRequestId) {
+                //     pids.push(pr.pullRequestId);
+                // }
+            }
+        }
+        // setSelectedIds(pids)
+        // console.log("Selected pull request IDs:", pids);
+    }
+
     function onSelectTopBuilds(list: Azdo.TopBuild[], listSelection: ListSelection) {
         if (list.length == 0) {
             // setSelectedIds([]);
@@ -184,6 +275,20 @@ function App(p: AppProps) {
 
     return (
         <Page>
+            <div className="padding-8 margin-8">
+                <Card className="padding-8">
+                    <div className="flex-column">
+                        <ScrollableList
+                            itemProvider={new ArrayItemProvider(currentRunsItems)}
+                            selection={currentRunsSelection}
+                            onSelect={(_evt, _listRow) => { onSelectCurrentRun(currentRunsItems, currentRunsSelection); }}
+                            onActivate={activateCurrentRun}
+                            renderRow={renderCurrentRunRow}
+                            width="100%"
+                        />
+                    </div>
+                </Card>
+            </div>
             <div className="padding-8 margin-8">
                 <Card className="padding-8">
                     <div className="flex-column">

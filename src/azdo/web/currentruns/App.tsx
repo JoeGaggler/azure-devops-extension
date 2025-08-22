@@ -37,6 +37,8 @@ function App(p: AppProps) {
 
     const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
     const [allTopBuilds, setAllTopBuilds] = React.useState<Azdo.TopBuild[]>([]);
+    const [selectedRunId, setSelectedRunId] = React.useState<number | null>(null);
+    const [selectedPipelineId, setSelectedPipelineId] = React.useState<number | null>(null);
 
     // HACK: force rerendering for server sync
     const [pollHack, setPollHack] = React.useState(Math.random());
@@ -47,6 +49,13 @@ function App(p: AppProps) {
     let topBuildsQueueItems: Azdo.TopBuild[] = (allTopBuilds || []);
     let topBuildsSelection = new ListSelection(true);
 
+    let idx = (selectedRunId) ?
+        topBuildsQueueItems.findIndex((b: Azdo.TopBuild) => b.buildId === selectedRunId) :
+        (-1);
+
+    if (idx >= 0) {
+        topBuildsSelection.select(idx);
+    }
 
     // initialize the app
     React.useEffect(() => { init() }, []);
@@ -128,40 +137,45 @@ function App(p: AppProps) {
                 index={index}
                 details={details}
             >
-                {/* <div className={className}>
-                    <div className="font-size-m flex-row flex-center flex-shrink rhythm-horizontal-8">
-                        <div>{index + 1}</div>
-                        <div>{topBuild.pipelineId}</div>
-                        <div>{topBuild.buildId}</div>
-                        <div>{topBuild.buildNumber || "(unknown build number)"}</div>
-                        <div>{topBuild.repositoryName || "(unknown repo)"}</div>
-                        <div>{topBuild.definitionName || "(unknown definition)"}</div>
-                    </div>
-                </div> */}
                 <Run
                     name={topBuild.buildNumber || "?"}
                     status={topBuildToStatus(topBuild)}
                     comment={`comment`}
                     started={null}
-                    isAlternate={false}
+                    isAlternate={isAlternate(topBuild)}
                 />
             </ListItem>
         );
     };
 
+    function isAlternate(topBuild: Azdo.TopBuild | undefined): boolean {
+        if (!topBuild) { return false; }
+        if (!selectedPipelineId || !selectedRunId) { return false; }
+        if (topBuild.buildId === selectedRunId) { return false; }
+        if (topBuild.pipelineId !== selectedPipelineId) { return false; }
+        return true;
+    }
+
     function onSelectTopBuilds(list: Azdo.TopBuild[], listSelection: ListSelection) {
         if (list.length == 0) {
             // setSelectedIds([]);
+            setSelectedPipelineId(null);
+            setSelectedRunId(null);
             return;
         }
 
         // let pids: number[] = []
         for (let selRange of listSelection.value) {
             for (let i = selRange.beginIndex; i <= selRange.endIndex; i++) {
-                //         let pr = list[i];
-                //         if (pr && pr.pullRequestId) {
-                //             pids.push(pr.pullRequestId);
-                //         }
+                let b = list[i];
+                if (b && b.buildId && b.pipelineId) {
+                    console.log("Selected run ID:", b.buildId, "Pipeline ID:", b.pipelineId);
+                    setSelectedRunId(b.buildId);
+                    setSelectedPipelineId(b.pipelineId);
+                }
+                // if (pr && pr.pullRequestId) {
+                //     pids.push(pr.pullRequestId);
+                // }
             }
         }
         // setSelectedIds(pids)

@@ -234,20 +234,6 @@ function App(p: AppProps) {
         navService.openNewWindow(url, "");
     }
 
-    async function activateTopBuild(_: any, evt: any) {
-        console.log("activated: ", evt);
-        let idx = evt.index;
-        let data: Azdo.TopBuild = evt.data;
-        console.log("activated: ", idx, data);
-        const navService = await SDK.getService<IHostNavigationService>("ms.vss-features.host-navigation-service");
-        let url = data.webUrl //`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_git/${data.repositoryName}/pullrequest/${data.pullRequestId}`;
-        console.log("url: ", url);
-        if (!url) {
-            return;
-        }
-        navService.openNewWindow(url, "");
-    }
-
     //"Success" | "Failed" | "Warning" | "Information" | "Running" | "Waiting" | "Queued" | "Canceled" | "Skipped";
     function topBuildToStatus(topBuild: Azdo.TopBuild): StatusType {
         return GetRunStatusType(topBuild.status, topBuild.result);
@@ -271,32 +257,6 @@ function App(p: AppProps) {
                     comment={run.comment || ""}
                     started={null}
                     isAlternate={isAlternate(run)}
-                />
-            </ListItem>
-        );
-    };
-
-    function renderTopBuildRow(
-        index: number,
-        topBuild: Azdo.TopBuild,
-        details: IListItemDetails<any>,
-        key?: string
-    ): React.JSX.Element {
-        // let extra = "";
-        // let className = `scroll-hidden flex-row flex-center rhythm-horizontal-8 flex-grow padding-4 ${extra}`;
-
-        return (
-            <ListItem
-                key={key || "list-item" + index}
-                index={index}
-                details={details}
-            >
-                <Run
-                    name={topBuild.buildNumber || "?"}
-                    status={topBuildToStatus(topBuild)}
-                    comment={`comment`}
-                    started={null}
-                    isAlternate={isAlternate(topBuild)}
                 />
             </ListItem>
         );
@@ -336,32 +296,6 @@ function App(p: AppProps) {
         // console.log("Selected pull request IDs:", pids);
     }
 
-    function onSelectTopBuilds(list: Azdo.TopBuild[], listSelection: ListSelection) {
-        if (list.length == 0) {
-            // setSelectedIds([]);
-            setSelectedPipelineId(null);
-            setSelectedRunId(null);
-            return;
-        }
-
-        // let pids: number[] = []
-        for (let selRange of listSelection.value) {
-            for (let i = selRange.beginIndex; i <= selRange.endIndex; i++) {
-                let b = list[i];
-                if (b && b.buildId && b.pipelineId) {
-                    console.log("Selected run ID:", b.buildId, "Pipeline ID:", b.pipelineId);
-                    setSelectedRunId(b.buildId);
-                    setSelectedPipelineId(b.pipelineId);
-                }
-                // if (pr && pr.pullRequestId) {
-                //     pids.push(pr.pullRequestId);
-                // }
-            }
-        }
-        // setSelectedIds(pids)
-        // console.log("Selected pull request IDs:", pids);
-    }
-
     return (
         <Page>
             <div className="padding-8 margin-8">
@@ -373,20 +307,6 @@ function App(p: AppProps) {
                             onSelect={(_evt, _listRow) => { onSelectCurrentRun(currentRunsItems, currentRunsSelection); }}
                             onActivate={activateCurrentRun}
                             renderRow={renderCurrentRunRow}
-                            width="100%"
-                        />
-                    </div>
-                </Card>
-            </div>
-            <div className="padding-8 margin-8">
-                <Card className="padding-8">
-                    <div className="flex-column">
-                        <ScrollableList
-                            itemProvider={new ArrayItemProvider(topBuildsQueueItems)}
-                            selection={topBuildsSelection}
-                            onSelect={(_evt, _listRow) => { onSelectTopBuilds(topBuildsQueueItems, topBuildsSelection); }}
-                            onActivate={activateTopBuild}
-                            renderRow={renderTopBuildRow}
                             width="100%"
                         />
                     </div>

@@ -91,7 +91,7 @@ function App(p: AppProps) {
     const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false, repositories: [] });
     const [repoMap, setRepoMap] = React.useState<Record<string, Azdo.Repo>>({});
 
-    // state if the lists
+    // state of the lists
     const [mergeQueueList, setMergeQueueList] = React.useState<MergeQueueList>({ queues: [{ pullRequests: [] }] }); // TODO use this
     const [allPullRequests, setAllPullRequests] = React.useState<AllPullRequests>({ pullRequests: [] });
 

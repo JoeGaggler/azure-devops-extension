@@ -77,6 +77,53 @@ export async function postAzdo(url: string, body: any, bearertoken: string): Pro
     }
 }
 
+// _apis/build/builds?$top=100&queryOrder=queueTimeAscending&minTime=2025-08-21T21:38:14.1184379Z&api-version=7.2-preview.7`, bearer as string);
+
+export async function getTopRecentBuilds(tenantInfo: TenantInfo): Promise<TopBuild[] | undefined> {
+    try {
+        let bearer = await SDK.getAccessToken()
+        let json = await getAzdo(`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/build/builds?$top=100&queryOrder=queueTimeDescending&api-version=7.2-preview.7`, bearer as string);
+        return json.value.flatMap((b: any): (TopBuild | readonly TopBuild[]) => {
+            return {
+                pipelineId: b.definition?.id,
+                buildId: b.id,
+                buildNumber: b.buildNumber,
+                repositoryName: b.repository?.name,
+                definitionName: b.definition?.name,
+                status: b.status,
+                result: b.result,
+                webUrl: b._links?.web?.href
+            }
+        });
+    }
+    catch (err) {
+        console.error("Error fetching pull requests:", err);
+        return undefined;
+    }
+}
+
+export interface TopBuild {
+    pipelineId?: number;
+    buildId?: number;
+    buildNumber?: string;
+    repositoryName?: string;
+    definitionName?: string;
+    status?: string;
+    result?: string;
+    webUrl?: string;
+
+    // pullRequestId?: number;
+    // repository?: any;
+    // targetRefName?: string;
+    // title?: string;
+    // createdBy?: any; // TODO: user type
+    // isDraft?: boolean;
+    // creationDate?: string; // ISO date string
+    // autoCompleteSetBy?: boolean
+    // mergeStatus?: string;
+    // reviewers?: Array<any>; // TODO: reviewer type
+}
+
 export async function getAllPullRequests(tenantInfo: TenantInfo): Promise<PullRequest[] | undefined> {
     try {
         let bearer = await SDK.getAccessToken()

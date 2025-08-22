@@ -3,6 +3,11 @@ jq -r '.version |= "0.1." + (((split(".")[2] | tonumber) + 1) | tostring)' vss-e
 mv vss-extension.json.tmp vss-extension.json
 npm ci
 npm run build
+RESULT=$?
+if [ $RESULT -ne 0 ]; then
+  echo "Build failed with exit code $RESULT"
+  exit $RESULT
+fi
 
 # HACK: add charset to CSS files
 for file in dist/assets/*.css; do

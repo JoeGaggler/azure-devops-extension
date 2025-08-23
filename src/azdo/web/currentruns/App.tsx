@@ -75,6 +75,7 @@ function App(p: AppProps) {
     const [allTopBuilds, setAllTopBuilds] = React.useState<Azdo.TopBuild[]>([]);
     const [selectedRunId, setSelectedRunId] = React.useState<number | null>(null);
     const [selectedPipelineId, setSelectedPipelineId] = React.useState<number | null>(null);
+    const [selectedTabId, setSelectedTabId] = React.useState<string>("tabAll");
 
     // HACK: force rerendering for server sync
     const [pollHack, setPollHack] = React.useState(Math.random());
@@ -82,7 +83,14 @@ function App(p: AppProps) {
     function Resync() { setPollHack(Math.random()); }
 
     // state
-    let currentRunsItems: CurrentRun[] = (currentRuns || []);
+    let selectedGroup: PipelineGroup | null;
+    switch (selectedTabId) {
+        case "tabAll": selectedGroup = null; break;
+        case "tabGroup-Builds": selectedGroup = pipelineGroups.find((g) => g.name === "Builds") || null; break;
+        case "tabGroup-Releases": selectedGroup = pipelineGroups.find((g) => g.name === "Releases") || null; break;
+        default: selectedGroup = null; break;
+    };
+    let currentRunsItems: CurrentRun[] = getRunsForGroup(selectedGroup)
     joe.sortByNumber(currentRunsItems, (i) => -(i.sortOrder || 0)); // newest first
 
     let currentRunsSelection = new ListSelection(true);
@@ -294,7 +302,7 @@ function App(p: AppProps) {
         let data: CurrentRun = evt.data;
         console.log("activated: ", idx, data);
         const navService = await SDK.getService<IHostNavigationService>("ms.vss-features.host-navigation-service");
-        let url = data.webUrl //`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_git/${data.repositoryName}/pullrequest/${data.pullRequestId}`;
+        let url = data.webUrl;
         console.log("url: ", url);
         if (!url) {
             return;
@@ -364,19 +372,26 @@ function App(p: AppProps) {
         // console.log("Selected pull request IDs:", pids);
     }
 
-    function getTabBar() {
+    function getRunsForGroup(pg: PipelineGroup | null): CurrentRun[] {
         var runs = currentRuns || [];
+        if (!pg) { return runs; }
+        let matches: CurrentRun[] = [];
+        for (let r of runs) {
+            let rp = r.pipelineId;
+            if (rp && pg.pipelines.indexOf(rp) >= 0) {
+                matches.push(r);
+            }
+        }
+        return matches;
+    }
+
+    function getTabBar() {
+        // var runs = currentRuns || [];
         var pgs = pipelineGroups || [];
         joe.sortByString(pgs, (p) => p.name);
         let tabs: React.JSX.Element[] = [];
         for (let pg of pgs) {
-            let matches: CurrentRun[] = [];
-            for (let r of runs) {
-                let rp = r.pipelineId;
-                if (rp && pg.pipelines.indexOf(rp) >= 0) {
-                    matches.push(r);
-                }
-            }
+            let matches = getRunsForGroup(pg);
             let tab = getTab(`tabGroup-${pg.name}`, pg.name, matches.length);
             tabs.push(tab);
         }
@@ -394,11 +409,11 @@ function App(p: AppProps) {
             <TabBar
                 tabSize={TabSize.Tall}
                 disableSticky={true}
-                selectedTabId={"tabAll"}
+                selectedTabId={selectedTabId}
                 onSelectedTabChanged={onSelectedTabChanged}
                 tabsClassName="run-tabbar"
             >
-                {getTab("tabAll", "All", currentRunsItems.length)}
+                {getTab("tab-All", "All", currentRuns.length)}
                 {...tabs}
             </TabBar>
         );
@@ -406,10 +421,7 @@ function App(p: AppProps) {
 
     function onSelectedTabChanged(newTabId: string) {
         console.log("Tab changed:", newTabId);
-        // setSelectedTabId(newTabId);
-        // setSelectedIds([]);
-        // setSelectedPipelineId(null);
-        // setSelectedRunId(null);
+        setSelectedTabId(newTabId);
     }
 
     return (

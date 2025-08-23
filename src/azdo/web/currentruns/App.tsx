@@ -15,6 +15,7 @@ import { Page } from "azure-devops-ui/Page";
 // import { Pill, PillVariant, PillSize } from "azure-devops-ui/Pill";
 // import { PillGroup } from "azure-devops-ui/PillGroup";
 import { ScrollableList, IListItemDetails, ListItem } from "azure-devops-ui/List";
+import { Tab, TabBar, TabSize } from "azure-devops-ui/Tabs";
 // import { Toast } from "azure-devops-ui/Toast";
 // import { Toggle } from "azure-devops-ui/Toggle";
 // import { VssPersona } from "azure-devops-ui/VssPersona";
@@ -30,6 +31,15 @@ interface AppProps {
     bearerToken: string;
     appToken: string;
     singleton: AppSingleton;
+}
+
+interface PipelineGroupsDocument {
+    groups: PipelineGroup[];
+}
+
+interface PipelineGroup {
+    name: string;
+    pipelines: number[]; // pipeline IDs
 }
 
 interface CurrentRunsDocument {
@@ -57,9 +67,11 @@ function App(p: AppProps) {
 
     let collectionId = "currentPipelines";
     let currentRunsDocumentId = "currentRuns";
+    let pipelineGroupsDocumentId = "pipelineGroups";
 
     const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
     const [currentRuns, setCurrentRuns] = React.useState<CurrentRun[]>([]);
+    const [pipelineGroups, setPipelineGroups] = React.useState<PipelineGroup[]>([]);
     const [allTopBuilds, setAllTopBuilds] = React.useState<Azdo.TopBuild[]>([]);
     const [selectedRunId, setSelectedRunId] = React.useState<number | null>(null);
     const [selectedPipelineId, setSelectedPipelineId] = React.useState<number | null>(null);
@@ -99,6 +111,29 @@ function App(p: AppProps) {
         let info = await Azdo.getAzdoInfo();
         console.log("Tenant Info", info);
         setTenantInfo(info)
+
+        // setup pipeline groups
+        let pipelineGroupsDoc: PipelineGroupsDocument = {
+            groups: [
+                {
+                    name: "Builds", pipelines: [
+                        1264, // shadowauth
+                        1649, // shadowsync
+                        3407, // shadowscribe
+                    ]
+                },
+                {
+                    name: "Releases", pipelines: [
+                        1652, // shadowsync prod
+                        2544, // shadowauth prod
+                        3304, // shadowscribe prod
+                    ]
+                }
+            ]
+        };
+        pipelineGroupsDoc = await Azdo.getOrCreateUserDocument(collectionId, pipelineGroupsDocumentId, pipelineGroupsDoc)
+        setPipelineGroups(pipelineGroupsDoc.groups);
+        console.log("Init Pipeline Groups Document", pipelineGroupsDoc);
 
         // setup current runs
         let currentRunsDoc: CurrentRunsDocument = { runs: [] };
@@ -177,7 +212,7 @@ function App(p: AppProps) {
             runs: tempRuns
         };
         const nextRunsDoc = await Azdo.trySaveSharedDocument(collectionId, currentRunsDocumentId, newRunsDoc);
-        if (! nextRunsDoc) {
+        if (!nextRunsDoc) {
             console.warn("Failed to save current runs document, will retry on next poll.", newRunsDoc);
         } else {
             console.log("Saved current runs document.", nextRunsDoc);
@@ -329,6 +364,54 @@ function App(p: AppProps) {
         // console.log("Selected pull request IDs:", pids);
     }
 
+    function getTabBar() {
+        var runs = currentRuns || [];
+        var pgs = pipelineGroups || [];
+        joe.sortByString(pgs, (p) => p.name);
+        let tabs: React.JSX.Element[] = [];
+        for (let pg of pgs) {
+            let matches: CurrentRun[] = [];
+            for (let r of runs) {
+                let rp = r.pipelineId;
+                if (rp && pg.pipelines.indexOf(rp) >= 0) {
+                    matches.push(r);
+                }
+            }
+            let tab = getTab(`tabGroup-${pg.name}`, pg.name, matches.length);
+            tabs.push(tab);
+        }
+
+        function getTab(id: string, name: string, badgeCount: number) {
+            return (
+                <Tab
+                    id={id}
+                    name={name}
+                    badgeCount={badgeCount}
+                />);
+        }
+
+        return (
+            <TabBar
+                tabSize={TabSize.Tall}
+                disableSticky={true}
+                selectedTabId={"tabAll"}
+                onSelectedTabChanged={onSelectedTabChanged}
+                tabsClassName="run-tabbar"
+            >
+                {getTab("tabAll", "All", currentRunsItems.length)}
+                {...tabs}
+            </TabBar>
+        );
+    }
+
+    function onSelectedTabChanged(newTabId: string) {
+        console.log("Tab changed:", newTabId);
+        // setSelectedTabId(newTabId);
+        // setSelectedIds([]);
+        // setSelectedPipelineId(null);
+        // setSelectedRunId(null);
+    }
+
     return (
         <Page>
             <div className="padding-8 margin-8">
@@ -338,6 +421,8 @@ function App(p: AppProps) {
                 </div>
                 <Card className="padding-8">
                     <div className="flex-column">
+                        {getTabBar()}
+
                         <ScrollableList
                             itemProvider={new ArrayItemProvider(currentRunsItems)}
                             selection={currentRunsSelection}

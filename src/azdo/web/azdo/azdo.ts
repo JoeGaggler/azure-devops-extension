@@ -13,6 +13,10 @@ export async function getAzdo(url: string, bearertoken: string): Promise<any> {
     });
     if (response.ok) {
         const data = await response.json();
+        const ctok = response.headers.get("x-ms-continuationtoken");
+        if (ctok) {
+            console.log("Continuation token:", ctok);
+        }
         // console.log(data);
         return data;
     } else {
@@ -75,6 +79,37 @@ export async function postAzdo(url: string, body: any, bearertoken: string): Pro
     } else {
         console.log("Error posting azdo data", response.statusText);
     }
+}
+
+// https://dev.azure.com/emdat/Emdat/_apis/pipelines/1938/runs/299579?api-version=7.2-preview.1
+export async function getPipelineRun(tenantInfo: TenantInfo, pipelineId: number, runId: number): Promise<PipelineRun | undefined> {
+    try {
+        let bearer = await SDK.getAccessToken()
+        let json = await getAzdo(`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/pipelines/${pipelineId}/runs/${runId}?api-version=7.2-preview.1`, bearer as string);
+        if (!json) {
+            return undefined;
+        }
+        let b = json;
+        return {
+            pipelineId: b.id,
+            name: b.name,
+            state: b.state,
+            result: b.result,
+            createdDate: b.createdDate,
+        };
+    }
+    catch (err) {
+        console.error("Error fetching pull requests:", err);
+        return undefined;
+    }
+}
+
+export interface PipelineRun {
+    pipelineId?: number;
+    name?: string;
+    state?: string;
+    result?: string;
+    createdDate?: string;
 }
 
 // _apis/build/builds?$top=100&queryOrder=queueTimeAscending&minTime=2025-08-21T21:38:14.1184379Z&api-version=7.2-preview.7`, bearer as string);

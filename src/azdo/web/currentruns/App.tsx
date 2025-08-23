@@ -32,6 +32,10 @@ interface AppProps {
     singleton: AppSingleton;
 }
 
+interface CurrentRunsDocument {
+    runs: CurrentRun[];
+}
+
 interface CurrentRun {
     pipelineId?: number;
     buildId?: number;
@@ -50,6 +54,9 @@ interface CurrentRun {
 
 function App(p: AppProps) {
     console.log("App render", p);
+
+    let collectionId = "currentPipelines";
+    let currentRunsDocumentId = "currentRuns";
 
     const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
     const [currentRuns, setCurrentRuns] = React.useState<CurrentRun[]>([]);
@@ -93,6 +100,12 @@ function App(p: AppProps) {
         console.log("Tenant Info", info);
         setTenantInfo(info)
 
+        // setup current runs
+        let currentRunsDoc: CurrentRunsDocument = { runs: [] };
+        currentRunsDoc = await Azdo.getOrCreateSharedDocument(collectionId, currentRunsDocumentId, currentRunsDoc);
+        setCurrentRuns(currentRunsDoc.runs);
+        console.log("Init Current Runs Document", currentRunsDoc);
+
         // // setup merge queue list
         // let newMergeQueueList = await downloadMergeQueuePullRequests();
         // setMergeQueueList(newMergeQueueList);
@@ -107,7 +120,7 @@ function App(p: AppProps) {
         // setFilters({ ...userFiltersDoc });
 
         // Refresh from server
-        setInterval(() => { Resync(); }, 1000 * 20);
+        setInterval(() => { Resync(); }, 1000 * 10);
         Resync();
     }
 
@@ -117,8 +130,12 @@ function App(p: AppProps) {
             return;
         }
 
+        let currentRunsDoc: CurrentRunsDocument = { runs: [] };
+        currentRunsDoc = await Azdo.getOrCreateSharedDocument(collectionId, currentRunsDocumentId, currentRunsDoc);
+        console.log("Current Runs Document", currentRunsDoc);
+
         let top = await getTopBuilds();
-        let tempRuns: CurrentRun[] = currentRuns.slice();
+        let tempRuns: CurrentRun[] = currentRunsDoc.runs || [];
         for (let i = 0; i < top.length; i++) {
             let it = top[i];
 
@@ -130,14 +147,18 @@ function App(p: AppProps) {
 
             let j = tempRuns.findIndex((r) => (r.buildId === it.buildId));
             if (j >= 0) {
-                // TODO: does this work?
-                top[i] = {
+                // TODO: this doesn't seem to update the status
+                tempRuns[j] = {
                     ...tempRuns[j], // existing data
                     ...it, // new data
                     // TODO: update comment?
                 }
             } else {
                 let queueTimestamp = queueDateTime.toUnixInteger();
+                // let pr = await Azdo.getPipelineRun(tenantInfo, it.pipelineId!, it.buildId!);
+                // if (pr) {
+                //     console.log("COMPARE", it, pr);
+                // }
                 tempRuns.push({
                     ...it,
                     sortOrder: queueTimestamp,
@@ -145,12 +166,22 @@ function App(p: AppProps) {
                     comment: `${queueTimestamp} - ${luxon.DateTime.fromSeconds(queueTimestamp, { zone: "utc" }).toISO({})} - ${it.queueTime}`,
                 });
             }
-            console.log("Current Run", tempRuns[i]);
+            // console.log("Current Run", tempRuns[i]);
         }
 
         tempRuns = cleanRuns(tempRuns)
 
         setCurrentRuns(tempRuns);
+        const newRunsDoc: CurrentRunsDocument = {
+            ...currentRunsDoc,
+            runs: tempRuns
+        };
+        const nextRunsDoc = await Azdo.trySaveSharedDocument(collectionId, currentRunsDocumentId, newRunsDoc);
+        if (! nextRunsDoc) {
+            console.warn("Failed to save current runs document, will retry on next poll.", newRunsDoc);
+        } else {
+            console.log("Saved current runs document.", nextRunsDoc);
+        }
     }
 
     function cleanRuns(runs: CurrentRun[]): CurrentRun[] {
@@ -301,6 +332,10 @@ function App(p: AppProps) {
     return (
         <Page>
             <div className="padding-8 margin-8">
+                <div className="padding-8 flex-row flex-baseline rhythm-horizontal-16">
+                    <h2>Current Pipelines</h2>
+                    <div className="flex-grow"></div>
+                </div>
                 <Card className="padding-8">
                     <div className="flex-column">
                         <ScrollableList

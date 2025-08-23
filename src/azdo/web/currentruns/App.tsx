@@ -4,7 +4,7 @@ import * as SDK from 'azure-devops-extension-sdk';
 import * as Azdo from '../azdo/azdo.ts';
 import * as luxon from 'luxon'
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
-// import { Button } from "azure-devops-ui/Button";
+import { Button } from "azure-devops-ui/Button";
 import { Card } from "azure-devops-ui/Card";
 // import { Dropdown } from "azure-devops-ui/Dropdown";
 // import { DropdownMultiSelection } from "azure-devops-ui/Utilities/DropdownSelection";
@@ -16,6 +16,7 @@ import { Page } from "azure-devops-ui/Page";
 // import { PillGroup } from "azure-devops-ui/PillGroup";
 import { ScrollableList, IListItemDetails, ListItem } from "azure-devops-ui/List";
 import { Tab, TabBar, TabSize } from "azure-devops-ui/Tabs";
+import { TextField, TextFieldWidth } from "azure-devops-ui/TextField";
 // import { Toast } from "azure-devops-ui/Toast";
 // import { Toggle } from "azure-devops-ui/Toggle";
 // import { VssPersona } from "azure-devops-ui/VssPersona";
@@ -79,7 +80,8 @@ function App(p: AppProps) {
     const [allTopBuilds, setAllTopBuilds] = React.useState<Azdo.TopBuild[]>([]);
     const [selectedRunId, setSelectedRunId] = React.useState<number | null>(null);
     const [selectedPipelineId, setSelectedPipelineId] = React.useState<number | null>(null);
-    const [selectedTabId, setSelectedTabId] = React.useState<string>("tabAll");
+    const [selectedTabId, setSelectedTabId] = React.useState<string>("tabGroup-ROOT");
+    const [newSubgroupName, setNewSubgroupName] = React.useState<string>("");
 
     // HACK: force rerendering for server sync
     const [pollHack, setPollHack] = React.useState(Math.random());
@@ -126,23 +128,23 @@ function App(p: AppProps) {
         // setup pipeline groups
         let pipelineGroupsDoc: PipelineGroupsDocument = {
             groups: [
-                {
-                    name: "Builds", pipelines: [
-                        1264, // shadowauth
-                        1649, // shadowsync
-                        3407, // shadowscribe
-                    ]
-                },
-                {
-                    name: "Releases", pipelines: [
-                        1652, // shadowsync prod
-                        2544, // shadowauth prod
-                        3304, // shadowscribe prod
-                    ]
-                }
+                // {
+                //     name: "Builds", pipelines: [
+                //         1264, // shadowauth
+                //         1649, // shadowsync
+                //         3407, // shadowscribe
+                //     ]
+                // },
+                // {
+                //     name: "Releases", pipelines: [
+                //         1652, // shadowsync prod
+                //         2544, // shadowauth prod
+                //         3304, // shadowscribe prod
+                //     ]
+                // }
             ]
         };
-        pipelineGroupsDoc = await Azdo.getOrCreateUserDocument(collectionId, pipelineGroupsDocumentId, pipelineGroupsDoc)
+        pipelineGroupsDoc = await Azdo.getOrCreateSharedDocument(collectionId, pipelineGroupsDocumentId, pipelineGroupsDoc)
         setPipelineGroups(pipelineGroupsDoc.groups);
         console.log("Init Pipeline Groups Document", pipelineGroupsDoc);
 
@@ -151,19 +153,6 @@ function App(p: AppProps) {
         currentRunsDoc = await Azdo.getOrCreateSharedDocument(collectionId, currentRunsDocumentId, currentRunsDoc);
         setCurrentRuns(currentRunsDoc.runs);
         console.log("Init Current Runs Document", currentRunsDoc);
-
-        // // setup merge queue list
-        // let newMergeQueueList = await downloadMergeQueuePullRequests();
-        // setMergeQueueList(newMergeQueueList);
-
-        // // setup user filters
-        // let userFiltersDoc: PullRequestFilters = {
-        //     drafts: false,
-        //     allBranches: false,
-        //     repositories: []
-        // }
-        // userFiltersDoc = await Azdo.getOrCreateUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc)
-        // setFilters({ ...userFiltersDoc });
 
         // Refresh from server
         setInterval(() => { Resync(); }, 1000 * 10);
@@ -427,12 +416,73 @@ function App(p: AppProps) {
         setSelectedTabId(newTabId);
     }
 
+    async function onAddSubgroup() {
+        let pgd: PipelineGroupsDocument = await Azdo.getOrCreateSharedDocument(collectionId, pipelineGroupsDocumentId, { groups: [] });
+        if (!newSubgroupName || newSubgroupName.trim().length == 0) {
+            alert("Please enter a valid subgroup name.");
+            return;
+        }
+        if (pgd.groups.find((g) => g.name === newSubgroupName)) {
+            alert("A subgroup with that name already exists.");
+            return;
+        }
+        pgd.groups.push({ name: newSubgroupName, pipelines: [] });
+        let r = await Azdo.trySaveSharedDocument(collectionId, pipelineGroupsDocumentId, pgd)
+        if (!r) {
+            alert("Failed to save new subgroup, please try again.");
+            return;
+        }
+        setPipelineGroups(pgd.groups);
+        setNewSubgroupName("");
+    }
+
+    async function onRemoveSubgroup() {
+        let tabId = selectedTabId;
+        if (tabId === "tabGroup-ROOT") {
+            alert("Cannot remove the 'All' group.");
+            return;
+        }
+
+        let pgd: PipelineGroupsDocument = await Azdo.getOrCreateSharedDocument(collectionId, pipelineGroupsDocumentId, { groups: [] });
+        let idx = pgd.groups.findIndex((g) => `tabGroup-${g.name}` === tabId);
+        if (idx < 0) {
+            alert("Failed to find the selected subgroup.");
+            return;
+        }
+        let confirmed = confirm(`Are you sure you want to remove the subgroup '${pgd.groups[idx].name}'? This will not delete any pipelines or runs, it will just remove the grouping.`);
+        if (!confirmed) { return; }
+        pgd.groups.splice(idx, 1);
+        let r = await Azdo.trySaveSharedDocument(collectionId, pipelineGroupsDocumentId, pgd)
+        if (!r) {
+            alert("Failed to remove subgroup, please try again.");
+            return;
+        }
+        setPipelineGroups(pgd.groups);
+        setSelectedTabId("tabGroup-ROOT");
+    }
+
     return (
         <Page>
             <div className="padding-8 margin-8">
                 <div className="padding-8 flex-row flex-baseline rhythm-horizontal-16">
                     <h2>Current Pipelines</h2>
                     <div className="flex-grow"></div>
+                    <TextField
+                        value={newSubgroupName}
+                        onChange={(_e, newValue) => (setNewSubgroupName(newValue))}
+                        placeholder="Name"
+                        width={TextFieldWidth.tabBar}
+                    />
+                    <Button
+                        disabled={false} // TODO: validation
+                        onClick={onAddSubgroup}
+                        text="Add Subgroup"
+                    />
+                    <Button
+                        disabled={false} // TODO: validation
+                        onClick={onRemoveSubgroup}
+                        text="Remove Subgroup"
+                    />
                 </div>
                 <Card className="padding-8">
                     <div className="flex-column">

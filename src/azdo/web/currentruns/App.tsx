@@ -64,7 +64,13 @@ interface CurrentRun {
 }
 
 interface MapTabIdToGroup {
-    [key: string]: PipelineGroup;
+    [key: string]: MappingTarget;
+}
+
+interface MappingTarget {
+    id: string;
+    path: string[];
+    pipelineGroup: PipelineGroup;
 }
 
 function App(p: AppProps) {
@@ -80,7 +86,8 @@ function App(p: AppProps) {
     const [allTopBuilds, setAllTopBuilds] = React.useState<Azdo.TopBuild[]>([]);
     const [selectedRunId, setSelectedRunId] = React.useState<number | null>(null);
     const [selectedPipelineId, setSelectedPipelineId] = React.useState<number | null>(null);
-    const [selectedTabId, setSelectedTabId] = React.useState<string>("tabGroup-ROOT");
+    const [selectedTabId, setSelectedTabId] = React.useState<string | null>(null);
+    const [tabIdPath, setTabIdPath] = React.useState<string[]>([]);
     const [newSubgroupName, setNewSubgroupName] = React.useState<string>("");
 
     // HACK: force rerendering for server sync
@@ -89,12 +96,26 @@ function App(p: AppProps) {
     function Resync() { setPollHack(Math.random()); }
 
     let mapTabsToGroups: MapTabIdToGroup = {};
-    for (let g of pipelineGroups) {
-        mapTabsToGroups[`tabGroup-${g.name}`] = g;
+    let tabBarItems: JSX.Element[] = [
+        <Tab id="tabGroup-ROOT" name="All" badgeCount={currentRuns.length} />
+    ];
+    function buildIt(prefix: String, pgs: PipelineGroup[], tip: string[]) {
+        if (!pgs || pgs.length == 0) { return; }
+        // tabBarItems.push(<div className="">|</div>); // TODO: DIVIDER
+        for (let g of pgs) {
+            let newPrefix = `${prefix}-${g.name}`;
+            mapTabsToGroups[newPrefix] = {
+                id: newPrefix,
+                pipelineGroup: g,
+                path: [...tip, g.name],
+            };
+            tabBarItems.push(<Tab id={newPrefix} name={g.name} badgeCount={getRunsForGroup(g).length} iconProps={{ iconName: "Home" }} />);
+        }
     }
+    buildIt("tabGroupId", pipelineGroups, tabIdPath);
 
     // state
-    let selectedGroup: PipelineGroup | undefined = mapTabsToGroups[selectedTabId];
+    let selectedGroup: PipelineGroup | undefined = undefined; // TODO: JOE
     let currentRunsItems: CurrentRun[] = getRunsForGroup(selectedGroup || null)
     joe.sortByNumber(currentRunsItems, (i) => -(i.sortOrder || 0)); // newest first
 
@@ -397,23 +418,46 @@ function App(p: AppProps) {
                 />);
         }
 
+        // function groupsToTabs(pgs: PipelineGroup[], _parents: string[]) {
+        //     if (pgs.length == 0) {
+        //         return <></>
+        //     }
+
+        //     let tabs: React.JSX.Element[] = [];
+        //     for (let pg of pgs) {
+        //         let matches = getRunsForGroup(pg);
+        //         let tab = getTab(`tabGroup-${pg.name}`, pg.name, matches.length);
+        //         tabs.push(tab);
+        //     }
+        //     return <>{tabs}</>;
+        // }
+
         return (
             <TabBar
                 tabSize={TabSize.Tall}
                 disableSticky={true}
-                selectedTabId={selectedTabId}
+                selectedTabId={selectedTabId || "tabGroup-ROOT"}
                 onSelectedTabChanged={onSelectedTabChanged}
                 tabsClassName="run-tabbar"
             >
-                {getTab("tabGroup-ROOT", "All", currentRuns.length)}
-                {...tabs}
+                {tabBarItems}
             </TabBar>
         );
     }
 
     function onSelectedTabChanged(newTabId: string) {
         console.log("Tab changed:", newTabId);
+        let ttt = mapTabsToGroups[newTabId];
+        if (!ttt) {
+            console.warn("Failed to find mapping for tab ID:", newTabId);
+            setSelectedTabId(null)
+            setTabIdPath([]);
+            return
+        }
+        console.log("Found mapping for tab ID:", newTabId, ttt);
+
         setSelectedTabId(newTabId);
+        setTabIdPath(ttt.path);
     }
 
     async function onAddSubgroup() {
@@ -526,8 +570,8 @@ function App(p: AppProps) {
                 <div className="padding-8 flex-row flex-baseline rhythm-horizontal-16">
                     <h2>Current Pipelines</h2>
                     <div className="flex-grow"></div>
-                    <div className="padding-8 flex-column rhythm-vertical-16">
-                        <div className="padding-8 flex-row flex-baseline rhythm-horizontal-16">
+                    <div className="flex-column rhythm-vertical-8">
+                        <div className="flex-row flex-baseline rhythm-horizontal-16">
                             <TextField
                                 value={newSubgroupName}
                                 onChange={(_e, newValue) => (setNewSubgroupName(newValue))}
@@ -545,7 +589,7 @@ function App(p: AppProps) {
                                 text="Remove Group"
                             />
                         </div>
-                        <div className="padding-8 flex-row flex-baseline rhythm-horizontal-16">
+                        <div className="flex-row flex-baseline rhythm-horizontal-16">
                             <TextField
                                 value={selectedPipelineId ? selectedPipelineId.toString() : ""}
                                 placeholder="Pipeline"

@@ -461,28 +461,108 @@ function App(p: AppProps) {
         setSelectedTabId("tabGroup-ROOT");
     }
 
+    async function onAddPipelineToGroup() {
+        if (!selectedPipelineId) {
+            alert("Please select a pipeline to add to the group.");
+            return;
+        }
+        let tabId = selectedTabId;
+        if (tabId === "tabGroup-ROOT") {
+            alert("Please select a subgroup to add the pipeline to.");
+            return;
+        }
+        let pgd: PipelineGroupsDocument = await Azdo.getOrCreateSharedDocument(collectionId, pipelineGroupsDocumentId, { groups: [] });
+        let group = pgd.groups.find((g) => `tabGroup-${g.name}` === tabId);
+        if (!group) {
+            alert("Failed to find the selected subgroup.");
+            return;
+        }
+        if (group.pipelines.indexOf(selectedPipelineId) >= 0) {
+            alert("That pipeline is already in the selected group.");
+            return;
+        }
+        group.pipelines.push(selectedPipelineId);
+        let r = await Azdo.trySaveSharedDocument(collectionId, pipelineGroupsDocumentId, pgd)
+        if (!r) {
+            alert("Failed to add pipeline to group, please try again.");
+            return;
+        }
+        setPipelineGroups(pgd.groups);
+    }
+
+    async function onRemovePipelineFromGroup() {
+        if (!selectedPipelineId) {
+            alert("Please select a pipeline to remove from the group.");
+            return;
+        }
+        let tabId = selectedTabId;
+        if (tabId === "tabGroup-ROOT") {
+            alert("Please select a subgroup to remove the pipeline from.");
+            return;
+        }
+        let pgd: PipelineGroupsDocument = await Azdo.getOrCreateSharedDocument(collectionId, pipelineGroupsDocumentId, { groups: [] });
+        let group = pgd.groups.find((g) => `tabGroup-${g.name}` === tabId);
+        if (!group) {
+            alert("Failed to find the selected subgroup.");
+            return;
+        }
+        let idx = group.pipelines.indexOf(selectedPipelineId);
+        if (idx < 0) {
+            alert("That pipeline is not in the selected group.");
+            return;
+        }
+        group.pipelines.splice(idx, 1);
+        let r = await Azdo.trySaveSharedDocument(collectionId, pipelineGroupsDocumentId, pgd)
+        if (!r) {
+            alert("Failed to remove pipeline from group, please try again.");
+            return;
+        }
+        setPipelineGroups(pgd.groups);
+    }
+
     return (
         <Page>
             <div className="padding-8 margin-8">
                 <div className="padding-8 flex-row flex-baseline rhythm-horizontal-16">
                     <h2>Current Pipelines</h2>
                     <div className="flex-grow"></div>
-                    <TextField
-                        value={newSubgroupName}
-                        onChange={(_e, newValue) => (setNewSubgroupName(newValue))}
-                        placeholder="Name"
-                        width={TextFieldWidth.tabBar}
-                    />
-                    <Button
-                        disabled={false} // TODO: validation
-                        onClick={onAddSubgroup}
-                        text="Add Subgroup"
-                    />
-                    <Button
-                        disabled={false} // TODO: validation
-                        onClick={onRemoveSubgroup}
-                        text="Remove Subgroup"
-                    />
+                    <div className="padding-8 flex-column rhythm-vertical-16">
+                        <div className="padding-8 flex-row flex-baseline rhythm-horizontal-16">
+                            <TextField
+                                value={newSubgroupName}
+                                onChange={(_e, newValue) => (setNewSubgroupName(newValue))}
+                                placeholder="Name"
+                                width={TextFieldWidth.tabBar}
+                            />
+                            <Button
+                                disabled={false} // TODO: validation
+                                onClick={onAddSubgroup}
+                                text="Add Group"
+                            />
+                            <Button
+                                disabled={false} // TODO: validation
+                                onClick={onRemoveSubgroup}
+                                text="Remove Group"
+                            />
+                        </div>
+                        <div className="padding-8 flex-row flex-baseline rhythm-horizontal-16">
+                            <TextField
+                                value={selectedPipelineId ? selectedPipelineId.toString() : ""}
+                                placeholder="Pipeline"
+                                width={TextFieldWidth.tabBar}
+                            />
+                            <Button
+                                disabled={false} // TODO: validation
+                                onClick={onAddPipelineToGroup}
+                                text="Add to Group"
+                            />
+                            <Button
+                                disabled={false} // TODO: validation
+                                onClick={onRemovePipelineFromGroup}
+                                text="Remove from Group"
+                            />
+                        </div>
+                    </div>
                 </div>
                 <Card className="padding-8">
                     <div className="flex-column">

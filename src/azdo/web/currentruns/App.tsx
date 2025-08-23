@@ -62,6 +62,10 @@ interface CurrentRun {
     comment?: string;
 }
 
+interface MapTabIdToGroup {
+    [key: string]: PipelineGroup;
+}
+
 function App(p: AppProps) {
     console.log("App render", p);
 
@@ -82,15 +86,14 @@ function App(p: AppProps) {
     React.useEffect(() => { poll(); }, [pollHack]);
     function Resync() { setPollHack(Math.random()); }
 
+    let mapTabsToGroups: MapTabIdToGroup = {};
+    for (let g of pipelineGroups) {
+        mapTabsToGroups[`tabGroup-${g.name}`] = g;
+    }
+
     // state
-    let selectedGroup: PipelineGroup | null;
-    switch (selectedTabId) {
-        case "tabAll": selectedGroup = null; break;
-        case "tabGroup-Builds": selectedGroup = pipelineGroups.find((g) => g.name === "Builds") || null; break;
-        case "tabGroup-Releases": selectedGroup = pipelineGroups.find((g) => g.name === "Releases") || null; break;
-        default: selectedGroup = null; break;
-    };
-    let currentRunsItems: CurrentRun[] = getRunsForGroup(selectedGroup)
+    let selectedGroup: PipelineGroup | undefined = mapTabsToGroups[selectedTabId];
+    let currentRunsItems: CurrentRun[] = getRunsForGroup(selectedGroup || null)
     joe.sortByNumber(currentRunsItems, (i) => -(i.sortOrder || 0)); // newest first
 
     let currentRunsSelection = new ListSelection(true);
@@ -413,7 +416,7 @@ function App(p: AppProps) {
                 onSelectedTabChanged={onSelectedTabChanged}
                 tabsClassName="run-tabbar"
             >
-                {getTab("tab-All", "All", currentRuns.length)}
+                {getTab("tabGroup-ROOT", "All", currentRuns.length)}
                 {...tabs}
             </TabBar>
         );

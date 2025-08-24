@@ -100,15 +100,24 @@ function App(p: AppProps) {
         <Tab id="tabGroup-ROOT" name="All" badgeCount={currentRuns.length} />
     ];
     function buildTabMappings(prefix: String, pgs: PipelineGroup[], tip: string[], tip2: string[], depth: number) {
+        if (depth > 5) { return; }
         console.log("buildTabMappings", prefix, pgs, tip, tip2, depth);
 
-        if (!pgs || pgs.length == 0) { return; }
+        if (!pgs || pgs.length == 0) {
+            console.log("buildTabMappings: no groups", prefix, pgs, tip, tip2, depth);
+            return;
+        }
 
         let icon: any | undefined = { iconName: "ChevronRight" };
         if (tip.length > 0) {
-            let last = [...tip].splice(0, 1)[0];
-            let g = pipelineGroups.find((g) => g.name === last);
-            if (!g) { return; }
+            let chop = [...tip];
+            let last = chop.splice(0, 1)[0];
+            console.log(`buildTabMappings: chopped ${last}`, prefix, pgs, tip, tip2, depth);
+            let g = pgs.find((g) => g.name === last);
+            if (!g) {
+                console.warn("Failed to find pipeline group for tab path:", tip, last);
+                return;
+            }
 
             let newTip2 = [...tip2, g.name];
             let newPrefix = `${prefix}-${g.name}`;
@@ -117,8 +126,11 @@ function App(p: AppProps) {
                 pipelineGroup: g,
                 path: newTip2,
             };
-            tabBarItems.push(<Tab id={newPrefix} name={g.name} badgeCount={getRunsForGroup(getPipelineGroupForPath(pipelineGroups, newTip2)).length} iconProps={icon} />);
+            tabBarItems.push(<Tab id={newPrefix} name={g.name} badgeCount={getRunsForGroup(g).length} iconProps={icon} />);
+
+            buildTabMappings(newPrefix, g.groups, chop, newTip2, depth + 1);
         } else {
+            console.log("buildTabMappings: final", prefix, pgs, tip, tip2, depth);
             for (let g of pgs) {
                 let newTip2: string[] = [...tip2, g.name];
                 let newPrefix = `${prefix}-${g.name}`;
@@ -127,7 +139,7 @@ function App(p: AppProps) {
                     pipelineGroup: g,
                     path: newTip2,
                 };
-                tabBarItems.push(<Tab id={newPrefix} name={g.name} badgeCount={getRunsForGroup(getPipelineGroupForPath(pipelineGroups, newTip2)).length} iconProps={icon} />);
+                tabBarItems.push(<Tab id={newPrefix} name={g.name} badgeCount={getRunsForGroup(g).length} iconProps={icon} />);
                 icon = undefined; // only first one gets icon
             }
         }
@@ -149,7 +161,7 @@ function App(p: AppProps) {
                 console.warn("Failed to find pipeline group for path:", path, n);
                 return undefined;
             }
-            // gg = g.groups // TODO: RECURSIVE STEP
+            gg = g.groups
         }
         console.log("*** getPipelineGroupForPath found", p, g);
         return g;
@@ -539,22 +551,22 @@ function App(p: AppProps) {
             alert("Please select a pipeline to add to the group.");
             return;
         }
-        let tabId = selectedTabId;
-        if (tabId === "tabGroup-ROOT") {
+        if (tabIdPath.length == 0) {
             alert("Please select a subgroup to add the pipeline to.");
             return;
         }
         let pgd: PipelineGroupsDocument = await Azdo.getOrCreateSharedDocument(collectionId, pipelineGroupsDocumentId, { groups: [] });
-        let group = pgd.groups.find((g) => `tabGroup-${g.name}` === tabId);
-        if (!group) {
+        let ggg = getPipelineGroupForPath(pgd.groups, [...tabIdPath]);
+        if (!ggg) {
             alert("Failed to find the selected subgroup.");
             return;
         }
-        if (group.pipelines.indexOf(selectedPipelineId) >= 0) {
+
+        if (ggg.pipelines.indexOf(selectedPipelineId) >= 0) {
             alert("That pipeline is already in the selected group.");
             return;
         }
-        group.pipelines.push(selectedPipelineId);
+        ggg.pipelines.push(selectedPipelineId);
         let r = await Azdo.trySaveSharedDocument(collectionId, pipelineGroupsDocumentId, pgd)
         if (!r) {
             alert("Failed to add pipeline to group, please try again.");
@@ -568,23 +580,22 @@ function App(p: AppProps) {
             alert("Please select a pipeline to remove from the group.");
             return;
         }
-        let tabId = selectedTabId;
-        if (tabId === "tabGroup-ROOT") {
-            alert("Please select a subgroup to remove the pipeline from.");
+        if (tabIdPath.length == 0) {
+            alert("Please select a subgroup to add the pipeline to.");
             return;
         }
         let pgd: PipelineGroupsDocument = await Azdo.getOrCreateSharedDocument(collectionId, pipelineGroupsDocumentId, { groups: [] });
-        let group = pgd.groups.find((g) => `tabGroup-${g.name}` === tabId);
-        if (!group) {
+        let ggg = getPipelineGroupForPath(pgd.groups, [...tabIdPath]);
+        if (!ggg) {
             alert("Failed to find the selected subgroup.");
             return;
         }
-        let idx = group.pipelines.indexOf(selectedPipelineId);
+        let idx = ggg.pipelines.indexOf(selectedPipelineId);
         if (idx < 0) {
             alert("That pipeline is not in the selected group.");
             return;
         }
-        group.pipelines.splice(idx, 1);
+        ggg.pipelines.splice(idx, 1);
         let r = await Azdo.trySaveSharedDocument(collectionId, pipelineGroupsDocumentId, pgd)
         if (!r) {
             alert("Failed to remove pipeline from group, please try again.");

@@ -131,7 +131,9 @@ function App(p: AppProps) {
             buildTabMappings(newPrefix, g.groups, chop, newTip2, depth + 1);
         } else {
             console.log("buildTabMappings: final", prefix, pgs, tip, tip2, depth);
-            for (let g of pgs) {
+            let pgs2 = [...pgs];
+            joe.sortByString(pgs2, (p) => p.name);
+            for (let g of pgs2) {
                 let newTip2: string[] = [...tip2, g.name];
                 let newPrefix = `${prefix}-${g.name}`;
                 mapTabsToGroups[newPrefix] = {

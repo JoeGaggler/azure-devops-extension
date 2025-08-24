@@ -8,6 +8,7 @@ interface RunProps {
     comment: string;
     started: number | null;
     isAlternate: boolean;
+    isKnown: boolean;
 }
 
 function Run(p: RunProps) {
@@ -21,7 +22,7 @@ function Run(p: RunProps) {
                 <RunIcon status={p.status} className="nothing_here" />
                 <div className="font-size-m flex-self-center padding-4 flex-noshrink">{p.name}</div>
                 {p.comment && (<div className="text-ellipsis italic text-neutral-70 padding-left-8">{p.comment}</div>)}
-                {p.started && (<div className="flex-row flex-grow"><div className="flex-grow" /><div>{luxon.DateTime.fromSeconds(p.started).toRelative()}</div></div>)}
+                {p.started && (<div className="flex-row flex-grow"><div className="flex-grow" />{!p.isKnown && (<div className="padding-right-8">?</div>)}<div>{luxon.DateTime.fromSeconds(p.started).toRelative()}</div></div>)}
             </div>
 
         </>

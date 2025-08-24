@@ -144,6 +144,7 @@ function App(p: AppProps) {
                 tabBarItems.push(<Tab id={newPrefix} name={g.name} badgeCount={getRunsForGroup(g).length} iconProps={icon} />);
                 icon = undefined; // only first one gets icon
             }
+            // TODO: ADD "OTHER" TAB HERE!
         }
     }
     buildTabMappings("tabGroupId", pipelineGroups, tabIdPath, [], 0);
@@ -166,6 +167,7 @@ function App(p: AppProps) {
             gg = g.groups
         }
         console.log("*** getPipelineGroupForPath found", p, g);
+        if (g && !g.groups) { g.groups = []; }
         return g;
     }
 
@@ -371,6 +373,14 @@ function App(p: AppProps) {
         return GetRunStatusType(topBuild.status, topBuild.result);
     }
 
+    function isKnown(pipelineId: number | undefined): boolean {
+        if (!pipelineId) { return false; }
+        for (let pg of pipelineGroups || []) {
+            if (getRecursivePipelineIds(pg).indexOf(pipelineId) >= 0) { return true; }
+        }
+        return false;
+    }
+
     function renderCurrentRunRow(
         index: number,
         run: CurrentRun,
@@ -389,6 +399,7 @@ function App(p: AppProps) {
                     comment={run.comment || ""}
                     started={run.sortOrder || null}
                     isAlternate={isAlternate(run)}
+                    isKnown={isKnown(run.pipelineId)}
                 />
             </ListItem>
         );
@@ -554,7 +565,7 @@ function App(p: AppProps) {
         // let confirmed = confirm(`Are you sure you want to remove the subgroup '${pgd.groups[idx].name}'? This will not delete any pipelines or runs, it will just remove the grouping.`);
         let confirmed = confirm(`Are you sure you want to remove the subgroup '${ggg3.name}'? This will not delete any pipelines or runs, it will just remove the grouping.`);
         if (!confirmed) { return; }
-        ggg2.splice(idx,1);
+        ggg2.splice(idx, 1);
         let r = await Azdo.trySaveSharedDocument(collectionId, pipelineGroupsDocumentId, pgd)
         if (!r) {
             alert("Failed to remove subgroup, please try again.");

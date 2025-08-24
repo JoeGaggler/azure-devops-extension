@@ -41,6 +41,7 @@ interface PipelineGroupsDocument {
 interface PipelineGroup {
     name: string;
     pipelines: number[]; // pipeline IDs
+    groups: PipelineGroup[];
 }
 
 interface CurrentRunsDocument {
@@ -83,7 +84,6 @@ function App(p: AppProps) {
     const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
     const [currentRuns, setCurrentRuns] = React.useState<CurrentRun[]>([]);
     const [pipelineGroups, setPipelineGroups] = React.useState<PipelineGroup[]>([]);
-    const [allTopBuilds, setAllTopBuilds] = React.useState<Azdo.TopBuild[]>([]);
     const [selectedRunId, setSelectedRunId] = React.useState<number | null>(null);
     const [selectedPipelineId, setSelectedPipelineId] = React.useState<number | null>(null);
     const [selectedTabId, setSelectedTabId] = React.useState<string | null>(null);
@@ -99,23 +99,65 @@ function App(p: AppProps) {
     let tabBarItems: JSX.Element[] = [
         <Tab id="tabGroup-ROOT" name="All" badgeCount={currentRuns.length} />
     ];
-    function buildIt(prefix: String, pgs: PipelineGroup[], tip: string[]) {
+    function buildTabMappings(prefix: String, pgs: PipelineGroup[], tip: string[], tip2: string[], depth: number) {
+        console.log("buildTabMappings", prefix, pgs, tip, tip2, depth);
+
         if (!pgs || pgs.length == 0) { return; }
-        // tabBarItems.push(<div className="">|</div>); // TODO: DIVIDER
-        for (let g of pgs) {
+
+        let icon: any | undefined = { iconName: "ChevronRight" };
+        if (tip.length > 0) {
+            let last = [...tip].splice(0, 1)[0];
+            let g = pipelineGroups.find((g) => g.name === last);
+            if (!g) { return; }
+
+            let newTip2 = [...tip2, g.name];
             let newPrefix = `${prefix}-${g.name}`;
             mapTabsToGroups[newPrefix] = {
                 id: newPrefix,
                 pipelineGroup: g,
-                path: [...tip, g.name],
+                path: newTip2,
             };
-            tabBarItems.push(<Tab id={newPrefix} name={g.name} badgeCount={getRunsForGroup(g).length} iconProps={{ iconName: "Home" }} />);
+            tabBarItems.push(<Tab id={newPrefix} name={g.name} badgeCount={getRunsForGroup(getPipelineGroupForPath(pipelineGroups, newTip2)).length} iconProps={icon} />);
+        } else {
+            for (let g of pgs) {
+                let newTip2: string[] = [...tip2, g.name];
+                let newPrefix = `${prefix}-${g.name}`;
+                mapTabsToGroups[newPrefix] = {
+                    id: newPrefix,
+                    pipelineGroup: g,
+                    path: newTip2,
+                };
+                tabBarItems.push(<Tab id={newPrefix} name={g.name} badgeCount={getRunsForGroup(getPipelineGroupForPath(pipelineGroups, newTip2)).length} iconProps={icon} />);
+                icon = undefined; // only first one gets icon
+            }
         }
     }
-    buildIt("tabGroupId", pipelineGroups, tabIdPath);
+    buildTabMappings("tabGroupId", pipelineGroups, tabIdPath, [], 0);
+    console.log("mapTabsToGroups", mapTabsToGroups);
+
+    function getPipelineGroupForPath(groups: PipelineGroup[], path: string[]): PipelineGroup | undefined {
+        if (path.length == 0) { return undefined; }
+        let gg = groups;
+        let g: PipelineGroup | undefined = undefined;
+        let p = [...path];
+        console.log("*** getPipelineGroupForPath", p);
+
+        while (p.length > 0) {
+            let n = p.splice(0, 1)[0];
+            g = gg.find((i) => i.name === n);
+            if (!g) {
+                console.warn("Failed to find pipeline group for path:", path, n);
+                return undefined;
+            }
+            // gg = g.groups // TODO: RECURSIVE STEP
+        }
+        console.log("*** getPipelineGroupForPath found", p, g);
+        return g;
+    }
 
     // state
-    let selectedGroup: PipelineGroup | undefined = undefined; // TODO: JOE
+    let selectedGroup = getPipelineGroupForPath(pipelineGroups, tabIdPath);
+    console.log("*** selectedGroup", selectedGroup, tabIdPath);
     let currentRunsItems: CurrentRun[] = getRunsForGroup(selectedGroup || null)
     joe.sortByNumber(currentRunsItems, (i) => -(i.sortOrder || 0)); // newest first
 
@@ -125,18 +167,6 @@ function App(p: AppProps) {
         (-1);
     if (currentRunsIndex >= 0) {
         currentRunsSelection.select(currentRunsIndex);
-    }
-
-    // state
-    let topBuildsQueueItems: Azdo.TopBuild[] = (allTopBuilds || []);
-    let topBuildsSelection = new ListSelection(true);
-
-    let idx = (selectedRunId) ?
-        topBuildsQueueItems.findIndex((b: Azdo.TopBuild) => b.buildId === selectedRunId) :
-        (-1);
-
-    if (idx >= 0) {
-        topBuildsSelection.select(idx);
     }
 
     // initialize the app
@@ -305,7 +335,6 @@ function App(p: AppProps) {
         let pullRequests = (await Azdo.getTopRecentBuilds(ti)) || [];
         console.log("Top Recent Builds", pullRequests);
 
-        setAllTopBuilds(pullRequests);
         return pullRequests;
     }
 
@@ -385,7 +414,7 @@ function App(p: AppProps) {
         // console.log("Selected pull request IDs:", pids);
     }
 
-    function getRunsForGroup(pg: PipelineGroup | null): CurrentRun[] {
+    function getRunsForGroup(pg: PipelineGroup | null | undefined): CurrentRun[] {
         var runs = currentRuns || [];
         if (!pg) { return runs; }
         let matches: CurrentRun[] = [];
@@ -417,20 +446,6 @@ function App(p: AppProps) {
                     badgeCount={badgeCount}
                 />);
         }
-
-        // function groupsToTabs(pgs: PipelineGroup[], _parents: string[]) {
-        //     if (pgs.length == 0) {
-        //         return <></>
-        //     }
-
-        //     let tabs: React.JSX.Element[] = [];
-        //     for (let pg of pgs) {
-        //         let matches = getRunsForGroup(pg);
-        //         let tab = getTab(`tabGroup-${pg.name}`, pg.name, matches.length);
-        //         tabs.push(tab);
-        //     }
-        //     return <>{tabs}</>;
-        // }
 
         return (
             <TabBar
@@ -466,11 +481,16 @@ function App(p: AppProps) {
             alert("Please enter a valid subgroup name.");
             return;
         }
-        if (pgd.groups.find((g) => g.name === newSubgroupName)) {
+
+        let ggg = getPipelineGroupForPath(pgd.groups, [...tabIdPath]);
+        let ggg2 = (ggg ? ggg.groups : pgd.groups)
+
+        if (ggg2.find((g) => g.name === newSubgroupName)) {
             alert("A subgroup with that name already exists.");
             return;
         }
-        pgd.groups.push({ name: newSubgroupName, pipelines: [] });
+
+        ggg2.push({ name: newSubgroupName, pipelines: [], groups: [] });
         let r = await Azdo.trySaveSharedDocument(collectionId, pipelineGroupsDocumentId, pgd)
         if (!r) {
             alert("Failed to save new subgroup, please try again.");
@@ -481,21 +501,30 @@ function App(p: AppProps) {
     }
 
     async function onRemoveSubgroup() {
-        let tabId = selectedTabId;
-        if (tabId === "tabGroup-ROOT") {
+        if (tabIdPath.length == 0) {
             alert("Cannot remove the 'All' group.");
             return;
         }
-
         let pgd: PipelineGroupsDocument = await Azdo.getOrCreateSharedDocument(collectionId, pipelineGroupsDocumentId, { groups: [] });
-        let idx = pgd.groups.findIndex((g) => `tabGroup-${g.name}` === tabId);
+
+        let ggg = getPipelineGroupForPath(pgd.groups, [...tabIdPath].splice(0, tabIdPath.length - 1));
+        // if (!ggg) {
+        //     alert("Failed to find the selected subgroup parent.");
+        //     return;
+        // }
+
+        let ggg2 = (ggg ? ggg.groups : pgd.groups)
+        let idx = ggg2.findIndex((g) => g.name === tabIdPath[tabIdPath.length - 1]);
         if (idx < 0) {
             alert("Failed to find the selected subgroup.");
             return;
         }
-        let confirmed = confirm(`Are you sure you want to remove the subgroup '${pgd.groups[idx].name}'? This will not delete any pipelines or runs, it will just remove the grouping.`);
+        let ggg3 = ggg2[idx];
+
+        // let confirmed = confirm(`Are you sure you want to remove the subgroup '${pgd.groups[idx].name}'? This will not delete any pipelines or runs, it will just remove the grouping.`);
+        let confirmed = confirm(`Are you sure you want to remove the subgroup '${ggg3.name}'? This will not delete any pipelines or runs, it will just remove the grouping.`);
         if (!confirmed) { return; }
-        pgd.groups.splice(idx, 1);
+        ggg2.splice(idx,1);
         let r = await Azdo.trySaveSharedDocument(collectionId, pipelineGroupsDocumentId, pgd)
         if (!r) {
             alert("Failed to remove subgroup, please try again.");

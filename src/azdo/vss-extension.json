@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "pingmint-extension",
-  "version": "0.1.147",
+  "version": "0.1.172",
   "name": "Merge Queue",
   "description": "Pingmint",
   "publisher": "pingmint",

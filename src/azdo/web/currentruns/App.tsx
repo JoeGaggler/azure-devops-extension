@@ -426,13 +426,29 @@ function App(p: AppProps) {
         // console.log("Selected pull request IDs:", pids);
     }
 
+    function getRecursivePipelineIds(pg: PipelineGroup | null | undefined): number[] {
+        if (!pg) { return []; }
+        let pids: number[] = [...pg.pipelines];
+        let ggg = pg.groups || [];
+        for (let g of ggg) {
+            let pids2 = getRecursivePipelineIds(g);
+            for (let p of pids2) {
+                if (pids.indexOf(p) < 0) {
+                    pids.push(p);
+                }
+            }
+        }
+        return pids;
+    }
+
     function getRunsForGroup(pg: PipelineGroup | null | undefined): CurrentRun[] {
         var runs = currentRuns || [];
         if (!pg) { return runs; }
+        let pids = getRecursivePipelineIds(pg);
         let matches: CurrentRun[] = [];
         for (let r of runs) {
             let rp = r.pipelineId;
-            if (rp && pg.pipelines.indexOf(rp) >= 0) {
+            if (rp && pids.indexOf(rp) >= 0) {
                 matches.push(r);
             }
         }

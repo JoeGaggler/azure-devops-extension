@@ -86,6 +86,7 @@ function App(p: AppProps) {
     const [pipelineGroups, setPipelineGroups] = React.useState<PipelineGroup[]>([]);
     const [selectedRunId, setSelectedRunId] = React.useState<number | null>(null);
     const [selectedPipelineId, setSelectedPipelineId] = React.useState<number | null>(null);
+    const [selectedPipelineName, setSelectedPipelineName] = React.useState<string>("");
     const [selectedTabId, setSelectedTabId] = React.useState<string | null>(null);
     const [tabIdPath, setTabIdPath] = React.useState<string[]>([]);
     const [newSubgroupName, setNewSubgroupName] = React.useState<string>("");
@@ -429,6 +430,7 @@ function App(p: AppProps) {
                     console.log("Selected run ID:", b.buildId, "Pipeline ID:", b.pipelineId);
                     setSelectedRunId(b.buildId);
                     setSelectedPipelineId(b.pipelineId);
+                    setSelectedPipelineName(b.definitionName || "");
                 }
                 // if (pr && pr.pullRequestId) {
                 //     pids.push(pr.pullRequestId);
@@ -678,6 +680,12 @@ function App(p: AppProps) {
                             />
                         </div>
                         <div className="flex-row flex-baseline rhythm-horizontal-16">
+                            <TextField
+                                value={selectedPipelineName}
+                                placeholder="Pipeline"
+                                width={TextFieldWidth.tabBar}
+                                readOnly={true}
+                            />
                             <TextField
                                 value={selectedPipelineId ? selectedPipelineId.toString() : ""}
                                 placeholder="Pipeline"

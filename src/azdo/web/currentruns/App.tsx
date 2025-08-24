@@ -606,12 +606,31 @@ function App(p: AppProps) {
             alert("Failed to find the selected subgroup.");
             return;
         }
-        let idx = ggg.pipelines.indexOf(selectedPipelineId);
-        if (idx < 0) {
+
+        function rrr(fromGroup: PipelineGroup, pid: number): boolean {
+            let found = false;
+            let idx = fromGroup.pipelines.indexOf(pid);
+            if (idx >= 0) {
+                fromGroup.pipelines.splice(idx, 1);
+                found = true;
+            }
+            let gggg = fromGroup.groups || [];
+            for (let g of gggg) {
+                found = rrr(g, pid) || found;
+            }
+            return found;
+        }
+
+        // TODO: RECURSIVE REMOVE
+        let found = rrr(ggg, selectedPipelineId);
+
+        // let idx = ggg.pipelines.indexOf(selectedPipelineId);
+        // if (idx < 0) {
+        if (!found) {
             alert("That pipeline is not in the selected group.");
             return;
         }
-        ggg.pipelines.splice(idx, 1);
+        // ggg.pipelines.splice(idx, 1);
         let r = await Azdo.trySaveSharedDocument(collectionId, pipelineGroupsDocumentId, pgd)
         if (!r) {
             alert("Failed to remove pipeline from group, please try again.");

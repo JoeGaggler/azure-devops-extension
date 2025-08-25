@@ -255,6 +255,7 @@ function App(p: AppProps) {
                     ...tempRuns[j], // existing data
                     ...it, // new data
                     // TODO: update comment?
+                    comment: ``, // TODO: COMMENT
                 }
             } else {
                 let queueTimestamp = queueDateTime.toUnixInteger();
@@ -266,7 +267,7 @@ function App(p: AppProps) {
                     ...it,
                     sortOrder: queueTimestamp,
                     queueTimestamp: queueTimestamp,
-                    comment: `${queueTimestamp} - ${luxon.DateTime.fromSeconds(queueTimestamp, { zone: "utc" }).toISO({})} - ${it.queueTime}`,
+                    comment: ``, // TODO: `${queueTimestamp} - ${luxon.DateTime.fromSeconds(queueTimestamp, { zone: "utc" }).toISO({})} - ${it.queueTime}`,
                 });
             }
             // console.log("Current Run", tempRuns[i]);
@@ -313,7 +314,7 @@ function App(p: AppProps) {
                 }
 
                 // keep unfinished runs
-                if (s !== "completed") {
+                if (s !== "completed" && s !== "cancelling") {
                     j++;
                     continue;
                 }
@@ -396,6 +397,7 @@ function App(p: AppProps) {
             >
                 <Run
                     name={run.buildNumber || "?"}
+                    definitionName={run.definitionName || "?"}
                     status={topBuildToStatus(run)}
                     comment={run.comment || ""}
                     started={run.sortOrder || null}

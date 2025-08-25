@@ -180,7 +180,7 @@ function App(p: AppProps) {
 
     let currentRunsSelection = new ListSelection(true);
     let currentRunsIndex = (selectedRunId) ?
-        currentRuns.findIndex((r: CurrentRun) => r.buildId === selectedRunId) :
+        currentRunsItems.findIndex((r: CurrentRun) => r.buildId === selectedRunId) :
         (-1);
     if (currentRunsIndex >= 0) {
         currentRunsSelection.select(currentRunsIndex);

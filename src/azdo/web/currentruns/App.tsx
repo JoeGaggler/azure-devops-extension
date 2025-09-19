@@ -383,6 +383,36 @@ function App(p: AppProps) {
         return false;
     }
 
+    function knownTagsForRun(pipelineId: number | undefined): string[] {
+        let tags: string[] = [];
+        if (!pipelineId) { return tags; }
+        for (let pg of pipelineGroups || []) {
+            rec_knownTagsForRun(pg, pipelineId, tags, []);
+        }
+        return tags;
+    }
+
+    function rec_knownTagsForRun(pg: PipelineGroup, pipelineId: number, tags: string[], path: string[]) {
+        let newPath = [...path, pg.name];
+        if (pg.pipelines.indexOf(pipelineId) >= 0) {
+            tags.push(newPath.join(" / "));
+        }
+        let ggg = pg.groups || [];
+        for (let g of ggg) {
+            rec_knownTagsForRun(g, pipelineId, tags, newPath);
+        }
+    }
+
+    // function rec_knownTagsForRun(pg: PipelineGroup, pipelineId: number, tags: string[]) {
+    //     if (pg.pipelines.indexOf(pipelineId) >= 0) {
+    //         tags.push(pg.name);
+    //     }
+    //     let ggg = pg.groups || [];
+    //     for (let g of ggg) {
+    //         rec_knownTagsForRun(g, pipelineId, tags);
+    //     }
+    // }
+
     function renderCurrentRunRow(
         index: number,
         run: CurrentRun,
@@ -403,6 +433,7 @@ function App(p: AppProps) {
                     started={run.sortOrder || null}
                     isAlternate={isAlternate(run)}
                     isKnown={isKnown(run.pipelineId)}
+                    knownTags={knownTagsForRun(run.pipelineId)}
                 />
             </ListItem>
         );

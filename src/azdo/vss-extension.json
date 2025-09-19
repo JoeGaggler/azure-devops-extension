@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "pingmint-extension",
-  "version": "0.1.201",
+  "version": "0.1.209",
   "name": "Merge Queue",
   "description": "Pingmint",
   "publisher": "pingmint",
@@ -40,7 +40,7 @@
       ],
       "properties": {
         "icon": "images/robotbig.png",
-        "name": "Current Runs",
+        "name": "Current Pipelines",
         "order": 312,
         "uri": "dist/web/currentruns/index.html"
       }

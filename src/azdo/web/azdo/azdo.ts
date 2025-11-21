@@ -114,6 +114,22 @@ export interface PipelineRun {
 
 // _apis/build/builds?$top=100&queryOrder=queueTimeAscending&minTime=2025-08-21T21:38:14.1184379Z&api-version=7.2-preview.7`, bearer as string);
 
+export async function getCommit(tenantInfo: TenantInfo, repoId: string, commitId: string): Promise<any | undefined> {
+    try {
+        let bearer = await SDK.getAccessToken()
+        let json = await getAzdo(`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/git/repositories/${repoId}/commits/${commitId}?$api-version=7.2-preview.2`, bearer as string);
+        let comment = json.comment ?? commitId;
+        comment = comment.split('\n')[0];
+        return {
+            comment: comment,
+        }
+    }
+    catch (err) {
+        console.error("Error fetching commit:", err);
+        return undefined;
+    }
+}
+
 export async function getTopRecentBuilds(tenantInfo: TenantInfo): Promise<TopBuild[] | undefined> {
     try {
         let bearer = await SDK.getAccessToken()
@@ -129,6 +145,7 @@ export async function getTopRecentBuilds(tenantInfo: TenantInfo): Promise<TopBui
                 result: b.result,
                 webUrl: b._links?.web?.href,
                 queueTime: b.queueTime,
+                commitId: b.sourceVersion
             }
         });
     }
@@ -148,6 +165,7 @@ export interface TopBuild {
     result?: string;
     webUrl?: string;
     queueTime?: string;
+    commitId?: string;
 
     // pullRequestId?: number;
     // repository?: any;

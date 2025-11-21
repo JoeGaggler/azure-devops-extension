@@ -62,6 +62,8 @@ interface CurrentRun {
     queueTimestamp?: number;
     sortOrder?: number;
     comment?: string;
+
+    commitId?: string;
 }
 
 interface MapTabIdToGroup {
@@ -195,22 +197,7 @@ function App(p: AppProps) {
 
         // setup pipeline groups
         let pipelineGroupsDoc: PipelineGroupsDocument = {
-            groups: [
-                // {
-                //     name: "Builds", pipelines: [
-                //         1264, // shadowauth
-                //         1649, // shadowsync
-                //         3407, // shadowscribe
-                //     ]
-                // },
-                // {
-                //     name: "Releases", pipelines: [
-                //         1652, // shadowsync prod
-                //         2544, // shadowauth prod
-                //         3304, // shadowscribe prod
-                //     ]
-                // }
-            ]
+            groups: []
         };
         pipelineGroupsDoc = await Azdo.getOrCreateSharedDocument(collectionId, pipelineGroupsDocumentId, pipelineGroupsDoc)
         setPipelineGroups(pipelineGroupsDoc.groups);
@@ -255,7 +242,11 @@ function App(p: AppProps) {
                     ...tempRuns[j], // existing data
                     ...it, // new data
                     // TODO: update comment?
-                    comment: ``, // TODO: COMMENT
+                }
+                if (it.repositoryName && it.commitId && (!tempRuns[j].comment)) {
+                    let commitInfo = await Azdo.getCommit(tenantInfo, it.repositoryName, it.commitId);
+                    console.log("COMMIT: ", commitInfo);
+                    tempRuns[j].comment = commitInfo?.comment ?? "????"
                 }
             } else {
                 let queueTimestamp = queueDateTime.toUnixInteger();
@@ -263,11 +254,14 @@ function App(p: AppProps) {
                 // if (pr) {
                 //     console.log("COMPARE", it, pr);
                 // }
+
+                let commitComment = "";
+
                 tempRuns.push({
                     ...it,
                     sortOrder: queueTimestamp,
                     queueTimestamp: queueTimestamp,
-                    comment: ``, // TODO: `${queueTimestamp} - ${luxon.DateTime.fromSeconds(queueTimestamp, { zone: "utc" }).toISO({})} - ${it.queueTime}`,
+                    comment: `${commitComment}`, // TODO: `${queueTimestamp} - ${luxon.DateTime.fromSeconds(queueTimestamp, { zone: "utc" }).toISO({})} - ${it.queueTime}`,
                 });
             }
             // console.log("Current Run", tempRuns[i]);

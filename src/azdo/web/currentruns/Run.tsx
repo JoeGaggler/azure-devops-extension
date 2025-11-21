@@ -28,7 +28,8 @@ function Run(p: RunProps) {
                 <div className="font-size-m flex-self-center padding-4 flex-noshrink italic">{p.definitionName}</div>
                 <div className="font-size-ml flex-self-center padding-4 flex-noshrink">·</div>
 
-                {p.comment && (<div className="text-ellipsis text-neutral-70 padding-left-8">{p.comment}</div>)}
+                {p.comment && (<div className="text-ellipsis text-neutral-30 padding-left-8">{p.comment}</div>)}
+
                 {
                     <div className="flex-row flex-grow">
                         <div className="flex-grow" />

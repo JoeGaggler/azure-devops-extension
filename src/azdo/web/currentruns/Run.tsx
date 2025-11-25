@@ -25,7 +25,7 @@ function Run(p: RunProps) {
                 <RunIcon status={p.status} className="nothing_here" />
                 <div className="font-size-m flex-self-center padding-4 flex-noshrink">{p.name}</div>
                 <div className="font-size-ml flex-self-center padding-4 flex-noshrink">·</div>
-                <div className="font-size-m flex-self-center padding-4 flex-noshrink italic">{p.definitionName}</div>
+                <div className="font-size-m flex-self-center padding-4 flex-noshrink italic text-neutral-70">{p.definitionName}</div>
                 <div className="font-size-ml flex-self-center padding-4 flex-noshrink">·</div>
 
                 {p.comment && (<div className="text-ellipsis text-neutral-30 padding-left-8">{p.comment}</div>)}

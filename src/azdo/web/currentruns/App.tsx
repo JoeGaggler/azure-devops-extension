@@ -301,6 +301,14 @@ function App(p: AppProps) {
                 let s = jt.status;
                 let r = jt.result;
 
+                // if (jt.webUrl && jt.webUrl.toLowerCase().indexOf("kajslfjklasjdflkjasdf") != -1) {
+                //     runs.splice(j, 1); continue;
+                // }
+
+                // if (jt.definitionName && jt.definitionName.toLowerCase().indexOf("asdjfljasdklfjsldkjf") != -1) {
+                //     runs.splice(j, 1); continue;
+                // }
+
                 // remove invalid entries
                 if (!s) {
                     console.warn("Removing invalid run:", jt);

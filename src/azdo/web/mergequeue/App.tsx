@@ -33,6 +33,7 @@ interface AppProps {
 interface PullRequestFilters {
     drafts: boolean;
     blocked: boolean;
+    queued: boolean;
     allBranches: boolean;
     repositories: string[];
 }
@@ -89,7 +90,7 @@ function App(p: AppProps) {
 
     // cached state
     const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
-    const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, blocked: false, allBranches: false, repositories: [] });
+    const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, blocked: false, queued: false, allBranches: false, repositories: [] });
     const [repoMap, setRepoMap] = React.useState<Record<string, Azdo.Repo>>({});
 
     // state of the lists
@@ -120,11 +121,13 @@ function App(p: AppProps) {
     joe.applySelections(p.singleton.repositoryFilterDropdownMultiSelection, filterRepoItems, (i: any) => i.id, selectedRepos);
 
     // rendering the all pull requests list
+    let primaryQueueItems: MergeQueuePullRequest[] = (mergeQueueList?.queues[0]?.pullRequests || []);
     let allFilteredPullRequests = allPullRequests.pullRequests.flatMap((pr) => {
         let repo = repoMap[pr.repositoryName];
         if (!repo) { return [] }
         if (pr.isDraft && !filters.drafts) { return [] } // filter out drafts if not enabled
         if (!filters.blocked && (pr.mergeStatus === "conflicts" || pr.voteStatus == "waiting" || pr.voteStatus === "rejected")) { return [] }
+        if (!filters.queued && primaryQueueItems.find(i => i.pullRequestId === pr.pullRequestId)) { return [] }
         if (selectedRepos.length > 0 && !selectedRepos.some((item) => item == pr.repositoryName)) { return [] }
         let isDefaultBranch = ((pr.targetRefName == repo.defaultBranch) as boolean)
         if (!isDefaultBranch && !filters.allBranches) { return [] } // filter out non-default branches if not enabled
@@ -133,7 +136,6 @@ function App(p: AppProps) {
     joe.sortByNumber(allFilteredPullRequests, i => -i.pullRequestId || 0);
 
     // rebuild selections from state
-    let primaryQueueItems: MergeQueuePullRequest[] = (mergeQueueList?.queues[0]?.pullRequests || []);
     let primaryQueueSelection = new ListSelection(true);
     let allSelection = new ListSelection(true);
     joe.applySelections(allSelection, allFilteredPullRequests, i => i.pullRequestId, selectedIds);
@@ -361,6 +363,7 @@ function App(p: AppProps) {
         let userFiltersDoc: PullRequestFilters = {
             drafts: false,
             blocked: false,
+            queued: false,
             allBranches: false,
             repositories: []
         }
@@ -424,6 +427,7 @@ function App(p: AppProps) {
 
         userFiltersDoc.drafts = value.drafts;
         userFiltersDoc.blocked = value.blocked;
+        userFiltersDoc.queued = value.queued;
         userFiltersDoc.allBranches = value.allBranches;
         userFiltersDoc.repositories = value.repositories;
 
@@ -950,6 +954,12 @@ function App(p: AppProps) {
                         onText={"Blocked"}
                         checked={filters.blocked}
                         onChange={(_event, value) => { saveUserFilters({ ...filters, blocked: value }) }}
+                    />
+                    <Toggle
+                        offText={"Queued"}
+                        onText={"Queued"}
+                        checked={filters.queued}
+                        onChange={(_event, value) => { saveUserFilters({ ...filters, queued: value }) }}
                     />
                     <Button
                         text="Enqueue"

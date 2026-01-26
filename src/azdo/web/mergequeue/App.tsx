@@ -32,6 +32,7 @@ interface AppProps {
 
 interface PullRequestFilters {
     drafts: boolean;
+    blocked: boolean;
     allBranches: boolean;
     repositories: string[];
 }
@@ -88,7 +89,7 @@ function App(p: AppProps) {
 
     // cached state
     const [tenantInfo, setTenantInfo] = React.useState<Azdo.TenantInfo>({});
-    const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, allBranches: false, repositories: [] });
+    const [filters, setFilters] = React.useState<PullRequestFilters>({ drafts: false, blocked: false, allBranches: false, repositories: [] });
     const [repoMap, setRepoMap] = React.useState<Record<string, Azdo.Repo>>({});
 
     // state of the lists
@@ -123,6 +124,7 @@ function App(p: AppProps) {
         let repo = repoMap[pr.repositoryName];
         if (!repo) { return [] }
         if (pr.isDraft && !filters.drafts) { return [] } // filter out drafts if not enabled
+        if (!filters.blocked && (pr.mergeStatus === "conflicts" || pr.voteStatus == "waiting" || pr.voteStatus === "rejected")) { return [] }
         if (selectedRepos.length > 0 && !selectedRepos.some((item) => item == pr.repositoryName)) { return [] }
         let isDefaultBranch = ((pr.targetRefName == repo.defaultBranch) as boolean)
         if (!isDefaultBranch && !filters.allBranches) { return [] } // filter out non-default branches if not enabled
@@ -358,6 +360,7 @@ function App(p: AppProps) {
         // setup user filters
         let userFiltersDoc: PullRequestFilters = {
             drafts: false,
+            blocked: false,
             allBranches: false,
             repositories: []
         }
@@ -420,6 +423,7 @@ function App(p: AppProps) {
         userFiltersDoc = await Azdo.getOrCreateUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
 
         userFiltersDoc.drafts = value.drafts;
+        userFiltersDoc.blocked = value.blocked;
         userFiltersDoc.allBranches = value.allBranches;
         userFiltersDoc.repositories = value.repositories;
 
@@ -940,6 +944,12 @@ function App(p: AppProps) {
                         onText={"Drafts"}
                         checked={filters.drafts}
                         onChange={(_event, value) => { saveUserFilters({ ...filters, drafts: value }) }}
+                    />
+                    <Toggle
+                        offText={"Blocked"}
+                        onText={"Blocked"}
+                        checked={filters.blocked}
+                        onChange={(_event, value) => { saveUserFilters({ ...filters, blocked: value }) }}
                     />
                     <Button
                         text="Enqueue"

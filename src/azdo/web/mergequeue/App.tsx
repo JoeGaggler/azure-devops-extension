@@ -270,6 +270,12 @@ function App(p: AppProps) {
                     if ((typeof pr2.autoCompleteSetBy !== "undefined") !== pr.autoComplete) { pr.autoComplete = (typeof pr2?.autoCompleteSetBy !== "undefined"); didChange = true; }
                 }
 
+                let pr3 = pullRequestsArray.find(p => p.pullRequestId == pr.pullRequestId);
+                if (pr3 && pr3.voteStatus) {
+                    if (pr3.voteStatus.status !== pr.voteStatus.status) { pr.voteStatus = pr3.voteStatus; didChange = true; }
+                    else if (pr3.voteStatus.count !== pr.voteStatus.count) { pr.voteStatus = pr3.voteStatus; didChange = true; }
+                }
+
                 let isFirst = false
                 if (!repoVisitedSet.has(pr.repositoryName)) {
                     repoVisitedSet.add(pr.repositoryName);

@@ -62,8 +62,14 @@ interface SomePullRequest {
     creationDate: string; // ISO date string
     autoComplete: boolean;
     mergeStatus: string;
-    voteStatus: string;
+    voteStatus: SomePullRequestVote;
 }
+
+interface SomePullRequestVote {
+    status: string;
+    count: number;
+}
+
 
 interface AllPullRequests {
     pullRequests: Array<SomePullRequest>;
@@ -126,7 +132,7 @@ function App(p: AppProps) {
         let repo = repoMap[pr.repositoryName];
         if (!repo) { return [] }
         if (pr.isDraft && !filters.drafts) { return [] } // filter out drafts if not enabled
-        if (!filters.blocked && (pr.mergeStatus === "conflicts" || pr.voteStatus == "waiting" || pr.voteStatus === "rejected")) { return [] }
+        if (!filters.blocked && (pr.mergeStatus === "conflicts" || pr.voteStatus.status == "waiting" || pr.voteStatus.status === "rejected")) { return [] }
         if (!filters.queued && primaryQueueItems.find(i => i.pullRequestId === pr.pullRequestId)) { return [] }
         if (selectedRepos.length > 0 && !selectedRepos.some((item) => item == pr.repositoryName)) { return [] }
         let isDefaultBranch = ((pr.targetRefName == repo.defaultBranch) as boolean)
@@ -141,25 +147,42 @@ function App(p: AppProps) {
     joe.applySelections(allSelection, allFilteredPullRequests, i => i.pullRequestId, selectedIds);
     joe.applySelections(primaryQueueSelection, primaryQueueItems, i => i.pullRequestId, selectedIds);
 
-    function summarizeVotes(reviewers: any): string {
+    function summarizeVotes(reviewers: any): SomePullRequestVote {
         let finalVote = 20;
+        let finalCount = 0;
         let voters = 0;
         for (let reviewer of reviewers) {
             if (reviewer?.vote) {
                 let vote = reviewer?.vote || 0;
                 if (!vote && !reviewer.isRequired) { continue; } // skip non-required reviewers with no vote
+                vote = vote > 10 ? 10 : vote;
                 finalVote = reviewer?.vote > 10 ? 10 : reviewer?.vote;
-                if (!reviewer.isContainer) { voters++; } // count only non-container reviewers
+                if (!reviewer.isContainer) {
+                    // count only non-container reviewers
+                    voters++;
+
+                    if (finalVote > vote) {
+                        finalVote = vote;
+                        if (vote == 5) { finalCount++; } 
+                        else { finalCount = 1; }
+                    }
+                    else if (vote == finalVote) {
+                        finalCount++;
+                    }
+                    else {
+                        continue;
+                    }
+                }
             }
         }
         switch (finalVote) {
-            case 20: return "none"
-            case 10: return voters > 1 ? "approved" : "none" // require at least 2 voters to be tagged "approved"
-            case 5: return voters > 1 ? "suggestions" : "none" // require at least 2 voters to be tagged "approved with suggestions"
-            case 0: return "none"
-            case -5: return "waiting"
-            case -10: return "rejected"
-            default: return "unknown";
+            case 20: return { status: "none", count: 0 }
+            case 10: return voters > 1 ? { status: "approved", count: finalCount } : { status: "none", count: 0 } // require at least 2 voters to be tagged "approved"
+            case 5: return voters > 1 ? { status: "suggestions", count: finalCount } : { status: "none", count: 0 } // require at least 2 voters to be tagged "approved with suggestions"
+            case 0: return { status: "none", count: 0 }
+            case -5: return { status: "waiting", count: finalCount }
+            case -10: return { status: "rejected", count: finalCount }
+            default: return { status: "unknown", count: 0 };
         }
     }
 
@@ -458,16 +481,20 @@ function App(p: AppProps) {
     }
 
     function renderPills(pullRequest: SomePullRequest): React.JSX.Element {
+        let voteStatus = pullRequest.voteStatus?.status;
+        let voteCount = pullRequest.voteStatus?.count || 0;
+        let voteCountString = voteCount > 0 ? ` (${voteCount})` : "";
+
         // TODO: approved by YOU!
         return <PillGroup className="padding-left-16 padding-right-16">
             {pullRequest.mergeStatus == "conflicts" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Conflicts</Pill>)}
             {pullRequest.mergeStatus == "failure" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Failure</Pill>)}
             {pullRequest.mergeStatus == "rejectedByPolicy" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Policy</Pill>)}
 
-            {pullRequest.voteStatus == "approved" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 128, blue: 64 }}>Approved</Pill>)}
-            {pullRequest.voteStatus == "suggestions" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 64, blue: 128 }}>Suggestions</Pill>)}
-            {pullRequest.voteStatus == "waiting" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 169, green: 154, blue: 60 }}>Waiting</Pill>)}
-            {pullRequest.voteStatus == "rejected" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Rejected</Pill>)}
+            {voteStatus == "approved" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 128, blue: 64 }}>Approved{voteCountString}</Pill>)}
+            {voteStatus == "suggestions" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 64, blue: 128 }}>Suggestions{voteCountString}</Pill>)}
+            {voteStatus == "waiting" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 169, green: 154, blue: 60 }}>Waiting{voteCountString}</Pill>)}
+            {voteStatus == "rejected" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Rejected{voteCountString}</Pill>)}
 
             {pullRequest.isDraft && (<Pill size={PillSize.compact}>Draft</Pill>)}
             {pullRequest.autoComplete && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 92, green: 128, blue: 92 }}>Auto-Complete</Pill>)}

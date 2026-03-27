@@ -1,10 +1,12 @@
 import React from "react";
 import * as Azdo from '../shared/azdo.ts';
+import * as Ping from '../shared/lib.ts';
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Card } from "azure-devops-ui/Card";
 import { ListItem, ListSelection, type IListItemDetails, type IListRow } from "azure-devops-ui/List";
-import { MessageCard, MessageCardSeverity } from "azure-devops-ui/MessageCard";
 import { ScrollableList } from "azure-devops-ui/List";
+// import { Page } from "azure-devops-ui/Page";
+import { Header, TitleSize } from "azure-devops-ui/Header";
 
 export interface NextRunTabSingleton {
     bearerToken: string;
@@ -20,10 +22,12 @@ export interface NextRunTabProps {
 
 interface ReducerState {
     targetPipelines?: TargetPipeline[];
+    selectedTargetPipelineId?: number;
 }
 
 interface ReducerAction {
     targetPipelines?: TargetPipeline[];
+    selectTargetPipeline?: TargetPipeline | null;
 }
 
 function reducer(state: ReducerState, action: ReducerAction): ReducerState {
@@ -31,6 +35,16 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
 
     if (action.targetPipelines) {
         next.targetPipelines = action.targetPipelines;
+    }
+
+    if (action.selectTargetPipeline !== undefined) {
+        let candidates = next.targetPipelines;
+        let selected = action.selectTargetPipeline;
+        if (!selected || !candidates) {
+            next.selectedTargetPipelineId = undefined;
+        } else {
+            next.selectedTargetPipelineId = candidates.find(t => t.name === selected.name)?.id || undefined;
+        }
     }
 
     return next;
@@ -42,22 +56,11 @@ export function NextRunTab(p: NextRunTabProps) {
     const sourcePipelinesCollectionId = "source-pipelines";
     let tenantInfo = React.useRef<Azdo.TenantInfo>();
 
-    const [_state, dispatch] = React.useReducer<(state: ReducerState, action: ReducerAction) => ReducerState>(reducer, {})
+    const [state, dispatch] = React.useReducer<(state: ReducerState, action: ReducerAction) => ReducerState>(reducer, {})
 
     let targetPipelineSelection = new ListSelection(true);
-    let targetPipelineItems: TargetPipeline[] = [
-        {
-            name: "Test Pipeline 1"
-        },
-        {
-            name: "Test Pipeline 2"
-        },
-        {
-            name: "Test Pipeline 3"
-        }
-    ]
-    // joe.applySelections(allSelection, allFilteredPullRequests, i => i.pullRequestId, selectedIds);
-
+    Ping.applySelection(targetPipelineSelection, state.targetPipelines || [], i => i.id, state.selectedTargetPipelineId);
+    const hasSelectedTargetPipeline = state.selectedTargetPipelineId !== undefined;
 
     // initialize the app
     React.useEffect(() => { init() }, []);
@@ -83,6 +86,23 @@ export function NextRunTab(p: NextRunTabProps) {
         }
         sources = await Azdo.getOrCreateSharedDocument(sourcePipelinesCollectionId, docId, sources)
         console.log("NextRunTab -> got shared document", sources);
+
+        // TODO: REMOVE HARDCODED TARGET PIPELINES
+        let targetPipelineItems: TargetPipeline[] = [
+            {
+                id: 1,
+                name: "Test Pipeline 1"
+            },
+            {
+                id: 2,
+                name: "Test Pipeline 2"
+            },
+            {
+                id: 3,
+                name: "Test Pipeline 3"
+            }
+        ];
+        sources.targetPipelines = targetPipelineItems;
 
         dispatch({ targetPipelines: sources.targetPipelines });
     }
@@ -114,30 +134,72 @@ export function NextRunTab(p: NextRunTabProps) {
 
     function targetPipelineSelect(row: IListRow<TargetPipeline>) {
         console.log("NextRunTab -> targetPipelineSelect", row);
+        dispatch({ selectTargetPipeline: row.data });
     }
 
-    return <>
-        <MessageCard severity={MessageCardSeverity.Info}>
-            Work in progress. Please check back later.
-        </MessageCard>
+    function showAddTargetPipelinePanel() {
+        console.log("NextRunTab -> showAddTargetPipelinePanel");
+    }
 
-        <Card className="padding-8">
-            <div className="flex-column">
-                <ScrollableList
-                    itemProvider={new ArrayItemProvider(targetPipelineItems)}
-                    selection={targetPipelineSelection}
-                    onSelect={(_evt, listRow) => { targetPipelineSelect(listRow); }}
-                    // onActivate={targetPipelineActivate}
-                    renderRow={targetPipelineRenderRow}
-                    width="100%"
-                />
-            </div>
-        </Card>
+    function showRunTargetPipelinePanel() {
+        console.log("NextRunTab -> showRunTargetPipelinePanel");
+    }
 
-        <p>
-            __NEXTRUNVERSION__
-        </p>
-    </>
+    return (
+        <div className="flex-column padding-4">
+            <Header
+                title={"Pipelines"}
+                titleSize={TitleSize.Large}
+                // titleIconProps={{ iconName: "Next" }}
+                contentClassName='flex-center'
+                // backButtonProps={Util.makeHeaderBackButtonProps(p.appNav)}
+                commandBarItems={[
+                    {
+                        id: "addTargetPipeline",
+                        // text: "Add Pipeline",
+                        iconProps: { iconName: "Add" },
+                        onActivate: () => { showAddTargetPipelinePanel(); },
+                        isPrimary: false,
+                        important: true,
+                        disabled: false,
+                    },
+                    {
+                        id: "runTargetPipeline",
+                        text: "Run",
+                        // iconProps: { iconName: "Add" },
+                        onActivate: () => { showRunTargetPipelinePanel(); },
+                        isPrimary: true,
+                        important: true,
+                        disabled: !hasSelectedTargetPipeline,
+                    }
+                ]}
+            />
+
+            <Card className="padding-8">
+                <div className="flex-column">
+                    <ScrollableList
+                        itemProvider={new ArrayItemProvider(state.targetPipelines || [])}
+                        selection={targetPipelineSelection}
+                        onSelect={(_evt, listRow) => { targetPipelineSelect(listRow); }}
+                        onActivate={showRunTargetPipelinePanel}
+                        renderRow={targetPipelineRenderRow}
+                        width="100%"
+                    />
+                </div>
+            </Card>
+            {
+                // isAddingHuddle &&
+                // <CreateHuddlePanel
+                //     onCommit={onCommitNewHuddle}
+                //     onCancel={onCancelNewHuddle}
+                // />
+            }
+
+            <p>
+                __NEXTRUNVERSION__
+            </p>
+        </div>
+    )
 }
 
 export interface SourcePipelineDocument {
@@ -145,6 +207,7 @@ export interface SourcePipelineDocument {
 }
 
 export interface TargetPipeline {
+    id?: number;
     name?: string;
 }
 

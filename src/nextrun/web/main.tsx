@@ -2,7 +2,7 @@ import ReactDOM from 'react-dom'
 import * as SDK from 'azure-devops-extension-sdk';
 import { NextRunTab } from './NextRunTab.tsx'
 import type { NextRunTabSingleton } from './NextRunTab.tsx'
-import { SurfaceBackground, SurfaceContext } from "azure-devops-ui/Surface";
+import { SurfaceBackground, SurfaceContext, Spacing } from "azure-devops-ui/Surface";
 
 console.log("pingmint menu is loading");
 
@@ -20,7 +20,10 @@ const appSingleton: NextRunTabSingleton = {
 let render = () => {
     console.log("render");
     ReactDOM.render(
-        <SurfaceContext.Provider value={{ background: SurfaceBackground.neutral }}>
+        <SurfaceContext.Provider value={{
+            background: SurfaceBackground.neutral,
+            spacing: Spacing.default
+        }}>
             <NextRunTab singleton={appSingleton} />
         </SurfaceContext.Provider>,
         document.getElementById('extension_root_div')

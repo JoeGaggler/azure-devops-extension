@@ -2,7 +2,7 @@ import ReactDOM from 'react-dom'
 import * as SDK from 'azure-devops-extension-sdk';
 import { App } from './App.tsx'
 import type { AppProps, AppSingleton } from './App.tsx'
-import { SurfaceBackground, SurfaceContext } from "azure-devops-ui/Surface";
+import { Spacing, SurfaceBackground, SurfaceContext } from "azure-devops-ui/Surface";
 import { DropdownMultiSelection } from "azure-devops-ui/Utilities/DropdownSelection";
 
 console.log("pingmint menu is loading");
@@ -18,7 +18,7 @@ const appSingleton: AppSingleton = {
 let render = (p: AppProps) => {
     console.log("render");
     ReactDOM.render(
-        <SurfaceContext.Provider value={{ background: SurfaceBackground.neutral }}>
+        <SurfaceContext.Provider value={{ background: SurfaceBackground.neutral, spacing: Spacing.default  }}>
             <App appToken={p.appToken} bearerToken={p.bearerToken} singleton={appSingleton} />
         </SurfaceContext.Provider>,
         document.getElementById('extension_root_div')

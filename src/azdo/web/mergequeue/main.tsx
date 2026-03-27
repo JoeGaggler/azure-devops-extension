@@ -49,8 +49,10 @@ SDK.ready().then(() => {
 
             let conf = SDK.getConfiguration();
             console.log("conf", conf);
-            render({ bearerToken: b, appToken: a, singleton: appSingleton });
+
             SDK.notifyLoadSucceeded();
+
+            render({ bearerToken: b, appToken: a, singleton: appSingleton });
 
             setTimeout(refreshToken, refreshMs);
         });

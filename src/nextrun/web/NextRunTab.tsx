@@ -1,7 +1,10 @@
 import React from "react";
 import * as Azdo from '../shared/azdo.ts';
+import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
+import { Card } from "azure-devops-ui/Card";
+import { ListItem, ListSelection, type IListItemDetails, type IListRow } from "azure-devops-ui/List";
 import { MessageCard, MessageCardSeverity } from "azure-devops-ui/MessageCard";
-// import * as SDK from 'azure-devops-extension-sdk';
+import { ScrollableList } from "azure-devops-ui/List";
 
 export interface NextRunTabSingleton {
     bearerToken: string;
@@ -41,6 +44,21 @@ export function NextRunTab(p: NextRunTabProps) {
 
     const [_state, dispatch] = React.useReducer<(state: ReducerState, action: ReducerAction) => ReducerState>(reducer, {})
 
+    let targetPipelineSelection = new ListSelection(true);
+    let targetPipelineItems: TargetPipeline[] = [
+        {
+            name: "Test Pipeline 1"
+        },
+        {
+            name: "Test Pipeline 2"
+        },
+        {
+            name: "Test Pipeline 3"
+        }
+    ]
+    // joe.applySelections(allSelection, allFilteredPullRequests, i => i.pullRequestId, selectedIds);
+
+
     // initialize the app
     React.useEffect(() => { init() }, []);
     async function init() {
@@ -77,10 +95,44 @@ export function NextRunTab(p: NextRunTabProps) {
         console.log("NextRunTab -> tick");
     }
 
+    function targetPipelineRenderRow(
+        index: number,
+        item: TargetPipeline,
+        details: IListItemDetails<any>,
+        key?: string
+    ): JSX.Element {
+        if (!item.name) { return <></> }
+
+        return <ListItem
+            key={key || "list-item" + index}
+            index={index}
+            details={details}
+        >
+            <TargetPipelineListItem name={item.name} />
+        </ListItem>
+    }
+
+    function targetPipelineSelect(row: IListRow<TargetPipeline>) {
+        console.log("NextRunTab -> targetPipelineSelect", row);
+    }
+
     return <>
         <MessageCard severity={MessageCardSeverity.Info}>
             Work in progress. Please check back later.
         </MessageCard>
+
+        <Card className="padding-8">
+            <div className="flex-column">
+                <ScrollableList
+                    itemProvider={new ArrayItemProvider(targetPipelineItems)}
+                    selection={targetPipelineSelection}
+                    onSelect={(_evt, listRow) => { targetPipelineSelect(listRow); }}
+                    // onActivate={targetPipelineActivate}
+                    renderRow={targetPipelineRenderRow}
+                    width="100%"
+                />
+            </div>
+        </Card>
 
         <p>
             __NEXTRUNVERSION__
@@ -93,4 +145,19 @@ export interface SourcePipelineDocument {
 }
 
 export interface TargetPipeline {
+    name?: string;
+}
+
+export interface TargetPipelineListItemProps {
+    name: string;
+}
+
+function TargetPipelineListItem({ name }: TargetPipelineListItemProps) {
+    let className = `scroll-hidden flex-row flex-center flex-grow padding-4`;
+    return (
+        <div className={className}>
+            <div className="margin-right-4"></div>
+            <div className="font-size-m flex-self-center padding-4 flex-noshrink">{name}</div>
+        </div>
+    )
 }

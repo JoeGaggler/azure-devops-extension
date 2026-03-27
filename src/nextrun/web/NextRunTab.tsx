@@ -7,6 +7,7 @@ import { ListItem, ListSelection, type IListItemDetails, type IListRow } from "a
 import { ScrollableList } from "azure-devops-ui/List";
 // import { Page } from "azure-devops-ui/Page";
 import { Header, TitleSize } from "azure-devops-ui/Header";
+import { AddPipelinePanel, type AddPipelinePanelValues } from "./AddPipelinePanel.tsx";
 
 export interface NextRunTabSingleton {
     bearerToken: string;
@@ -21,20 +22,22 @@ export interface NextRunTabProps {
 }
 
 interface ReducerState {
-    targetPipelines?: TargetPipeline[];
+    targetPipelines: TargetPipeline[];
     selectedTargetPipelineId?: number;
+    isShowingAddPipelinePanel: boolean;
 }
 
 interface ReducerAction {
     targetPipelines?: TargetPipeline[];
     selectTargetPipeline?: TargetPipeline | null;
+    showAddPipelinePanel?: boolean;
 }
 
 function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     let next = { ...state };
 
-    if (action.targetPipelines) {
-        next.targetPipelines = action.targetPipelines;
+    if (action.targetPipelines !== undefined) {
+        next.targetPipelines = action.targetPipelines || [];
     }
 
     if (action.selectTargetPipeline !== undefined) {
@@ -43,8 +46,12 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         if (!selected || !candidates) {
             next.selectedTargetPipelineId = undefined;
         } else {
-            next.selectedTargetPipelineId = candidates.find(t => t.name === selected.name)?.id || undefined;
+            next.selectedTargetPipelineId = candidates.find(t => t.id === selected.id)?.id || undefined;
         }
+    }
+
+    if (action.showAddPipelinePanel !== undefined) {
+        next.isShowingAddPipelinePanel = action.showAddPipelinePanel;
     }
 
     return next;
@@ -54,12 +61,17 @@ export function NextRunTab(p: NextRunTabProps) {
     console.log("NextRunTab render", p);
 
     const sourcePipelinesCollectionId = "source-pipelines";
+    let documentId = React.useRef<string>();
     let tenantInfo = React.useRef<Azdo.TenantInfo>();
 
-    const [state, dispatch] = React.useReducer<(state: ReducerState, action: ReducerAction) => ReducerState>(reducer, {})
+    const [state, dispatch] = React.useReducer<(state: ReducerState, action: ReducerAction) => ReducerState>(reducer, {
+        targetPipelines: [],
+        selectedTargetPipelineId: undefined,
+        isShowingAddPipelinePanel: false,
+    })
 
     let targetPipelineSelection = new ListSelection(true);
-    Ping.applySelection(targetPipelineSelection, state.targetPipelines || [], i => i.id, state.selectedTargetPipelineId);
+    Ping.applySelection(targetPipelineSelection, state.targetPipelines, i => i.id, state.selectedTargetPipelineId);
     const hasSelectedTargetPipeline = state.selectedTargetPipelineId !== undefined;
 
     // initialize the app
@@ -73,12 +85,13 @@ export function NextRunTab(p: NextRunTabProps) {
 
         let project = await info.project;
         let defId = p.singleton.definition?.id;
-        if (!project || !defId) {
+        if (project === undefined || defId === undefined) {
             console.warn("NextRunTab -> missing project or definition id", { project, defId });
             return;
         }
 
         let docId = `project-${project}-pipeline-${defId}`;
+        documentId.current = docId;
         console.log("NextRunTab -> source pipeline document id", docId);
 
         let sources: SourcePipelineDocument = {
@@ -86,23 +99,6 @@ export function NextRunTab(p: NextRunTabProps) {
         }
         sources = await Azdo.getOrCreateSharedDocument(sourcePipelinesCollectionId, docId, sources)
         console.log("NextRunTab -> got shared document", sources);
-
-        // TODO: REMOVE HARDCODED TARGET PIPELINES
-        let targetPipelineItems: TargetPipeline[] = [
-            {
-                id: 1,
-                name: "Test Pipeline 1"
-            },
-            {
-                id: 2,
-                name: "Test Pipeline 2"
-            },
-            {
-                id: 3,
-                name: "Test Pipeline 3"
-            }
-        ];
-        sources.targetPipelines = targetPipelineItems;
 
         dispatch({ targetPipelines: sources.targetPipelines });
     }
@@ -139,10 +135,59 @@ export function NextRunTab(p: NextRunTabProps) {
 
     function showAddTargetPipelinePanel() {
         console.log("NextRunTab -> showAddTargetPipelinePanel");
+        dispatch({ showAddPipelinePanel: true });
     }
 
     function showRunTargetPipelinePanel() {
         console.log("NextRunTab -> showRunTargetPipelinePanel");
+    }
+
+    async function onCommitNewPipeline(data: AddPipelinePanelValues) {
+        console.log("NextRunTab -> onCommitNewPipeline", data);
+
+        // TODO: update shared document
+
+        const docId = documentId.current;
+        if (!docId) {
+            console.error("NextRunTab -> onCommitNewPipeline -> missing document id");
+            return;
+        }
+
+        let prevPipelines = state.targetPipelines ?? [];
+        // TODO: deduplicate, sort
+
+        let prevPipelinesDoc: SourcePipelineDocument = {
+            targetPipelines: prevPipelines
+        }
+        prevPipelinesDoc = await Azdo.getOrCreateSharedDocument(sourcePipelinesCollectionId, docId, prevPipelinesDoc);
+
+        console.log("What is this?", prevPipelinesDoc.targetPipelines);
+        prevPipelinesDoc.targetPipelines = [
+            ...(prevPipelinesDoc.targetPipelines || []),
+            {
+                id: data.id,
+                name: data.name,
+                resourceName: data.resource,
+            }];
+
+        const nextPipelinesDoc = await Azdo.trySaveSharedDocument(sourcePipelinesCollectionId, docId, prevPipelinesDoc);
+        if (!nextPipelinesDoc) {
+            console.warn("Failed to save document.", prevPipelinesDoc);
+            dispatch({
+                showAddPipelinePanel: false
+            });
+        } else {
+            console.log("Saved document.", nextPipelinesDoc);
+            dispatch({
+                targetPipelines: nextPipelinesDoc.targetPipelines || [],
+                showAddPipelinePanel: false
+            });
+        }
+    }
+
+    async function onCancelNewPipeline() {
+        console.log("NextRunTab -> onCancelNewPipeline");
+        dispatch({ showAddPipelinePanel: false });
     }
 
     return (
@@ -177,22 +222,32 @@ export function NextRunTab(p: NextRunTabProps) {
 
             <Card className="padding-8">
                 <div className="flex-column">
-                    <ScrollableList
-                        itemProvider={new ArrayItemProvider(state.targetPipelines || [])}
-                        selection={targetPipelineSelection}
-                        onSelect={(_evt, listRow) => { targetPipelineSelect(listRow); }}
-                        onActivate={showRunTargetPipelinePanel}
-                        renderRow={targetPipelineRenderRow}
-                        width="100%"
-                    />
+                    {
+                        (state.targetPipelines && state.targetPipelines.length > 0) ? (
+                            <ScrollableList
+                                itemProvider={new ArrayItemProvider(state.targetPipelines || [])}
+                                selection={targetPipelineSelection}
+                                onSelect={(_evt, listRow) => { targetPipelineSelect(listRow); }}
+                                onActivate={showRunTargetPipelinePanel}
+                                renderRow={targetPipelineRenderRow}
+                                width="100%"
+                            />
+                        ) : (
+                            <div className="flex-row flex-center padding-16">
+                                <div className="font-size-m text-neutral-70">
+                                    No target pipelines configured.
+                                </div>
+                            </div>
+                        )
+                    }
                 </div>
             </Card>
             {
-                // isAddingHuddle &&
-                // <CreateHuddlePanel
-                //     onCommit={onCommitNewHuddle}
-                //     onCancel={onCancelNewHuddle}
-                // />
+                state.isShowingAddPipelinePanel &&
+                <AddPipelinePanel
+                    onCommit={onCommitNewPipeline}
+                    onCancel={onCancelNewPipeline}
+                />
             }
 
             <p>
@@ -209,6 +264,7 @@ export interface SourcePipelineDocument {
 export interface TargetPipeline {
     id?: number;
     name?: string;
+    resourceName?: string;
 }
 
 export interface TargetPipelineListItemProps {

@@ -1,0 +1,63 @@
+{
+  "manifestVersion": 1,
+  "id": "pingmint-nextrun",
+  "version": "0.1.14",
+  "name": "Next Run",
+  "description": "Pingmint",
+  "publisher": "pingmint",
+  "categories": [
+    "Azure Boards"
+  ],
+  "targets": [
+    {
+      "id": "Microsoft.VisualStudio.Services"
+    }
+  ],
+  "icons": {
+    "default": "images/dot-icon.png"
+  },
+  "contributions": [
+    {
+      "id": "nextruntab",
+      "type": "ms.vss-build-web.build-results-tab",
+      "description": "Next Run Tab",
+      "targets": [
+        "ms.vss-build-web.build-results-view"
+      ],
+      "properties": {
+        "icon": "images/robotbig.png",
+        "name": "Next",
+        "order": 313,
+        "uri": "dist/web/index.html"
+      }
+    }
+  ],
+  "scopes": [
+    "vso.build",
+    "vso.build_execute",
+    "vso.code",
+    "vso.code_status",
+    "vso.code_write",
+    "vso.graph",
+    "vso.identity",
+    "vso.pipelineresources_use",
+    "vso.profile",
+    "vso.project",
+    "vso.release",
+    "vso.release_manage",
+    "vso.work",
+    "vso.work_write"
+  ],
+  "files": [
+    {
+      "path": "dist",
+      "addressable": true,
+      "packagePath": "dist"
+    },
+    {
+      "path": "images",
+      "addressable": true,
+      "packagePath": "images"
+    }
+  ]
+}

@@ -46,7 +46,10 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         if (!selected || !candidates) {
             next.selectedTargetPipelineId = undefined;
         } else {
-            next.selectedTargetPipelineId = candidates.find(t => t.id === selected.id)?.id || undefined;
+            next.selectedTargetPipelineId = selected.id;
+            if (undefined === candidates.find(t => t.id === selected.id)) {
+                next.selectedTargetPipelineId = undefined;
+            }
         }
     }
 

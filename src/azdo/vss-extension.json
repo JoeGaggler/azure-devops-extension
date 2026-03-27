@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "pingmint-extension",
-  "version": "0.1.302",
+  "version": "0.1.313",
   "name": "Merge Queue",
   "description": "Pingmint",
   "publisher": "pingmint",
@@ -25,7 +25,7 @@
         "ms.vss-code-web.code-hub-group"
       ],
       "properties": {
-        "icon": "images/robotbig.png",
+        "icon": "images/merge-queue-icon-small.png",
         "name": "Merge Queue",
         "order": 313,
         "uri": "dist/web/mergequeue/index.html"

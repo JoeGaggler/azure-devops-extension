@@ -1,7 +1,7 @@
 import ReactDOM from 'react-dom'
 import * as SDK from 'azure-devops-extension-sdk';
-import { App } from './App.tsx'
-import type { AppProps, AppSingleton } from './App.tsx'
+import { NextRunTab } from './NextRunTab.tsx'
+import type { NextRunTabProps, NextRunTabSingleton } from './NextRunTab.tsx'
 import { SurfaceBackground, SurfaceContext } from "azure-devops-ui/Surface";
 // import { DropdownMultiSelection } from "azure-devops-ui/Utilities/DropdownSelection";
 
@@ -11,15 +11,15 @@ SDK.init();
 
 // singleton
 
-const appSingleton: AppSingleton = {
+const appSingleton: NextRunTabSingleton = {
     // repositoryFilterDropdownMultiSelection: new DropdownMultiSelection()
 };
 
-let render = (p: AppProps) => {
+let render = (p: NextRunTabProps) => {
     console.log("render");
     ReactDOM.render(
         <SurfaceContext.Provider value={{ background: SurfaceBackground.neutral }}>
-           <App appToken={p.appToken} bearerToken={p.bearerToken} singleton={appSingleton} />
+           <NextRunTab appToken={p.appToken} bearerToken={p.bearerToken} singleton={appSingleton} />
         </SurfaceContext.Provider>,
         document.getElementById('extension_root_div')
     );

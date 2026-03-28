@@ -81,22 +81,44 @@ export async function postAzdo(url: string, body: any, bearertoken: string): Pro
     }
 }
 
+export async function getBuildRun(tenantInfo: TenantInfo, runId: number): Promise<any | undefined> {
+    try {
+        let bearer = await SDK.getAccessToken()
+        let json = await getAzdo(`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/build/builds/${runId}?api-version=7.2-preview.7`, bearer as string);
+        if (!json) {
+            return undefined;
+        }
+        return json;
+        // return {
+        //     pipelineId: b.id,
+        //     name: b.name,
+        //     state: b.state,
+        //     result: b.result,
+        //     createdDate: b.createdDate,
+        // };
+    }
+    catch (err) {
+        console.error("Error fetching pull requests:", err);
+        return undefined;
+    }
+}
+
 // https://dev.azure.com/emdat/Emdat/_apis/pipelines/1938/runs/299579?api-version=7.2-preview.1
-export async function getPipelineRun(tenantInfo: TenantInfo, pipelineId: number, runId: number): Promise<PipelineRun | undefined> {
+export async function getPipelineRun(tenantInfo: TenantInfo, pipelineId: number, runId: number): Promise<any | undefined> {
     try {
         let bearer = await SDK.getAccessToken()
         let json = await getAzdo(`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/pipelines/${pipelineId}/runs/${runId}?api-version=7.2-preview.1`, bearer as string);
         if (!json) {
             return undefined;
         }
-        let b = json;
-        return {
-            pipelineId: b.id,
-            name: b.name,
-            state: b.state,
-            result: b.result,
-            createdDate: b.createdDate,
-        };
+        return json;
+        // return {
+        //     pipelineId: b.id,
+        //     name: b.name,
+        //     state: b.state,
+        //     result: b.result,
+        //     createdDate: b.createdDate,
+        // };
     }
     catch (err) {
         console.error("Error fetching pull requests:", err);

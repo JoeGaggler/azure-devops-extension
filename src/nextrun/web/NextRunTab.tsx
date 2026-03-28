@@ -1,6 +1,7 @@
 import React from "react";
 import * as Azdo from '../shared/azdo.ts';
 import * as Ping from '../shared/lib.ts';
+import { isNumber, isObject, isString } from "../shared/lib.ts";
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Card } from "azure-devops-ui/Card";
 import { ListItem, ListSelection, type IListItemDetails, type IListRow } from "azure-devops-ui/List";
@@ -31,6 +32,10 @@ interface ReducerAction {
     targetPipelines?: TargetPipeline[];
     selectTargetPipeline?: TargetPipeline | null;
     showAddPipelinePanel?: boolean;
+}
+
+function makeDocId(project: string, definitionId: number) {
+    return `project-${project}-pipeline-${definitionId}`;
 }
 
 function reducer(state: ReducerState, action: ReducerAction): ReducerState {
@@ -86,14 +91,14 @@ export function NextRunTab(p: NextRunTabProps) {
         console.log("NextRunTab -> tenant", info);
         tenantInfo.current = info;
 
-        let project = await info.project;
+        let project = info.project;
         let defId = p.singleton.definition?.id;
         if (project === undefined || defId === undefined) {
             console.warn("NextRunTab -> missing project or definition id", { project, defId });
             return;
         }
 
-        let docId = `project-${project}-pipeline-${defId}`;
+        let docId = makeDocId(project, defId);
         documentId.current = docId;
         console.log("NextRunTab -> source pipeline document id", docId);
 
@@ -104,6 +109,8 @@ export function NextRunTab(p: NextRunTabProps) {
         console.log("NextRunTab -> got shared document", sources);
 
         dispatch({ targetPipelines: sources.targetPipelines });
+
+        setupPipelineMapping();
     }
 
     React.useEffect(() => {
@@ -112,6 +119,76 @@ export function NextRunTab(p: NextRunTabProps) {
     }, []);
     async function tick() {
         console.log("NextRunTab -> tick");
+    }
+
+    async function setupPipelineMapping() {
+        console.log("NextRunTab -> setupPipelineMapping");
+        let info = tenantInfo.current;
+        if (info === undefined) { return; }
+
+        let project = info.project;
+        if (project === undefined) { return; }
+
+        let defId = p.singleton.definition?.id;
+        if (defId === undefined) { return; }
+
+        let targetRunId = p.singleton.build?.id;
+        if (targetRunId === undefined) { return; }
+
+        let targetRunModel = await Azdo.getPipelineRun(info, defId, targetRunId);
+        if (targetRunModel === undefined) { return; }
+        console.log("NextRunTab -> target run model", targetRunModel);
+
+        let sourcePipelines = targetRunModel?.resources?.pipelines;
+        if (!isObject(sourcePipelines)) { return; }
+
+        console.log("NextRunTab -> source pipelines", sourcePipelines);
+        for (let spKey in sourcePipelines) {
+            let sp = sourcePipelines[spKey];
+            if (!isObject(sp)) { continue; }
+
+            let spPipeline = sp.pipeline;
+            if (!isObject(spPipeline)) { continue; }
+            console.log("NextRunTab -> source pipeline", spKey, sp);
+
+            let spRunId = spPipeline.id;
+            if (!isNumber(spRunId)) { continue; }
+
+            let spDefName = spPipeline.name;
+            if (!Ping.isString(spDefName)) { continue; }
+
+            if (spRunId !== undefined && spDefName !== undefined) {
+                let sourceRunModel = await Azdo.getBuildRun(info, spRunId);
+                if (!isObject(sourceRunModel)) { continue; }
+                console.log("NextRunTab -> got source pipeline run model", sourceRunModel);
+
+                let spDefId = sourceRunModel?.definition?.id;
+                if (!isNumber(spDefId)) { continue; }
+
+                let spDocId = makeDocId(project, spDefId);
+                await Azdo.deleteSharedDocument(sourcePipelinesCollectionId, spDocId);
+                let spDoc = await Azdo.getOrCreateSharedDocument(sourcePipelinesCollectionId, spDocId, { targetPipelines: [] });
+                console.log("NextRunTab -> got source pipeline document", spDocId, spDoc);
+
+                let spTargetPipelines: Array<TargetPipeline> = spDoc.targetPipelines || [];
+                console.log("NextRunTab -> got source pipeline target pipelines", spDocId, spTargetPipelines);
+                
+                let targDefId = sourceRunModel?.definition?.id;
+                if (!isNumber(targDefId)) { continue; }
+
+                let targDefName = p.singleton.definition?.name;
+                if (!isString(targDefName)) { continue; }
+
+                spTargetPipelines.push({
+                    id: targDefId,
+                    name: targDefName,
+                    resourceName: spKey,
+                });
+
+                let nnn = await Azdo.trySaveSharedDocument(sourcePipelinesCollectionId, spDocId, spDoc);
+                console.log("NextRunTab -> saved source pipeline document", spDocId, nnn);
+            }
+        }
     }
 
     function targetPipelineRenderRow(

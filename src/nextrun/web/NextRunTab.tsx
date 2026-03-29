@@ -1,7 +1,6 @@
 import React from "react";
 import * as Azdo from '../shared/azdo.ts';
 import * as Ping from '../shared/lib.ts';
-import { isNumber, isObject, isString } from "../shared/lib.ts";
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Card } from "azure-devops-ui/Card";
 import { ListItem, ListSelection, type IListItemDetails, type IListRow } from "azure-devops-ui/List";
@@ -42,7 +41,9 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     let next = { ...state };
 
     if (action.targetPipelines !== undefined) {
-        next.targetPipelines = action.targetPipelines || [];
+        let sortedPipelines = action.targetPipelines || [];
+        Ping.sortByString(sortedPipelines, i => i.name || "");
+        next.targetPipelines = sortedPipelines;
     }
 
     if (action.selectTargetPipeline !== undefined) {
@@ -129,65 +130,65 @@ export function NextRunTab(p: NextRunTabProps) {
         let project = info.project;
         if (project === undefined) { return; }
 
-        let defId = p.singleton.definition?.id;
-        if (defId === undefined) { return; }
+        let targetDefinitionId = p.singleton.definition?.id;
+        if (targetDefinitionId === undefined || typeof targetDefinitionId !== "number") { return; }
+
+        let targetDefinitionName = p.singleton.definition?.name;
+        if (targetDefinitionName === undefined) { return; }
 
         let targetRunId = p.singleton.build?.id;
         if (targetRunId === undefined) { return; }
 
-        let targetRunModel = await Azdo.getPipelineRun(info, defId, targetRunId);
+        let targetRunModel = await Azdo.getPipelineRun(info, targetDefinitionId, targetRunId);
         if (targetRunModel === undefined) { return; }
+
         console.log("NextRunTab -> target run model", targetRunModel);
 
-        let sourcePipelines = targetRunModel?.resources?.pipelines;
-        if (!isObject(sourcePipelines)) { return; }
+        let pipelineResources = targetRunModel.resources?.pipelines;
+        if (!pipelineResources) { return; }
 
-        console.log("NextRunTab -> source pipelines", sourcePipelines);
-        for (let spKey in sourcePipelines) {
-            let sp = sourcePipelines[spKey];
-            if (!isObject(sp)) { continue; }
+        console.log("NextRunTab -> source pipelines", pipelineResources);
+        for (let pipelineResourceKey in pipelineResources) {
+            let pipelineResource = pipelineResources[pipelineResourceKey];
 
-            let spPipeline = sp.pipeline;
-            if (!isObject(spPipeline)) { continue; }
-            console.log("NextRunTab -> source pipeline", spKey, sp);
+            let sourcePipelineResource = pipelineResource.pipeline;
+            if (sourcePipelineResource == null) { continue; }
+            console.log("NextRunTab -> source pipeline", pipelineResourceKey, pipelineResource);
 
-            let spRunId = spPipeline.id;
-            if (!isNumber(spRunId)) { continue; }
+            let sourceRunId = sourcePipelineResource.id;
+            if (sourceRunId == null) { continue; }
 
-            let spDefName = spPipeline.name;
-            if (!Ping.isString(spDefName)) { continue; }
+            // let spDefName = spPipeline.name;
+            // if (!Ping.isString(spDefName)) { continue; }
 
-            if (spRunId !== undefined && spDefName !== undefined) {
-                let sourceRunModel = await Azdo.getBuildRun(info, spRunId);
-                if (!isObject(sourceRunModel)) { continue; }
-                console.log("NextRunTab -> got source pipeline run model", sourceRunModel);
+            let sourceRunModel = await Azdo.getBuildRun(info, sourceRunId);
+            if (sourceRunModel == null) { continue; }
+            console.log("NextRunTab -> got source pipeline run model", sourceRunModel);
 
-                let spDefId = sourceRunModel?.definition?.id;
-                if (!isNumber(spDefId)) { continue; }
+            let sourceDefinitionId = sourceRunModel.definition.id;
+            if (sourceDefinitionId == null) { continue; }
 
-                let spDocId = makeDocId(project, spDefId);
-                await Azdo.deleteSharedDocument(sourcePipelinesCollectionId, spDocId);
-                let spDoc = await Azdo.getOrCreateSharedDocument(sourcePipelinesCollectionId, spDocId, { targetPipelines: [] });
-                console.log("NextRunTab -> got source pipeline document", spDocId, spDoc);
+            let docId = makeDocId(project, sourceDefinitionId);
+            // await Azdo.deleteSharedDocument(sourcePipelinesCollectionId, docId);
+            let doc = await Azdo.getOrCreateSharedDocument(sourcePipelinesCollectionId, docId, { targetPipelines: [] });
+            console.log("NextRunTab -> got source pipeline document", docId, doc);
 
-                let spTargetPipelines: Array<TargetPipeline> = spDoc.targetPipelines || [];
-                console.log("NextRunTab -> got source pipeline target pipelines", spDocId, spTargetPipelines);
-                
-                let targDefId = sourceRunModel?.definition?.id;
-                if (!isNumber(targDefId)) { continue; }
+            let docTargetPipelines: Array<TargetPipeline> = doc.targetPipelines || [];
+            console.log("NextRunTab -> got source pipeline target pipelines", docId, docTargetPipelines);
 
-                let targDefName = p.singleton.definition?.name;
-                if (!isString(targDefName)) { continue; }
-
-                spTargetPipelines.push({
-                    id: targDefId,
-                    name: targDefName,
-                    resourceName: spKey,
-                });
-
-                let nnn = await Azdo.trySaveSharedDocument(sourcePipelinesCollectionId, spDocId, spDoc);
-                console.log("NextRunTab -> saved source pipeline document", spDocId, nnn);
+            if (docTargetPipelines.find(i => i.id === targetDefinitionId)) {
+                console.log("NextRunTab -> target pipeline already mapped in source pipeline document, skipping", docId, targetDefinitionId);
+                continue;
             }
+
+            docTargetPipelines.push({
+                id: targetDefinitionId,
+                name: targetDefinitionName,
+                resourceName: pipelineResourceKey,
+            });
+
+            let nnn = await Azdo.trySaveSharedDocument(sourcePipelinesCollectionId, docId, doc);
+            console.log("NextRunTab -> saved source pipeline document", docId, nnn);
         }
     }
 
@@ -213,10 +214,10 @@ export function NextRunTab(p: NextRunTabProps) {
         dispatch({ selectTargetPipeline: row.data });
     }
 
-    function showAddTargetPipelinePanel() {
-        console.log("NextRunTab -> showAddTargetPipelinePanel");
-        dispatch({ showAddPipelinePanel: true });
-    }
+    // function showAddTargetPipelinePanel() {
+    //     console.log("NextRunTab -> showAddTargetPipelinePanel");
+    //     dispatch({ showAddPipelinePanel: true });
+    // }
 
     function showRunTargetPipelinePanel() {
         console.log("NextRunTab -> showRunTargetPipelinePanel");
@@ -279,15 +280,15 @@ export function NextRunTab(p: NextRunTabProps) {
                 contentClassName='flex-center'
                 // backButtonProps={Util.makeHeaderBackButtonProps(p.appNav)}
                 commandBarItems={[
-                    {
-                        id: "addTargetPipeline",
-                        // text: "Add Pipeline",
-                        iconProps: { iconName: "Add" },
-                        onActivate: () => { showAddTargetPipelinePanel(); },
-                        isPrimary: false,
-                        important: true,
-                        disabled: false,
-                    },
+                    // {
+                    //     id: "addTargetPipeline",
+                    //     // text: "Add Pipeline",
+                    //     iconProps: { iconName: "Add" },
+                    //     onActivate: () => { showAddTargetPipelinePanel(); },
+                    //     isPrimary: false,
+                    //     important: true,
+                    //     disabled: false,
+                    // },
                     {
                         id: "runTargetPipeline",
                         text: "Run",

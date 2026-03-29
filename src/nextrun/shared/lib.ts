@@ -1,17 +1,5 @@
 import { ListSelection } from "azure-devops-ui/List";
 
-export function isObject(item: unknown): item is any { // TODO: make this better`
-    return (item !== undefined && item !== null && typeof item === 'object');
-}
-
-export function isNumber(item: unknown): item is number {
-    return (item !== undefined && item !== null && typeof item === 'number');
-}
-
-export function isString(item: unknown): item is string {
-    return (item !== undefined && item !== null && typeof item === 'string');
-}
-
 export function sortByString<T>(array: T[], f: (i: T) => string) {
     array.sort((a, b) => {
         let x = f(a);

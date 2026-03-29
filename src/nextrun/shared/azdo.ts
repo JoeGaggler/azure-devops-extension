@@ -2,7 +2,9 @@ import * as SDK from 'azure-devops-extension-sdk';
 import { type IProjectPageService } from "azure-devops-extension-api";
 import { type IExtensionDataService } from 'azure-devops-extension-api';
 
-export async function getAzdo(url: string, bearertoken: string): Promise<any> {
+type WithUnknowns<T> = T & Record<string, unknown>;
+
+export async function getAzdo(url: string, bearertoken: string): Promise<unknown | undefined> {
     const response = await fetch(url, {
         method: "GET",
         headers: {
@@ -21,6 +23,7 @@ export async function getAzdo(url: string, bearertoken: string): Promise<any> {
         return data;
     } else {
         console.log("Error fetching azdo data", response.statusText);
+        return undefined;
     }
 }
 
@@ -81,21 +84,21 @@ export async function postAzdo(url: string, body: any, bearertoken: string): Pro
     }
 }
 
-export async function getBuildRun(tenantInfo: TenantInfo, runId: number): Promise<any | undefined> {
+export async function getBuildRun(tenantInfo: TenantInfo, runId: number): Promise<WithUnknowns<BuildRun> | undefined> {
     try {
         let bearer = await SDK.getAccessToken()
         let json = await getAzdo(`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/build/builds/${runId}?api-version=7.2-preview.7`, bearer as string);
-        if (!json) {
-            return undefined;
-        }
-        return json;
-        // return {
-        //     pipelineId: b.id,
-        //     name: b.name,
-        //     state: b.state,
-        //     result: b.result,
-        //     createdDate: b.createdDate,
-        // };
+        if (json == null) { return undefined; }
+
+        let definition = (json as any)?.definition;
+        if (definition == null) { return undefined; }
+
+        // Validation definition
+        let defId = definition.id;
+        if (defId == null || typeof defId !== 'number') { return undefined; }
+
+        // Validated
+        return json as WithUnknowns<BuildRun>;
     }
     catch (err) {
         console.error("Error fetching pull requests:", err);
@@ -103,22 +106,23 @@ export async function getBuildRun(tenantInfo: TenantInfo, runId: number): Promis
     }
 }
 
+export interface BuildRun {
+    definition: BuildRunDefinition;
+}
+
+export interface BuildRunDefinition {
+    id: number;
+}
+
 // https://dev.azure.com/emdat/Emdat/_apis/pipelines/1938/runs/299579?api-version=7.2-preview.1
-export async function getPipelineRun(tenantInfo: TenantInfo, pipelineId: number, runId: number): Promise<any | undefined> {
+export async function getPipelineRun(tenantInfo: TenantInfo, pipelineId: number, runId: number): Promise<WithUnknowns<PipelineRun> | undefined> {
     try {
         let bearer = await SDK.getAccessToken()
         let json = await getAzdo(`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/pipelines/${pipelineId}/runs/${runId}?api-version=7.2-preview.1`, bearer as string);
-        if (!json) {
-            return undefined;
-        }
-        return json;
-        // return {
-        //     pipelineId: b.id,
-        //     name: b.name,
-        //     state: b.state,
-        //     result: b.result,
-        //     createdDate: b.createdDate,
-        // };
+        if (json == null) { return undefined; }
+        if (typeof json !== 'object') { return undefined; }
+        if (!('resources' in json)) { return undefined; }
+        return json as WithUnknowns<PipelineRun>;
     }
     catch (err) {
         console.error("Error fetching pull requests:", err);
@@ -127,11 +131,28 @@ export async function getPipelineRun(tenantInfo: TenantInfo, pipelineId: number,
 }
 
 export interface PipelineRun {
-    pipelineId?: number;
-    name?: string;
-    state?: string;
-    result?: string;
-    createdDate?: string;
+    resources?: PipelineRunResources;
+    // pipelineId?: number;
+    // name?: string;
+    // state?: string;
+    // result?: string;
+    // createdDate?: string;
+}
+
+export interface PipelineRunResources {
+    pipelines?: PipelineRunResourcePipelines;
+}
+
+export interface PipelineRunResourcePipelines {
+    [key: string]: PipelineRunResourcePipeline;
+}
+
+export interface PipelineRunResourcePipeline {
+    pipeline?: PipelineRunResourcePipeline2;
+}
+
+export interface PipelineRunResourcePipeline2 {
+    id?: number;
 }
 
 // _apis/build/builds?$top=100&queryOrder=queueTimeAscending&minTime=2025-08-21T21:38:14.1184379Z&api-version=7.2-preview.7`, bearer as string);
@@ -140,7 +161,8 @@ export async function getCommit(tenantInfo: TenantInfo, repoId: string, commitId
     try {
         let bearer = await SDK.getAccessToken()
         let json = await getAzdo(`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/git/repositories/${repoId}/commits/${commitId}?$api-version=7.2-preview.2`, bearer as string);
-        let comment = json.comment ?? commitId;
+        if (json === undefined) { return undefined; }
+        let comment = (json as any).comment ?? commitId;
         comment = comment.split('\n')[0];
         return {
             comment: comment,
@@ -156,7 +178,7 @@ export async function getTopRecentBuilds(tenantInfo: TenantInfo): Promise<TopBui
     try {
         let bearer = await SDK.getAccessToken()
         let json = await getAzdo(`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/build/builds?$top=1000&queryOrder=queueTimeDescending&api-version=7.2-preview.7`, bearer as string);
-        return json.value.flatMap((b: any): (TopBuild | readonly TopBuild[]) => {
+        return (json as any).value.flatMap((b: any): (TopBuild | readonly TopBuild[]) => {
             return {
                 pipelineId: b.definition?.id,
                 buildId: b.id,
@@ -205,7 +227,7 @@ export async function getAllPullRequests(tenantInfo: TenantInfo): Promise<PullRe
     try {
         let bearer = await SDK.getAccessToken()
         let json = await getAzdo(`https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/git/pullrequests?api-version=7.2-preview.2`, bearer as string);
-        return json.value
+        return (json as any).value
     }
     catch (err) {
         console.error("Error fetching pull requests:", err);
@@ -375,7 +397,7 @@ export async function getPullRequest(
     try {
         let url = `https://dev.azure.com/${tenantInfo.organization}/${tenantInfo.project}/_apis/git/repositories/${repository}/pullRequests/${pullRequestId}?api-version=7.2-preview.2`;
         let resp = await getAzdo(url, bearerToken);
-        return resp;
+        return (resp as any);
     }
     catch (error) {
         console.error("Error fetching pull request:", error);

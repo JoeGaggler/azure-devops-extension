@@ -437,6 +437,7 @@ export interface Repo {
     id?: string;
     name?: string;
     defaultBranch?: string;
+    at?: number;
 }
 
 export interface ExtensionDocument {

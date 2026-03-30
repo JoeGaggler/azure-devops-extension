@@ -163,7 +163,7 @@ function App(p: AppProps) {
 
                     if (finalVote > vote) {
                         finalVote = vote;
-                        if (vote == 5) { finalCount++; } 
+                        if (vote == 5) { finalCount++; }
                         else { finalCount = 1; }
                     }
                     else if (vote == finalVote) {
@@ -413,16 +413,22 @@ function App(p: AppProps) {
         }
 
         for (let pullRequest of value) {
-            // TODO: cache expiration
+            let prRepoName = pullRequest.repository?.name;
+            if (!prRepoName) { continue; }
 
-            if (pullRequest.repository.name && map[pullRequest.repository.name]) {
-                // already cached
-                continue
+            let cacheDurationMsec = 1000 * 60 * 60 * 24; // 1 day
+            let nowAt = Date.now();
+
+            if (map[pullRequest.repository.name]) {
+                let repo = map[pullRequest.repository.name];
+                let isMapValid = repo.at && (repo.at > (nowAt - cacheDurationMsec));
+                if (isMapValid && repo && repo.id && repo.name && repo.defaultBranch) { continue; }
             }
 
             if (sharedMap && sharedMap[pullRequest.repository.name]) {
                 let repo = sharedMap[pullRequest.repository.name];
-                if (repo && repo.id && repo.name && repo.defaultBranch) {
+                let isSharedMapValid = repo.at && (repo.at > (nowAt - cacheDurationMsec));
+                if (isSharedMapValid && repo && repo.id && repo.name && repo.defaultBranch) {
                     // copy cached repo to local map
                     map[pullRequest.repository.name] = repo;
                     continue
@@ -436,6 +442,7 @@ function App(p: AppProps) {
                     id: repo.id,
                     name: repo.name,
                     defaultBranch: repo.defaultBranch,
+                    at: nowAt + Math.floor(Math.random() * 15 * 60 * 1000), // add up to 15 minutes of random jitter
                 }
                 map[pullRequest.repository.name] = newRepo;
                 sharedMap[pullRequest.repository.name] = newRepo;

@@ -8,6 +8,8 @@ import { ScrollableList } from "azure-devops-ui/List";
 // import { Page } from "azure-devops-ui/Page";
 import { Header, TitleSize } from "azure-devops-ui/Header";
 import { AddPipelinePanel, type AddPipelinePanelValues } from "./AddPipelinePanel.tsx";
+import { type IHostNavigationService } from 'azure-devops-extension-api';
+import * as SDK from 'azure-devops-extension-sdk';
 
 export interface NextRunTabSingleton {
     bearerToken: string;
@@ -72,6 +74,7 @@ export function NextRunTab(p: NextRunTabProps) {
     const sourcePipelinesCollectionId = "source-pipelines";
     let documentId = React.useRef<string>();
     let tenantInfo = React.useRef<Azdo.TenantInfo>();
+    let singleton = React.useRef(p.singleton);
 
     const [state, dispatch] = React.useReducer<(state: ReducerState, action: ReducerAction) => ReducerState>(reducer, {
         targetPipelines: [],
@@ -93,7 +96,7 @@ export function NextRunTab(p: NextRunTabProps) {
         tenantInfo.current = info;
 
         let project = info.project;
-        let defId = p.singleton.definition?.id;
+        let defId = singleton.current.definition?.id;
         if (project === undefined || defId === undefined) {
             console.warn("NextRunTab -> missing project or definition id", { project, defId });
             return;
@@ -130,13 +133,13 @@ export function NextRunTab(p: NextRunTabProps) {
         let project = info.project;
         if (project === undefined) { return; }
 
-        let targetDefinitionId = p.singleton.definition?.id;
+        let targetDefinitionId = singleton.current.definition?.id;
         if (targetDefinitionId === undefined || typeof targetDefinitionId !== "number") { return; }
 
-        let targetDefinitionName = p.singleton.definition?.name;
+        let targetDefinitionName = singleton.current.definition?.name;
         if (targetDefinitionName === undefined) { return; }
 
-        let targetRunId = p.singleton.build?.id;
+        let targetRunId = singleton.current.build?.id;
         if (targetRunId === undefined) { return; }
 
         let targetRunModel = await Azdo.getPipelineRun(info, targetDefinitionId, targetRunId);
@@ -219,8 +222,63 @@ export function NextRunTab(p: NextRunTabProps) {
     //     dispatch({ showAddPipelinePanel: true });
     // }
 
-    function showRunTargetPipelinePanel() {
+    async function showRunTargetPipelinePanel() {
         console.log("NextRunTab -> showRunTargetPipelinePanel");
+
+        let org = tenantInfo.current?.organization;
+        let project = tenantInfo.current?.project;
+        if (!org || !project) {
+            console.error("NextRunTab -> showRunTargetPipelinePanel -> missing org or project", { org, project });
+            return;
+        }
+
+        let pipelineId = state.selectedTargetPipelineId;
+        if (pipelineId === undefined) {
+            console.error("NextRunTab -> showRunTargetPipelinePanel -> missing pipeline id");
+            return;
+        }
+
+        let pipeline = state.targetPipelines?.find(t => t.id === pipelineId);
+        if (!pipeline) {
+            console.error("NextRunTab -> showRunTargetPipelinePanel -> selected pipeline not found in state", { pipelineId, pipelines: state.targetPipelines });
+            return;
+        }
+
+        let pipelineResourceName = pipeline.resourceName;
+        if (!pipelineResourceName) {
+            console.error("NextRunTab -> showRunTargetPipelinePanel -> selected pipeline missing resource name", pipeline);
+            return;
+        }
+
+        // https://dev.azure.com/{organization}/{project}/_apis/pipelines/{pipelineId}/runs?api-version=7.2-preview.1
+        let url = `https://dev.azure.com/${org}/${project}/_apis/pipelines/${pipelineId}/runs?api-version=7.2-preview.1`;
+        let body = {
+            previewRun: false,
+            stagesToSkip: [],
+            resources: {
+                repositories: {
+                    ["self"]: {
+                        refName: singleton.current.build?.sourceBranch,
+                    }
+                },
+                pipelines: {
+                    [pipelineResourceName]: {
+                        runId: singleton.current.build.id
+                    }
+                },
+            }
+        };
+        console.log("NextRunTab -> showRunTargetPipelinePanel -> posting to azdo api", url, body);
+        let response = await Azdo.postAzdo(url, body, singleton.current.bearerToken);
+        console.log("NextRunTab -> showRunTargetPipelinePanel -> got response", response);
+        if (response === undefined) {
+            return;
+        }
+        let link = response._links?.web?.href;
+        console.log("NextRunTab -> showRunTargetPipelinePanel -> got run link", link);
+        const navService = await SDK.getService<IHostNavigationService>("ms.vss-features.host-navigation-service");
+        console.log("NextRunTab -> showRunTargetPipelinePanel -> got nav service", navService);
+        navService.openNewWindow(link, "");
     }
 
     async function onCommitNewPipeline(data: AddPipelinePanelValues) {
@@ -331,9 +389,10 @@ export function NextRunTab(p: NextRunTabProps) {
                 />
             }
 
-            <p>
-                __NEXTRUNVERSION__
-            </p>
+            <div className="text-neutral-30 flex-row padding-4">
+                <div className="flex-grow"></div>
+                <div>__NEXTRUNVERSION__</div>
+            </div>
         </div>
     )
 }

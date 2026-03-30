@@ -50,9 +50,12 @@ SDK.ready().then(() => {
     SDK.getAppToken().then((a) => {
         console.log("AppToken is ready");
         console.log(a);
+        appSingleton.appToken = a;
+
         SDK.getAccessToken().then((b) => {
             console.log("BearerToken is ready");
             console.log(b);
+            appSingleton.bearerToken = b;
 
             let conf = SDK.getConfiguration();
             console.log("conf", conf);

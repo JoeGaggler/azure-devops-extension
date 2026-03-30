@@ -77,7 +77,6 @@ export async function postAzdo(url: string, body: any, bearertoken: string): Pro
     });
     if (response.ok) {
         const data = await response.json();
-        // console.log(data);
         return data;
     } else {
         console.log("Error posting azdo data", response.statusText);

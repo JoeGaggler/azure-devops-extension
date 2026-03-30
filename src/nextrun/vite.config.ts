@@ -11,7 +11,7 @@ export default defineConfig({
     }
   },
   build: {
-    rollupOptions: {
+    rolldownOptions: {
       input: {
         web: './web/index.html'
       },

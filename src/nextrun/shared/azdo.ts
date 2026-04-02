@@ -1,8 +1,12 @@
 import * as SDK from 'azure-devops-extension-sdk';
 import { type IProjectPageService } from "azure-devops-extension-api";
 import { type IExtensionDataService } from 'azure-devops-extension-api';
+import * as ClientAPI from 'azure-devops-extension-api/Common/Client';
+import * as BuildClientAPI from 'azure-devops-extension-api/Build/BuildClient';
 
 type WithUnknowns<T> = T & Record<string, unknown>;
+
+export function getBuildClient() { return ClientAPI.getClient(BuildClientAPI.BuildRestClient); }
 
 export async function getAzdo(url: string, bearertoken: string): Promise<unknown | undefined> {
     const response = await fetch(url, {

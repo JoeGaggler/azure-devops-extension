@@ -156,6 +156,7 @@ export interface PipelineRunResourcePipeline {
 
 export interface PipelineRunResourcePipeline2 {
     id?: number;
+    name?: string;
 }
 
 // _apis/build/builds?$top=100&queryOrder=queueTimeAscending&minTime=2025-08-21T21:38:14.1184379Z&api-version=7.2-preview.7`, bearer as string);

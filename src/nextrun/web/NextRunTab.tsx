@@ -27,12 +27,14 @@ interface ReducerState {
     targetPipelines: TargetPipeline[];
     selectedTargetPipelineId?: number;
     isShowingAddPipelinePanel: boolean;
+    registeredSourcePipelines?: Array<string>;
 }
 
 interface ReducerAction {
     targetPipelines?: TargetPipeline[];
     selectTargetPipeline?: TargetPipeline | null;
     showAddPipelinePanel?: boolean;
+    registeredSourcePipelines?: Array<string>;
 }
 
 function makeDocId(project: string, definitionId: number) {
@@ -63,6 +65,10 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
 
     if (action.showAddPipelinePanel !== undefined) {
         next.isShowingAddPipelinePanel = action.showAddPipelinePanel;
+    }
+
+    if (action.registeredSourcePipelines !== undefined) {
+        next.registeredSourcePipelines = action.registeredSourcePipelines;
     }
 
     return next;
@@ -150,6 +156,7 @@ export function NextRunTab(p: NextRunTabProps) {
         let pipelineResources = targetRunModel.resources?.pipelines;
         if (!pipelineResources) { return; }
 
+        let registeredSourcePipelines: Array<string> = [];
         console.log("NextRunTab -> source pipelines", pipelineResources);
         for (let pipelineResourceKey in pipelineResources) {
             let pipelineResource = pipelineResources[pipelineResourceKey];
@@ -179,6 +186,8 @@ export function NextRunTab(p: NextRunTabProps) {
             let docTargetPipelines: Array<TargetPipeline> = doc.targetPipelines || [];
             console.log("NextRunTab -> got source pipeline target pipelines", docId, docTargetPipelines);
 
+            pipelineResource?.pipeline?.name && registeredSourcePipelines.push(pipelineResource?.pipeline?.name);
+
             if (docTargetPipelines.find(i => i.id === targetDefinitionId)) {
                 console.log("NextRunTab -> target pipeline already mapped in source pipeline document, skipping", docId, targetDefinitionId);
                 continue;
@@ -193,6 +202,8 @@ export function NextRunTab(p: NextRunTabProps) {
             let nnn = await Azdo.trySaveSharedDocument(sourcePipelinesCollectionId, docId, doc);
             console.log("NextRunTab -> saved source pipeline document", docId, nnn);
         }
+        console.log("NextRunTab -> registered source pipelines", registeredSourcePipelines);
+        dispatch({ registeredSourcePipelines: registeredSourcePipelines });
     }
 
     function targetPipelineRenderRow(
@@ -374,7 +385,7 @@ export function NextRunTab(p: NextRunTabProps) {
                         ) : (
                             <div className="flex-row flex-center padding-16">
                                 <div className="font-size-m text-neutral-70">
-                                    No target pipelines configured.
+                                    No target pipelines configured. Open this page from a target pipeline, then refresh this page.
                                 </div>
                             </div>
                         )
@@ -393,6 +404,21 @@ export function NextRunTab(p: NextRunTabProps) {
                 <div className="flex-grow"></div>
                 <div>__NEXTRUNVERSION__</div>
             </div>
+
+            {
+                state.registeredSourcePipelines && state.registeredSourcePipelines.length > 0 && (
+                    <div className="flex-column margin-top-16">
+                        <div className="font-size-m text-neutral-70">Source pipelines:</div>
+                        <ul>
+                            {
+                                state.registeredSourcePipelines.map((name, index) => (
+                                    <li key={index} className="font-size-m">{name}</li>
+                                ))
+                            }
+                        </ul>
+                    </div>
+                )
+            }
         </div>
     )
 }

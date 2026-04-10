@@ -6,10 +6,11 @@ import { Card } from "azure-devops-ui/Card";
 import { ListItem, ListSelection, type IListItemDetails, type IListRow } from "azure-devops-ui/List";
 import { ScrollableList } from "azure-devops-ui/List";
 // import { Page } from "azure-devops-ui/Page";
-import { Header, TitleSize } from "azure-devops-ui/Header";
+// import { Header, TitleSize } from "azure-devops-ui/Header";
 import { AddPipelinePanel, type AddPipelinePanelValues } from "./AddPipelinePanel.tsx";
 import { type IHostNavigationService } from 'azure-devops-extension-api';
 import * as SDK from 'azure-devops-extension-sdk';
+import { Button } from "azure-devops-ui/Components/Button/Button";
 
 export interface NextRunTabSingleton {
     bearerToken: string;
@@ -342,35 +343,20 @@ export function NextRunTab(p: NextRunTabProps) {
 
     return (
         <div className="flex-column padding-4">
-            <Header
-                title={"Pipelines"}
-                titleSize={TitleSize.Large}
-                // titleIconProps={{ iconName: "Next" }}
-                contentClassName='flex-center'
-                // backButtonProps={Util.makeHeaderBackButtonProps(p.appNav)}
-                commandBarItems={[
-                    // {
-                    //     id: "addTargetPipeline",
-                    //     // text: "Add Pipeline",
-                    //     iconProps: { iconName: "Add" },
-                    //     onActivate: () => { showAddTargetPipelinePanel(); },
-                    //     isPrimary: false,
-                    //     important: true,
-                    //     disabled: false,
-                    // },
-                    {
-                        id: "runTargetPipeline",
-                        text: "Run",
-                        // iconProps: { iconName: "Add" },
-                        onActivate: () => { showRunTargetPipelinePanel(); },
-                        isPrimary: true,
-                        important: true,
-                        disabled: !hasSelectedTargetPipeline,
-                    }
-                ]}
-            />
-
-            <Card className="padding-8">
+            <Card
+                className="padding-8"
+                contentProps={{ contentPadding: false }}
+                titleProps={{ text: "Pipelines" }}
+                headerClassName=""
+                headerCommandBarItems={[{
+                    id: "runTargetPipeline",
+                    text: "Run",
+                    onActivate: () => { showRunTargetPipelinePanel(); },
+                    isPrimary: true,
+                    important: true,
+                    disabled: !hasSelectedTargetPipeline,
+                }]}
+            >
                 <div className="flex-column">
                     {
                         (state.targetPipelines && state.targetPipelines.length > 0) ? (
@@ -443,6 +429,13 @@ function TargetPipelineListItem({ name }: TargetPipelineListItemProps) {
         <div className={className}>
             <div className="margin-right-4"></div>
             <div className="font-size-m flex-self-center padding-4 flex-noshrink">{name}</div>
+            {
+                false &&
+                <Button
+                    text="Run"
+                    onClick={() => alert("Default button clicked!")}
+                />
+            }
         </div>
     )
 }

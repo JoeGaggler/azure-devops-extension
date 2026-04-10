@@ -1,12 +1,12 @@
 {
   "manifestVersion": 1,
   "id": "pingmint-nextrun",
-  "version": "0.1.189",
+  "version": "0.1.205",
   "name": "Next Run",
-  "description": "Pingmint",
+  "description": "Run a release pipeline from a build run.",
   "publisher": "pingmint",
   "categories": [
-    "Azure Boards"
+    "Azure Repos"
   ],
   "targets": [
     {
@@ -14,7 +14,13 @@
     }
   ],
   "icons": {
-    "default": "images/dot-icon.png"
+    "default": "images/blue-planner.png"
+  },
+  "public": true,
+  "content": {
+    "details": {
+      "path": "content/details.md"
+    }
   },
   "contributions": [
     {

@@ -5,12 +5,8 @@ import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Card } from "azure-devops-ui/Card";
 import { ListItem, ListSelection, type IListItemDetails, type IListRow } from "azure-devops-ui/List";
 import { ScrollableList } from "azure-devops-ui/List";
-// import { Page } from "azure-devops-ui/Page";
-// import { Header, TitleSize } from "azure-devops-ui/Header";
-import { AddPipelinePanel, type AddPipelinePanelValues } from "./AddPipelinePanel.tsx";
 import { type IHostNavigationService } from 'azure-devops-extension-api';
 import * as SDK from 'azure-devops-extension-sdk';
-import { Button } from "azure-devops-ui/Components/Button/Button";
 
 export interface NextRunTabSingleton {
     bearerToken: string;
@@ -229,11 +225,6 @@ export function NextRunTab(p: NextRunTabProps) {
         dispatch({ selectTargetPipeline: row.data });
     }
 
-    // function showAddTargetPipelinePanel() {
-    //     console.log("NextRunTab -> showAddTargetPipelinePanel");
-    //     dispatch({ showAddPipelinePanel: true });
-    // }
-
     async function showRunTargetPipelinePanel() {
         console.log("NextRunTab -> showRunTargetPipelinePanel");
 
@@ -262,7 +253,6 @@ export function NextRunTab(p: NextRunTabProps) {
             return;
         }
 
-        // https://dev.azure.com/{organization}/{project}/_apis/pipelines/{pipelineId}/runs?api-version=7.2-preview.1
         let url = `https://dev.azure.com/${org}/${project}/_apis/pipelines/${pipelineId}/runs?api-version=7.2-preview.1`;
         let body = {
             previewRun: false,
@@ -291,54 +281,6 @@ export function NextRunTab(p: NextRunTabProps) {
         const navService = await SDK.getService<IHostNavigationService>("ms.vss-features.host-navigation-service");
         console.log("NextRunTab -> showRunTargetPipelinePanel -> got nav service", navService);
         navService.openNewWindow(link, "");
-    }
-
-    async function onCommitNewPipeline(data: AddPipelinePanelValues) {
-        console.log("NextRunTab -> onCommitNewPipeline", data);
-
-        // TODO: update shared document
-
-        const docId = documentId.current;
-        if (!docId) {
-            console.error("NextRunTab -> onCommitNewPipeline -> missing document id");
-            return;
-        }
-
-        let prevPipelines = state.targetPipelines ?? [];
-        // TODO: deduplicate, sort
-
-        let prevPipelinesDoc: SourcePipelineDocument = {
-            targetPipelines: prevPipelines
-        }
-        prevPipelinesDoc = await Azdo.getOrCreateSharedDocument(sourcePipelinesCollectionId, docId, prevPipelinesDoc);
-
-        console.log("What is this?", prevPipelinesDoc.targetPipelines);
-        prevPipelinesDoc.targetPipelines = [
-            ...(prevPipelinesDoc.targetPipelines || []),
-            {
-                id: data.id,
-                name: data.name,
-                resourceName: data.resource,
-            }];
-
-        const nextPipelinesDoc = await Azdo.trySaveSharedDocument(sourcePipelinesCollectionId, docId, prevPipelinesDoc);
-        if (!nextPipelinesDoc) {
-            console.warn("Failed to save document.", prevPipelinesDoc);
-            dispatch({
-                showAddPipelinePanel: false
-            });
-        } else {
-            console.log("Saved document.", nextPipelinesDoc);
-            dispatch({
-                targetPipelines: nextPipelinesDoc.targetPipelines || [],
-                showAddPipelinePanel: false
-            });
-        }
-    }
-
-    async function onCancelNewPipeline() {
-        console.log("NextRunTab -> onCancelNewPipeline");
-        dispatch({ showAddPipelinePanel: false });
     }
 
     return (
@@ -378,13 +320,6 @@ export function NextRunTab(p: NextRunTabProps) {
                     }
                 </div>
             </Card>
-            {
-                state.isShowingAddPipelinePanel &&
-                <AddPipelinePanel
-                    onCommit={onCommitNewPipeline}
-                    onCancel={onCancelNewPipeline}
-                />
-            }
 
             <div className="text-neutral-30 flex-row padding-4">
                 <div className="flex-grow"></div>
@@ -429,13 +364,6 @@ function TargetPipelineListItem({ name }: TargetPipelineListItemProps) {
         <div className={className}>
             <div className="margin-right-4"></div>
             <div className="font-size-m flex-self-center padding-4 flex-noshrink">{name}</div>
-            {
-                false &&
-                <Button
-                    text="Run"
-                    onClick={() => alert("Default button clicked!")}
-                />
-            }
         </div>
     )
 }

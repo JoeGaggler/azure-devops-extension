@@ -1,7 +1,7 @@
 {
   "manifestVersion": 1,
   "id": "pingmint-nextrun",
-  "version": "0.1.205",
+  "version": "0.1.211",
   "name": "Next Run",
   "description": "Run a release pipeline from a build run.",
   "publisher": "pingmint",

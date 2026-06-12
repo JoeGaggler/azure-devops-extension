@@ -148,37 +148,39 @@ function App(p: AppProps) {
     joe.applySelections(primaryQueueSelection, primaryQueueItems, i => i.pullRequestId, selectedIds);
 
     function summarizeVotes(reviewers: any): SomePullRequestVote {
-        let finalVote = 20;
+        let finalVote: number | undefined = undefined;
         let finalCount = 0;
         let voters = 0;
         for (let reviewer of reviewers) {
-            if (reviewer?.vote) {
-                let vote = reviewer?.vote || 0;
-                if (!vote && !reviewer.isRequired) { continue; } // skip non-required reviewers with no vote
-                vote = vote > 10 ? 10 : vote;
-                finalVote = reviewer?.vote > 10 ? 10 : reviewer?.vote;
-                if (!reviewer.isContainer) {
-                    // count only non-container reviewers
-                    voters++;
+            if (!reviewer) { continue; }
+            if (!reviewer.vote) { continue; }
 
-                    if (finalVote > vote) {
-                        finalVote = vote;
-                        if (vote == 5) { finalCount++; }
-                        else { finalCount = 1; }
-                    }
-                    else if (vote == finalVote) {
-                        finalCount++;
-                    }
-                    else {
-                        continue;
-                    }
+            let vote = reviewer.vote;
+            if (!vote || typeof vote !== "number") { continue; }
+            // if (!reviewer.isRequired) { continue; } // skip non-required reviewers with no vote
+
+            vote = vote > 10 ? 10 : vote;
+            vote = vote < -10 ? -10 : vote;
+            if (!reviewer.isContainer) {
+                // count only non-container reviewers
+                voters++;
+
+                if (finalVote === undefined || finalVote > vote) {
+                    finalVote = vote;
+                    if (vote == 5) { finalCount++; }
+                    else { finalCount = 1; }
+                }
+                else if (vote == finalVote) {
+                    finalCount++;
+                }
+                else {
+                    continue;
                 }
             }
         }
-        switch (finalVote) {
-            case 20: return { status: "none", count: 0 }
-            case 10: return voters > 1 ? { status: "approved", count: finalCount } : { status: "none", count: 0 } // require at least 2 voters to be tagged "approved"
-            case 5: return voters > 1 ? { status: "suggestions", count: finalCount } : { status: "none", count: 0 } // require at least 2 voters to be tagged "approved with suggestions"
+        switch (finalVote || 0) {
+            case 10: return { status: "approved", count: finalCount }
+            case 5: return { status: "suggestions", count: finalCount }
             case 0: return { status: "none", count: 0 }
             case -5: return { status: "waiting", count: finalCount }
             case -10: return { status: "rejected", count: finalCount }
@@ -250,7 +252,7 @@ function App(p: AppProps) {
                 // refresh the pull request details
                 let pr2 = await Azdo.getPullRequest(p.bearerToken, tenantInfo, pr.repositoryName, pr.pullRequestId);
                 if (pr2) {
-                    console.log("Pull Request details:", pr2);
+                    // console.log("Pull Request details:", pr2);
                     if (pr2.status == "completed" || pr2.status == "abandoned") {
                         console.log("Pull request is completed, removing from queue:", pr2);
                         removedPullRequests.push(pr.pullRequestId);
@@ -274,6 +276,8 @@ function App(p: AppProps) {
                 if (pr3 && pr3.voteStatus) {
                     if (pr3.voteStatus.status !== pr.voteStatus.status) { pr.voteStatus = pr3.voteStatus; didChange = true; }
                     else if (pr3.voteStatus.count !== pr.voteStatus.count) { pr.voteStatus = pr3.voteStatus; didChange = true; }
+                } else {
+                    console.warn("Unable to find pull request in all pull requests list:", pr.pullRequestId, pr);
                 }
 
                 let isFirst = false
@@ -422,30 +426,37 @@ function App(p: AppProps) {
             if (map[pullRequest.repository.name]) {
                 let repo = map[pullRequest.repository.name];
                 let isMapValid = repo.at && (repo.at > (nowAt - cacheDurationMsec));
-                if (isMapValid && repo && repo.id && repo.name && repo.defaultBranch) { continue; }
+                if (true && isMapValid && repo && repo.id && repo.name && repo.defaultBranch) { continue; }
             }
 
             if (sharedMap && sharedMap[pullRequest.repository.name]) {
                 let repo = sharedMap[pullRequest.repository.name];
                 let isSharedMapValid = repo.at && (repo.at > (nowAt - cacheDurationMsec));
-                if (isSharedMapValid && repo && repo.id && repo.name && repo.defaultBranch) {
+                if (true && isSharedMapValid && repo && repo.id && repo.name && repo.defaultBranch) {
                     // copy cached repo to local map
                     map[pullRequest.repository.name] = repo;
                     continue
                 }
             }
 
-            if (pullRequest.repository && pullRequest.repository.name && pullRequest.repository.url) {
-                let repo: Azdo.Repo = await Azdo.getAzdo(pullRequest.repository.url, p.bearerToken);
-                console.log("Repo:", pullRequest.repository.name, repo);
+            let prRepoUrl = pullRequest.repository.url;
+            if (!prRepoUrl) {
+                console.warn("No repository URL found for pull request:", pullRequest);
+                continue;
+            }
+
+            if (prRepoName && prRepoUrl) {
+                let repo: Azdo.Repo = await Azdo.getAzdo(prRepoUrl, p.bearerToken);
+                console.log("Repo:", prRepoName, repo);
                 let newRepo: Azdo.Repo = {
                     id: repo.id,
                     name: repo.name,
                     defaultBranch: repo.defaultBranch,
                     at: nowAt + Math.floor(Math.random() * 15 * 60 * 1000), // add up to 15 minutes of random jitter
                 }
-                map[pullRequest.repository.name] = newRepo;
-                sharedMap[pullRequest.repository.name] = newRepo;
+                map[prRepoName] = newRepo;
+                sharedMap[prRepoName] = newRepo;
+                (sharedMap[prRepoName] as any).url = prRepoUrl;
             } else {
                 console.warn("No repository found for pull request:", pullRequest);
             }
@@ -496,7 +507,7 @@ function App(p: AppProps) {
     function renderPills(pullRequest: SomePullRequest): React.JSX.Element {
         let voteStatus = pullRequest.voteStatus?.status;
         let voteCount = pullRequest.voteStatus?.count || 0;
-        let voteCountString = voteCount > 0 ? ` (${voteCount})` : "";
+        let voteCountString = voteCount > 1 ? ` (${voteCount})` : "";
 
         // TODO: approved by YOU!
         return <PillGroup className="padding-left-16 padding-right-16">

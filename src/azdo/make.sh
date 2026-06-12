@@ -1,6 +1,10 @@
+
 # az login --allow-no-subscriptions
 jq -r '.version |= "0.1." + (((split(".")[2] | tonumber) + 1) | tostring)' vss-extension.json > vss-extension.json.tmp
+NEXTVERSION=$(jq -r '.version' vss-extension.json.tmp)
 mv vss-extension.json.tmp vss-extension.json
+
+# npm install
 npm ci
 npm run build
 RESULT=$?
@@ -13,6 +17,14 @@ fi
 for file in dist/assets/*.css; do
   if ! grep -q '^@charset "UTF-8";' "$file"; then
     echo '@charset "UTF-8";' | cat - "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+  fi
+done
+
+# HACK: inject version
+for file in dist/**/*.js; do
+  if grep -q '__MERGEQUEUEVERSION__' "$file"; then
+    sed -i '' "s/__MERGEQUEUEVERSION__/$NEXTVERSION/g" "$file"
+    # cat $file
   fi
 done
 

@@ -17,15 +17,29 @@ import { ExtensionManagementRestClient } from "azure-devops-extension-api/Extens
 
 const publisher = "pingmint";
 const extensionName = "pingmint-extension";
+const collectionId = "mergequeue";
+const mergeQueueDocumentId = "mergequeue";
 
 export interface MergeQueueAppSingleton {
     bearerToken: string;
     appToken: string;
 }
 
+interface RepositoryInfo {
+    id: string;
+    name: string;
+}
+
 interface PullRequestInfo {
     id: number;
     title: string;
+    repository: RepositoryInfo;
+}
+
+interface PullRequestDocument {
+    id: string;
+    __etag: number;
+    pullRequests: PullRequestInfo[];
 }
 
 interface ReducerState {
@@ -129,21 +143,21 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
             let em = getExtensionManagementClient();
             extensionManagementClient.current = em;
-            let doc = await getDocument(em, "test-collection", "test-document");
-            if (!doc) {
-                console.log("MQ: init -> document not found, creating new one");
-                doc = await createDocument(em, "test-collection", "test-document", { foo: "bar" });
-                if (!doc) {
-                    console.error("MQ: init -> failed to create document");
-                    return;
-                }
-            }
-            console.log("MQ: init -> retrieved document", doc);
-            let doc2 = await updateDocument(em, "test-collection", "test-document", doc);
-            console.log("MQ: init -> updated document 2", doc2);
-            let doc3 = await updateDocument(em, "test-collection", "test-document", doc2);
-            console.log("MQ: init -> updated document 3", doc3);
 
+            var adoc = await getActivePullRequestDocument();
+            if (!adoc) {
+                console.error("Failed to procure active pull request document");
+                return;
+            }
+            console.log("MQ: init -> got active pull request document", adoc);
+
+            var adoc2 = await updateActivePullRequestDocument(adoc);
+            if (!adoc2) {
+                console.error("Failed to update active pull request document");
+                return;
+            }
+            console.log("MQ: init -> updated active pull request document", adoc2);
+            dispatch({ activePullRequests: adoc2.pullRequests})
         } catch (error) {
             console.error("MQ: init -> error occurred", error);
         }
@@ -189,15 +203,61 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 return {
                     ...pr, // HACK: smuggle full response
                     id: pr.pullRequestId,
-                    title: pr.title
+                    title: pr.title,
+                    repository: (function(): RepositoryInfo {
+                        if (!pr.repository || !pr.repository.id || !pr.repository.name) {
+                            // TODO: log and skip
+                            return {
+                                id: '00000000-0000-0000-0000-000000000000',
+                                name: 'Unknown'
+                            };
+                        }
+                        return {
+                            id: pr.repository.id,
+                            name: pr.repository.name
+                        }
+                    })(),
                 };
             });
 
             dispatch({ activePullRequests: prs2 });
             console.log("MQ: pull requests", prs2);
+
+            let adoc = await getActivePullRequestDocument();
+            if (adoc) {
+                adoc.pullRequests = prs2;
+                let adoc2 = await updateActivePullRequestDocument(adoc);
+                if (adoc2) {
+                    console.log("MQ: updated active pull request document", adoc2);
+                }
+            }
         } catch (error) {
             console.error("MQ: ticktock -> error occurred", error);
         }
+    }
+
+    async function getActivePullRequestDocument(): Promise<PullRequestDocument | undefined> {
+        let doc = await getDocument(extensionManagementClient.current, collectionId, mergeQueueDocumentId);
+        if (!doc) {
+            doc = await createDocument(extensionManagementClient.current, collectionId, mergeQueueDocumentId, {});
+            if (!doc) {
+                console.error("Failed to create active pull request document");
+                return undefined;
+            }
+        }
+        if (doc.id !== mergeQueueDocumentId) {
+            console.error("Wrong document ID", doc.id);
+            return undefined;
+        }
+        if (!doc.__etag) {
+            console.error("Failed to get document etag");
+            return undefined;
+        }
+        return doc;
+    }
+
+    async function updateActivePullRequestDocument(doc: PullRequestDocument): Promise<PullRequestDocument | undefined> {
+        return await updateDocument(extensionManagementClient.current, collectionId, mergeQueueDocumentId, doc);
     }
 
     function renderPageCommandBarItems(): IHeaderCommandBarItem[] {
@@ -225,7 +285,17 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     async function onEnqueuePullRequest() {
+        let doc = await getActivePullRequestDocument();
+        if (!doc) {
+            console.error("Failed to get active pull request document");
+            return;
+        }
 
+        let nextids = state.selectedActivePullRequestIds;
+        console.log("MQ: onEnqueuePullRequest -> next IDs", nextids);
+
+        let doc2 = await updateActivePullRequestDocument(doc);
+        console.log("MQ: onEnqueuePullRequest -> updated document", doc2);
     }
 
     function onSelectMergeQueuePullRequestIds(ids: number[]) {
@@ -251,8 +321,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 headerClassName=""
                 headerCommandBarItems={renderMergeQueueCommandBarItems()}
             >
-                <PullRequestList 
-                    pullRequests={state.mergeQueuePullRequests} 
+                <PullRequestList
+                    pullRequests={state.mergeQueuePullRequests}
                     selectedIds={state.selectedMergeQueuePullRequestIds}
                     onSelectPullRequestIds={onSelectMergeQueuePullRequestIds}
                 />
@@ -265,8 +335,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 headerClassName=""
                 headerCommandBarItems={renderAllPullRequestsCommandBarItems()}
             >
-                <PullRequestList 
-                    pullRequests={state.activePullRequests} 
+                <PullRequestList
+                    pullRequests={state.activePullRequests}
                     selectedIds={state.selectedActivePullRequestIds}
                     onSelectPullRequestIds={onSelectActivePullRequestIds}
                 />
@@ -283,7 +353,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 export interface PullRequestListProps {
     pullRequests: any[]; // TODO: pull request type
     selectedIds: number[];
-    onSelectPullRequestIds: (id: number[]) => void;    
+    onSelectPullRequestIds: (id: number[]) => void;
 }
 
 export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequestIds }: PullRequestListProps) {
@@ -314,6 +384,7 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
             >
                 <div className="flex-row rhythm-horizontal-8">
                     <div>{item.pullRequestId}</div>
+                    <div>{item.repository.name}</div>
                     <div>{item.title}</div>
                     <div>{selectedIds.length > 0 && selectedIds.includes(item.pullRequestId) ? "Selected" : ""}</div>
                 </div>

@@ -19,6 +19,7 @@ const publisher = "pingmint";
 const extensionName = "pingmint-extension";
 const collectionId = "mergequeue";
 const mergeQueueDocumentId = "mergequeue";
+const activePullRequestsDocumentId = "activepullrequests";
 
 export interface MergeQueueAppSingleton {
     bearerToken: string;
@@ -50,6 +51,7 @@ interface ReducerState {
 }
 
 interface ReducerAction {
+    mergeQueuePullRequests?: PullRequestInfo[];
     activePullRequests?: PullRequestInfo[];
     enqueuePullRequests?: PullRequestInfo[];
     selectedMergeQueuePullRequestIds?: number[];
@@ -78,9 +80,16 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         next.selectedActivePullRequestIds = action.selectedActivePullRequestIds;
     }
 
+    if (action.mergeQueuePullRequests) {
+        console.log("MQ: reducer -> updating merge queue pull requests", action.mergeQueuePullRequests);
+        next.mergeQueuePullRequests = action.mergeQueuePullRequests;
+        // TODO: confirm selections
+    }
+
     if (action.activePullRequests) {
         console.log("MQ: reducer -> updating active pull requests", action.activePullRequests);
         next.activePullRequests = action.activePullRequests;
+        // TODO: confirm selections
     }
 
     return next;
@@ -144,20 +153,27 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             let em = getExtensionManagementClient();
             extensionManagementClient.current = em;
 
-            var adoc = await getActivePullRequestDocument();
-            if (!adoc) {
-                console.error("Failed to procure active pull request document");
-                return;
-            }
-            console.log("MQ: init -> got active pull request document", adoc);
+            // TODO: REMOVE THIS
+            // await extensionManagementClient.current.deleteDocumentByName(
+            //     publisher,
+            //     extensionName,
+            //     "Default",
+            //     "Current",
+            //     collectionId,
+            //     mergeQueueDocumentId
+            // );
 
-            var adoc2 = await updateActivePullRequestDocument(adoc);
-            if (!adoc2) {
-                console.error("Failed to update active pull request document");
-                return;
+            var mdoc = await getMergeQueueDocument();
+            if (mdoc) {
+                dispatch({ mergeQueuePullRequests: mdoc.pullRequests });
             }
-            console.log("MQ: init -> updated active pull request document", adoc2);
-            dispatch({ activePullRequests: adoc2.pullRequests})
+
+            var adoc = await getActivePullRequestDocument();
+            if (adoc) {
+                dispatch({ activePullRequests: adoc.pullRequests });
+            }
+
+            console.log("MQ: init -> done");
         } catch (error) {
             console.error("MQ: init -> error occurred", error);
         }
@@ -204,7 +220,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     ...pr, // HACK: smuggle full response
                     id: pr.pullRequestId,
                     title: pr.title,
-                    repository: (function(): RepositoryInfo {
+                    repository: (function (): RepositoryInfo {
                         if (!pr.repository || !pr.repository.id || !pr.repository.name) {
                             // TODO: log and skip
                             return {
@@ -236,7 +252,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
     }
 
-    async function getActivePullRequestDocument(): Promise<PullRequestDocument | undefined> {
+    async function getMergeQueueDocument(): Promise<PullRequestDocument | undefined> {
         let doc = await getDocument(extensionManagementClient.current, collectionId, mergeQueueDocumentId);
         if (!doc) {
             doc = await createDocument(extensionManagementClient.current, collectionId, mergeQueueDocumentId, {});
@@ -256,7 +272,32 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         return doc;
     }
 
+    // TODO: generalize getter
+    async function getActivePullRequestDocument(): Promise<PullRequestDocument | undefined> {
+        let doc = await getDocument(extensionManagementClient.current, collectionId, activePullRequestsDocumentId);
+        if (!doc) {
+            doc = await createDocument(extensionManagementClient.current, collectionId, activePullRequestsDocumentId, {});
+            if (!doc) {
+                console.error("Failed to create active pull request document");
+                return undefined;
+            }
+        }
+        if (doc.id !== activePullRequestsDocumentId) {
+            console.error("Wrong document ID", doc.id);
+            return undefined;
+        }
+        if (!doc.__etag) {
+            console.error("Failed to get document etag");
+            return undefined;
+        }
+        return doc;
+    }
+
     async function updateActivePullRequestDocument(doc: PullRequestDocument): Promise<PullRequestDocument | undefined> {
+        return await updateDocument(extensionManagementClient.current, collectionId, activePullRequestsDocumentId, doc);
+    }
+
+    async function updateMergeQueueDocument(doc: PullRequestDocument): Promise<PullRequestDocument | undefined> {
         return await updateDocument(extensionManagementClient.current, collectionId, mergeQueueDocumentId, doc);
     }
 
@@ -285,17 +326,42 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     async function onEnqueuePullRequest() {
-        let doc = await getActivePullRequestDocument();
-        if (!doc) {
+        let adoc = await getActivePullRequestDocument();
+        if (!adoc) {
             console.error("Failed to get active pull request document");
             return;
         }
+        let aprs = adoc.pullRequests || [];
+        dispatch({ activePullRequests: aprs });
+
+        let mdoc = await getMergeQueueDocument();
+        if (!mdoc) {
+            console.error("Failed to get merge queue document");
+            return;
+        }
+        let mprs = mdoc.pullRequests || [];
+        dispatch({ mergeQueuePullRequests: mprs });
 
         let nextids = state.selectedActivePullRequestIds;
-        console.log("MQ: onEnqueuePullRequest -> next IDs", nextids);
+        let nextprs = aprs.filter(pr => nextids.includes(pr.id));
+        console.log("MQ: onEnqueuePullRequest -> next pull requests", nextids, nextprs);
 
-        let doc2 = await updateActivePullRequestDocument(doc);
-        console.log("MQ: onEnqueuePullRequest -> updated document", doc2);
+        // exclude nextprs that are already in the merge queue
+        let filteredprs = nextprs.filter(pr => !mprs.some(mpr => mpr.id === pr.id));
+        console.log("MQ: onEnqueuePullRequest -> filtered pull requests", filteredprs);
+        if (filteredprs.length === 0) {
+            console.warn("MQ: onEnqueuePullRequest -> no pull requests to enqueue");
+            return;
+        }
+
+        mdoc.pullRequests = [...mprs, ...filteredprs];
+        let updatedMdoc = await updateMergeQueueDocument(mdoc);
+        if (!updatedMdoc) {
+            console.error("MQ: onEnqueuePullRequest -> failed to update merge queue document");
+            return;
+        }
+        console.log("MQ: onEnqueuePullRequest -> updated merge queue document", updatedMdoc);
+        dispatch({ mergeQueuePullRequests: updatedMdoc.pullRequests });
     }
 
     function onSelectMergeQueuePullRequestIds(ids: number[]) {

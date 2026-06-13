@@ -14,7 +14,7 @@
 			"problemMatcher": "$msCompile",
 			"presentation": {
 				"clear": true,
-				"reveal": "always"
+				"reveal": "silent"
 			}
 		},
 		{
@@ -30,7 +30,7 @@
 			"problemMatcher": "$msCompile",
 			"presentation": {
 				"clear": true,
-				"reveal": "always"
+				"reveal": "silent"
 			}
 		}
 	]

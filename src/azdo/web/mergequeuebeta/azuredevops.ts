@@ -1,11 +1,13 @@
 import * as ClientAPI from 'azure-devops-extension-api/Common/Client';
 import * as BuildClientAPI from 'azure-devops-extension-api/Build/BuildClient';
 import * as GetClientAPI from 'azure-devops-extension-api/Git/GitClient';
+import * as ExtMgmtAPI from 'azure-devops-extension-api/ExtensionManagement/ExtensionManagementClient'
 import * as SDK from 'azure-devops-extension-sdk';
 import { IProjectPageService } from 'azure-devops-extension-api/Common';
 
 export function getBuildClient() { return ClientAPI.getClient(BuildClientAPI.BuildRestClient); }
 export function getGitClient() { return ClientAPI.getClient(GetClientAPI.GitRestClient); }
+export function getExtensionManagementClient() { return ClientAPI.getClient(ExtMgmtAPI.ExtensionManagementRestClient); }
 
 export interface TenantInfo {
     organization: string;
@@ -31,4 +33,5 @@ export async function getAzdoInfo(): Promise<TenantInfo | undefined> {
         project: project
     };
 }
+
 

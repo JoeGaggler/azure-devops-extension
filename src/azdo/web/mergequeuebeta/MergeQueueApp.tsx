@@ -31,15 +31,38 @@ interface PullRequestInfo {
 interface ReducerState {
     mergeQueuePullRequests: PullRequestInfo[];
     activePullRequests: PullRequestInfo[];
+    selectedMergeQueuePullRequestIds: number[];
+    selectedActivePullRequestIds: number[];
 }
 
 interface ReducerAction {
     activePullRequests?: PullRequestInfo[];
     enqueuePullRequests?: PullRequestInfo[];
+    selectedMergeQueuePullRequestIds?: number[];
+    selectedActivePullRequestIds?: number[];
+}
+
+function applySelections<T, TItem>(listSelection: ListSelection, all: T[], accessor: (t: T) => TItem, ids: TItem[]) {
+    listSelection.clear();
+    for (let id of ids) {
+        let idx = all.findIndex((item) => accessor(item) === id);
+        if (idx < 0) { continue; }
+        listSelection.select(idx, 1, true, true);
+    }
 }
 
 function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     let next = { ...state };
+
+    if (action.selectedMergeQueuePullRequestIds) {
+        console.log("MQ: reducer -> updating selected merge queue pull request IDs", action.selectedMergeQueuePullRequestIds);
+        next.selectedMergeQueuePullRequestIds = action.selectedMergeQueuePullRequestIds;
+    }
+
+    if (action.selectedActivePullRequestIds) {
+        console.log("MQ: reducer -> updating selected active pull request IDs", action.selectedActivePullRequestIds);
+        next.selectedActivePullRequestIds = action.selectedActivePullRequestIds;
+    }
 
     if (action.activePullRequests) {
         console.log("MQ: reducer -> updating active pull requests", action.activePullRequests);
@@ -87,6 +110,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     const [state, dispatch] = React.useReducer<(state: ReducerState, action: ReducerAction) => ReducerState>(reducer, {
         mergeQueuePullRequests: [],
         activePullRequests: [],
+        selectedMergeQueuePullRequestIds: [],
+        selectedActivePullRequestIds: []
     })
 
     // initialize the app
@@ -191,12 +216,24 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             {
                 id: "enqueue",
                 text: "Enqueue",
-                onActivate: () => { /* TODO: Implement enqueue functionality */ },
+                onActivate: () => { onEnqueuePullRequest(); },
                 isPrimary: true,
                 important: true,
                 disabled: false
             }
         ];
+    }
+
+    async function onEnqueuePullRequest() {
+
+    }
+
+    function onSelectMergeQueuePullRequestIds(ids: number[]) {
+        dispatch({ selectedMergeQueuePullRequestIds: ids });
+    }
+
+    function onSelectActivePullRequestIds(ids: number[]) {
+        dispatch({ selectedActivePullRequestIds: ids });
     }
 
     return (
@@ -214,7 +251,11 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 headerClassName=""
                 headerCommandBarItems={renderMergeQueueCommandBarItems()}
             >
-                <PullRequestList pullRequests={state.mergeQueuePullRequests} />
+                <PullRequestList 
+                    pullRequests={state.mergeQueuePullRequests} 
+                    selectedIds={state.selectedMergeQueuePullRequestIds}
+                    onSelectPullRequestIds={onSelectMergeQueuePullRequestIds}
+                />
             </Card>
 
             <Card
@@ -224,7 +265,11 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 headerClassName=""
                 headerCommandBarItems={renderAllPullRequestsCommandBarItems()}
             >
-                <PullRequestList pullRequests={state.activePullRequests} />
+                <PullRequestList 
+                    pullRequests={state.activePullRequests} 
+                    selectedIds={state.selectedActivePullRequestIds}
+                    onSelectPullRequestIds={onSelectActivePullRequestIds}
+                />
             </Card>
 
             <div className="text-neutral-30 flex-row padding-4">
@@ -237,14 +282,20 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
 export interface PullRequestListProps {
     pullRequests: any[]; // TODO: pull request type
+    selectedIds: number[];
+    onSelectPullRequestIds: (id: number[]) => void;    
 }
 
-export function PullRequestList({ pullRequests }: PullRequestListProps) {
+export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequestIds }: PullRequestListProps) {
     let listSelection = new ListSelection(true);
+
+    // let [selectedPullRequests, setSelectedPullRequests] = useState<number[]>([]);
+
+    applySelections(listSelection, pullRequests, (pr) => pr.pullRequestId, selectedIds);
 
     function onSelectRow(row: IListRow<any>) { // TODO: pull request type
         console.log("NextRunTab -> targetPipelineSelect", row);
-        // dispatch({ selectTargetPipeline: row.data });
+        onSelectPullRequestIds([row.data.pullRequestId]);
     }
 
     function renderRow(
@@ -264,6 +315,7 @@ export function PullRequestList({ pullRequests }: PullRequestListProps) {
                 <div className="flex-row rhythm-horizontal-8">
                     <div>{item.pullRequestId}</div>
                     <div>{item.title}</div>
+                    <div>{selectedIds.length > 0 && selectedIds.includes(item.pullRequestId) ? "Selected" : ""}</div>
                 </div>
             </ListItem>
         )

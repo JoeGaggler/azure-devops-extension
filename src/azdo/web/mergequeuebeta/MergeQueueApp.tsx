@@ -349,7 +349,34 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     async function onDequeuePullRequest() {
-        // TODO: implement
+        let adoc = await getActivePullRequestDocument();
+        if (!adoc) {
+            console.error("Failed to get active pull request document");
+            return;
+        }
+        let aprs = adoc.pullRequests || [];
+        dispatch({ activePullRequests: aprs });
+
+        let mdoc = await getMergeQueueDocument();
+        if (!mdoc) {
+            console.error("Failed to get merge queue document");
+            return;
+        }
+        let mitems = mdoc.mergeQueueItems || [];
+        dispatch({ mergeQueueItems: mitems });
+
+        let oldids = state.selectedMergeQueuePullRequestIds;
+        let newMergeQueueItems = mitems.filter(m => !oldids.includes(m.pr.id));
+        console.log("MQ: onDequeuePullRequest -> new pull requests", newMergeQueueItems);
+
+        mdoc.mergeQueueItems = [...newMergeQueueItems];
+        let updatedMdoc = await updateMergeQueueDocument(mdoc);
+        if (!updatedMdoc) {
+            console.error("MQ: onDequeuePullRequest -> failed to update merge queue document");
+            return;
+        }
+        console.log("MQ: onDequeuePullRequest -> updated merge queue document", updatedMdoc);
+        dispatch({ mergeQueueItems: updatedMdoc.mergeQueueItems });
     }
 
     async function onEnqueuePullRequest() {

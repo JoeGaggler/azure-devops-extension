@@ -14,6 +14,7 @@ import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo } f
 
 import { GitPullRequestSearchCriteria, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
 import { ExtensionManagementRestClient } from "azure-devops-extension-api/ExtensionManagement/ExtensionManagementClient";
+import { Icon, IconSize } from "azure-devops-ui/Icon";
 
 const publisher = "pingmint";
 const extensionName = "pingmint-extension";
@@ -38,7 +39,7 @@ interface PullRequestInfo {
 }
 
 interface MergeQueueItemInfo {
-    pr: PullRequestInfo;    
+    pr: PullRequestInfo;
 }
 
 
@@ -428,6 +429,28 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         onEnqueuePullRequest();
     }
 
+    function mapMergeQueueItemToPullRequestListItems(): PullRequestListItem[] {
+        return state.mergeQueueItems.map((item): PullRequestListItem => {
+            return {
+                icon: "Starburst",
+                pullRequestId: item.pr.id,
+                repository: item.pr.repository.name,
+                title: item.pr.title
+            };
+        });
+    }
+
+    function mapActivePullRequestsToPullRequestListItems(): PullRequestListItem[] {
+        return state.activePullRequests.map((pr): PullRequestListItem => {
+            return {
+                icon: "CircleRing",
+                pullRequestId: pr.id,
+                repository: pr.repository.name,
+                title: pr.title
+            };
+        });
+    }
+
     return (
         <Page className="">
             <Header
@@ -444,7 +467,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 headerCommandBarItems={renderMergeQueueCommandBarItems()}
             >
                 <PullRequestList
-                    pullRequests={state.mergeQueuePullRequests}
+                    pullRequests={mapMergeQueueItemToPullRequestListItems()}
                     selectedIds={state.selectedMergeQueuePullRequestIds}
                     onSelectPullRequestIds={onSelectMergeQueuePullRequestIds}
                 />
@@ -458,7 +481,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 headerCommandBarItems={renderAllPullRequestsCommandBarItems()}
             >
                 <PullRequestList
-                    pullRequests={state.activePullRequests}
+                    pullRequests={mapActivePullRequestsToPullRequestListItems()}
                     selectedIds={state.selectedActivePullRequestIds}
                     onSelectPullRequestIds={onSelectActivePullRequestIds}
                     onActivatePullRequest={onActivateActivePullRequest}
@@ -469,12 +492,23 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 <div className="flex-grow"></div>
                 <div>__MERGEQUEUEVERSION__</div>
             </div>
+
+            <div>
+                {AllIcons()}
+            </div>
         </Page>
     );
 }
 
+export interface PullRequestListItem {
+    pullRequestId: number;
+    repository: string;
+    title: string;
+    icon: string;
+}
+
 export interface PullRequestListProps {
-    pullRequests: any[]; // TODO: pull request type
+    pullRequests: PullRequestListItem[];
     selectedIds: number[];
     onSelectPullRequestIds: (id: number[]) => void;
     onActivatePullRequest?: (id: number) => void;
@@ -485,12 +519,12 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
 
     applySelections(listSelection, pullRequests, (pr) => pr.pullRequestId, selectedIds);
 
-    function onSelectRow(row: IListRow<any>) { // TODO: pull request type
+    function onSelectRow(row: IListRow<PullRequestListItem>) {
         console.log("NextRunTab -> targetPipelineSelect", row);
         onSelectPullRequestIds([row.data.pullRequestId]);
     }
 
-    function onActivateRow(row: IListRow<any>) { // TODO: pull request type
+    function onActivateRow(row: IListRow<PullRequestListItem>) {
         console.log("NextRunTab -> targetPipelineActivate", row);
         if (onActivatePullRequest) {
             onActivatePullRequest(row.data.pullRequestId);
@@ -499,8 +533,8 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
 
     function renderRow(
         index: number,
-        item: any, // TODO: pull request type
-        details: IListItemDetails<any>,
+        item: PullRequestListItem,
+        details: IListItemDetails<PullRequestListItem>,
         key?: string
     ): JSX.Element {
         if (!item) { return <></> }
@@ -512,8 +546,9 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
                 details={details}
             >
                 <div className="flex-row rhythm-horizontal-8">
+                    <Icon iconName={item.icon} size={IconSize.small} />
                     <div>{item.pullRequestId}</div>
-                    <div>{item.repository.name}</div>
+                    <div>{item.repository}</div>
                     <div>{item.title}</div>
                     <div>{selectedIds.length > 0 && selectedIds.includes(item.pullRequestId) ? "Selected" : ""}</div>
                 </div>
@@ -533,4 +568,492 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
             />
         </div>
     </>
+}
+
+export function AllIcons() {
+    return (
+        <div className="flex-column rhythm-vertical-16">
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"Accept"} size={IconSize.large} tooltipProps={{ text: "Accept" }} />
+                <Icon iconName={"AccountManagement"} size={IconSize.large} tooltipProps={{ text: "AccountManagement" }} />
+                <Icon iconName={"Accounts"} size={IconSize.large} tooltipProps={{ text: "Accounts" }} />
+                <Icon iconName={"ActivateOrders"} size={IconSize.large} tooltipProps={{ text: "ActivateOrders" }} />
+                <Icon iconName={"ActivityFeed"} size={IconSize.large} tooltipProps={{ text: "ActivityFeed" }} />
+                <Icon iconName={"Add"} size={IconSize.large} tooltipProps={{ text: "Add" }} />
+                <Icon iconName={"AddFriend"} size={IconSize.large} tooltipProps={{ text: "AddFriend" }} />
+                <Icon iconName={"AddGroup"} size={IconSize.large} tooltipProps={{ text: "AddGroup" }} />
+                <Icon iconName={"AddReaction"} size={IconSize.large} tooltipProps={{ text: "AddReaction" }} />
+                <Icon iconName={"AddTo"} size={IconSize.large} tooltipProps={{ text: "AddTo" }} />
+                <Icon iconName={"Airplane"} size={IconSize.large} tooltipProps={{ text: "Airplane" }} />
+                <Icon iconName={"AirplaneSolid"} size={IconSize.large} tooltipProps={{ text: "AirplaneSolid" }} />
+                <Icon iconName={"AlertSolid"} size={IconSize.large} tooltipProps={{ text: "AlertSolid" }} />
+                <Icon iconName={"AlignJustify"} size={IconSize.large} tooltipProps={{ text: "AlignJustify" }} />
+                <Icon iconName={"AnalyticsView"} size={IconSize.large} tooltipProps={{ text: "AnalyticsView" }} />
+                <Icon iconName={"AppIconDefault"} size={IconSize.large} tooltipProps={{ text: "AppIconDefault" }} />
+                <Icon iconName={"ArrowDownRightMirrored8"} size={IconSize.large} tooltipProps={{ text: "ArrowDownRightMirrored8" }} />
+                <Icon iconName={"ArrowTallUpRight"} size={IconSize.large} tooltipProps={{ text: "ArrowTallUpRight" }} />
+                <Icon iconName={"ArrowUpRight8"} size={IconSize.large} tooltipProps={{ text: "ArrowUpRight8" }} />
+                <Icon iconName={"Ascending"} size={IconSize.large} tooltipProps={{ text: "Ascending" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"Assign"} size={IconSize.large} tooltipProps={{ text: "Assign" }} />
+                <Icon iconName={"AsteriskSolid"} size={IconSize.large} tooltipProps={{ text: "AsteriskSolid" }} />
+                <Icon iconName={"Attach"} size={IconSize.large} tooltipProps={{ text: "Attach" }} />
+                <Icon iconName={"AwayStatus"} size={IconSize.large} tooltipProps={{ text: "AwayStatus" }} />
+                <Icon iconName={"Back"} size={IconSize.large} tooltipProps={{ text: "Back" }} />
+                <Icon iconName={"Backlog"} size={IconSize.large} tooltipProps={{ text: "Backlog" }} />
+                <Icon iconName={"BacklogBoard"} size={IconSize.large} tooltipProps={{ text: "BacklogBoard" }} />
+                <Icon iconName={"BacklogList"} size={IconSize.large} tooltipProps={{ text: "BacklogList" }} />
+                <Icon iconName={"BackToWindow"} size={IconSize.large} tooltipProps={{ text: "BackToWindow" }} />
+                <Icon iconName={"BankSolid"} size={IconSize.large} tooltipProps={{ text: "BankSolid" }} />
+                <Icon iconName={"BlockContact"} size={IconSize.large} tooltipProps={{ text: "BlockContact" }} />
+                <Icon iconName={"Blocked"} size={IconSize.large} tooltipProps={{ text: "Blocked" }} />
+                <Icon iconName={"Blocked2"} size={IconSize.large} tooltipProps={{ text: "Blocked2" }} />
+                <Icon iconName={"Blocked2Solid"} size={IconSize.large} tooltipProps={{ text: "Blocked2Solid" }} />
+                <Icon iconName={"BlockedSite"} size={IconSize.large} tooltipProps={{ text: "BlockedSite" }} />
+                <Icon iconName={"BlockedSolid"} size={IconSize.large} tooltipProps={{ text: "BlockedSolid" }} />
+                <Icon iconName={"Bold"} size={IconSize.large} tooltipProps={{ text: "Bold" }} />
+                <Icon iconName={"BranchCompare"} size={IconSize.large} tooltipProps={{ text: "BranchCompare" }} />
+                <Icon iconName={"BranchFork2"} size={IconSize.large} tooltipProps={{ text: "BranchFork2" }} />
+                <Icon iconName={"BranchMerge"} size={IconSize.large} tooltipProps={{ text: "BranchMerge" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"BranchMerged"} size={IconSize.large} tooltipProps={{ text: "BranchMerged" }} />
+                <Icon iconName={"BranchPullRequest"} size={IconSize.large} tooltipProps={{ text: "BranchPullRequest" }} />
+                <Icon iconName={"BranchRequestClosed"} size={IconSize.large} tooltipProps={{ text: "BranchRequestClosed" }} />
+                <Icon iconName={"BranchRequestDraft"} size={IconSize.large} tooltipProps={{ text: "BranchRequestDraft" }} />
+                <Icon iconName={"BuildQueue"} size={IconSize.large} tooltipProps={{ text: "BuildQueue" }} />
+                <Icon iconName={"BuildQueueNew"} size={IconSize.large} tooltipProps={{ text: "BuildQueueNew" }} />
+                <Icon iconName={"BulletedList"} size={IconSize.large} tooltipProps={{ text: "BulletedList" }} />
+                <Icon iconName={"CalculatorAddition"} size={IconSize.large} tooltipProps={{ text: "CalculatorAddition" }} />
+                <Icon iconName={"Calendar"} size={IconSize.large} tooltipProps={{ text: "Calendar" }} />
+                <Icon iconName={"Camera"} size={IconSize.large} tooltipProps={{ text: "Camera" }} />
+                <Icon iconName={"Cancel"} size={IconSize.large} tooltipProps={{ text: "Cancel" }} />
+                <Icon iconName={"CannedChat"} size={IconSize.large} tooltipProps={{ text: "CannedChat" }} />
+                <Icon iconName={"Car"} size={IconSize.large} tooltipProps={{ text: "Car" }} />
+                <Icon iconName={"CaretSolidDown"} size={IconSize.large} tooltipProps={{ text: "CaretSolidDown" }} />
+                <Icon iconName={"Certificate"} size={IconSize.large} tooltipProps={{ text: "Certificate" }} />
+                <Icon iconName={"Chart"} size={IconSize.large} tooltipProps={{ text: "Chart" }} />
+                <Icon iconName={"ChartSeries"} size={IconSize.large} tooltipProps={{ text: "ChartSeries" }} />
+                <Icon iconName={"Chat"} size={IconSize.large} tooltipProps={{ text: "Chat" }} />
+                <Icon iconName={"ChatInviteFriend"} size={IconSize.large} tooltipProps={{ text: "ChatInviteFriend" }} />
+                <Icon iconName={"CheckboxComposite"} size={IconSize.large} tooltipProps={{ text: "CheckboxComposite" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"CheckboxCompositeReversed"} size={IconSize.large} tooltipProps={{ text: "CheckboxCompositeReversed" }} />
+                <Icon iconName={"CheckList"} size={IconSize.large} tooltipProps={{ text: "CheckList" }} />
+                <Icon iconName={"CheckMark"} size={IconSize.large} tooltipProps={{ text: "CheckMark" }} />
+                <Icon iconName={"ChevronDown"} size={IconSize.large} tooltipProps={{ text: "ChevronDown" }} />
+                <Icon iconName={"ChevronFold10"} size={IconSize.large} tooltipProps={{ text: "ChevronFold10" }} />
+                <Icon iconName={"ChevronLeft"} size={IconSize.large} tooltipProps={{ text: "ChevronLeft" }} />
+                <Icon iconName={"ChevronRight"} size={IconSize.large} tooltipProps={{ text: "ChevronRight" }} />
+                <Icon iconName={"ChevronUnfold10"} size={IconSize.large} tooltipProps={{ text: "ChevronUnfold10" }} />
+                <Icon iconName={"ChevronUp"} size={IconSize.large} tooltipProps={{ text: "ChevronUp" }} />
+                <Icon iconName={"ChromeClose"} size={IconSize.large} tooltipProps={{ text: "ChromeClose" }} />
+                <Icon iconName={"CircleFill"} size={IconSize.large} tooltipProps={{ text: "CircleFill" }} />
+                <Icon iconName={"CirclePause"} size={IconSize.large} tooltipProps={{ text: "CirclePause" }} />
+                <Icon iconName={"CirclePauseSolid"} size={IconSize.large} tooltipProps={{ text: "CirclePauseSolid" }} />
+                <Icon iconName={"CirclePlus"} size={IconSize.large} tooltipProps={{ text: "CirclePlus" }} />
+                <Icon iconName={"CircleRing"} size={IconSize.large} tooltipProps={{ text: "CircleRing" }} />
+                <Icon iconName={"CircleShapeSolid"} size={IconSize.large} tooltipProps={{ text: "CircleShapeSolid" }} />
+                <Icon iconName={"CircleStop"} size={IconSize.large} tooltipProps={{ text: "CircleStop" }} />
+                <Icon iconName={"CircleStopSolid"} size={IconSize.large} tooltipProps={{ text: "CircleStopSolid" }} />
+                <Icon iconName={"CityNext"} size={IconSize.large} tooltipProps={{ text: "CityNext" }} />
+                <Icon iconName={"Clear"} size={IconSize.large} tooltipProps={{ text: "Clear" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"ClearFilter"} size={IconSize.large} tooltipProps={{ text: "ClearFilter" }} />
+                <Icon iconName={"ClearFormatting"} size={IconSize.large} tooltipProps={{ text: "ClearFormatting" }} />
+                <Icon iconName={"Clicked"} size={IconSize.large} tooltipProps={{ text: "Clicked" }} />
+                <Icon iconName={"ClipboardSolid"} size={IconSize.large} tooltipProps={{ text: "ClipboardSolid" }} />
+                <Icon iconName={"Clock"} size={IconSize.large} tooltipProps={{ text: "Clock" }} />
+                <Icon iconName={"CloneToDesktop"} size={IconSize.large} tooltipProps={{ text: "CloneToDesktop" }} />
+                <Icon iconName={"ClosePane"} size={IconSize.large} tooltipProps={{ text: "ClosePane" }} />
+                <Icon iconName={"CloudDownload"} size={IconSize.large} tooltipProps={{ text: "CloudDownload" }} />
+                <Icon iconName={"CloudUpload"} size={IconSize.large} tooltipProps={{ text: "CloudUpload" }} />
+                <Icon iconName={"CloudWeather"} size={IconSize.large} tooltipProps={{ text: "CloudWeather" }} />
+                <Icon iconName={"Cloudy"} size={IconSize.large} tooltipProps={{ text: "Cloudy" }} />
+                <Icon iconName={"Code"} size={IconSize.large} tooltipProps={{ text: "Code" }} />
+                <Icon iconName={"CoffeeScript"} size={IconSize.large} tooltipProps={{ text: "CoffeeScript" }} />
+                <Icon iconName={"CollegeFootball"} size={IconSize.large} tooltipProps={{ text: "CollegeFootball" }} />
+                <Icon iconName={"Color"} size={IconSize.large} tooltipProps={{ text: "Color" }} />
+                <Icon iconName={"ColorSolid"} size={IconSize.large} tooltipProps={{ text: "ColorSolid" }} />
+                <Icon iconName={"Comment"} size={IconSize.large} tooltipProps={{ text: "Comment" }} />
+                <Icon iconName={"CommentAdd"} size={IconSize.large} tooltipProps={{ text: "CommentAdd" }} />
+                <Icon iconName={"Completed"} size={IconSize.large} tooltipProps={{ text: "Completed" }} />
+                <Icon iconName={"CompletedSolid"} size={IconSize.large} tooltipProps={{ text: "CompletedSolid" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"Configuration"} size={IconSize.large} tooltipProps={{ text: "Configuration" }} />
+                <Icon iconName={"ConnectContacts"} size={IconSize.large} tooltipProps={{ text: "ConnectContacts" }} />
+                <Icon iconName={"ConstructionConeSolid"} size={IconSize.large} tooltipProps={{ text: "ConstructionConeSolid" }} />
+                <Icon iconName={"Contact"} size={IconSize.large} tooltipProps={{ text: "Contact" }} />
+                <Icon iconName={"ContactCard"} size={IconSize.large} tooltipProps={{ text: "ContactCard" }} />
+                <Icon iconName={"ContactInfo"} size={IconSize.large} tooltipProps={{ text: "ContactInfo" }} />
+                <Icon iconName={"Copy"} size={IconSize.large} tooltipProps={{ text: "Copy" }} />
+                <Icon iconName={"CPU"} size={IconSize.large} tooltipProps={{ text: "CPU" }} />
+                <Icon iconName={"CrownSolid"} size={IconSize.large} tooltipProps={{ text: "CrownSolid" }} />
+                <Icon iconName={"CSharpLanguage"} size={IconSize.large} tooltipProps={{ text: "CSharpLanguage" }} />
+                <Icon iconName={"CustomList"} size={IconSize.large} tooltipProps={{ text: "CustomList" }} />
+                <Icon iconName={"DashKey"} size={IconSize.large} tooltipProps={{ text: "DashKey" }} />
+                <Icon iconName={"Database"} size={IconSize.large} tooltipProps={{ text: "Database" }} />
+                <Icon iconName={"DateTime2"} size={IconSize.large} tooltipProps={{ text: "DateTime2" }} />
+                <Icon iconName={"DecisionSolid"} size={IconSize.large} tooltipProps={{ text: "DecisionSolid" }} />
+                <Icon iconName={"Delete"} size={IconSize.large} tooltipProps={{ text: "Delete" }} />
+                <Icon iconName={"Descending"} size={IconSize.large} tooltipProps={{ text: "Descending" }} />
+                <Icon iconName={"Diagnostic"} size={IconSize.large} tooltipProps={{ text: "Diagnostic" }} />
+                <Icon iconName={"Diamond2Solid"} size={IconSize.large} tooltipProps={{ text: "Diamond2Solid" }} />
+                <Icon iconName={"DiamondSolid"} size={IconSize.large} tooltipProps={{ text: "DiamondSolid" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"Dictionary"} size={IconSize.large} tooltipProps={{ text: "Dictionary" }} />
+                <Icon iconName={"DictionaryRemove"} size={IconSize.large} tooltipProps={{ text: "DictionaryRemove" }} />
+                <Icon iconName={"DiffInline"} size={IconSize.large} tooltipProps={{ text: "DiffInline" }} />
+                <Icon iconName={"DiffSideBySide"} size={IconSize.large} tooltipProps={{ text: "DiffSideBySide" }} />
+                <Icon iconName={"Dislike"} size={IconSize.large} tooltipProps={{ text: "Dislike" }} />
+                <Icon iconName={"DockRight"} size={IconSize.large} tooltipProps={{ text: "DockRight" }} />
+                <Icon iconName={"Documentation"} size={IconSize.large} tooltipProps={{ text: "Documentation" }} />
+                <Icon iconName={"DocumentSearch"} size={IconSize.large} tooltipProps={{ text: "DocumentSearch" }} />
+                <Icon iconName={"DocumentSet"} size={IconSize.large} tooltipProps={{ text: "DocumentSet" }} />
+                <Icon iconName={"DoubleChevronDown"} size={IconSize.large} tooltipProps={{ text: "DoubleChevronDown" }} />
+                <Icon iconName={"DoubleChevronLeft"} size={IconSize.large} tooltipProps={{ text: "DoubleChevronLeft" }} />
+                <Icon iconName={"DoubleChevronRight"} size={IconSize.large} tooltipProps={{ text: "DoubleChevronRight" }} />
+                <Icon iconName={"DoubleChevronUp"} size={IconSize.large} tooltipProps={{ text: "DoubleChevronUp" }} />
+                <Icon iconName={"Down"} size={IconSize.large} tooltipProps={{ text: "Down" }} />
+                <Icon iconName={"Download"} size={IconSize.large} tooltipProps={{ text: "Download" }} />
+                <Icon iconName={"DownloadDocument"} size={IconSize.large} tooltipProps={{ text: "DownloadDocument" }} />
+                <Icon iconName={"EatDrink"} size={IconSize.large} tooltipProps={{ text: "EatDrink" }} />
+                <Icon iconName={"Edit"} size={IconSize.large} tooltipProps={{ text: "Edit" }} />
+                <Icon iconName={"EditNote"} size={IconSize.large} tooltipProps={{ text: "EditNote" }} />
+                <Icon iconName={"EditStyle"} size={IconSize.large} tooltipProps={{ text: "EditStyle" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"Embed"} size={IconSize.large} tooltipProps={{ text: "Embed" }} />
+                <Icon iconName={"EMI"} size={IconSize.large} tooltipProps={{ text: "EMI" }} />
+                <Icon iconName={"Emoji"} size={IconSize.large} tooltipProps={{ text: "Emoji" }} />
+                <Icon iconName={"Emoji2"} size={IconSize.large} tooltipProps={{ text: "Emoji2" }} />
+                <Icon iconName={"EntryView"} size={IconSize.large} tooltipProps={{ text: "EntryView" }} />
+                <Icon iconName={"Equalizer"} size={IconSize.large} tooltipProps={{ text: "Equalizer" }} />
+                <Icon iconName={"Error"} size={IconSize.large} tooltipProps={{ text: "Error" }} />
+                <Icon iconName={"ErrorBadge"} size={IconSize.large} tooltipProps={{ text: "ErrorBadge" }} />
+                <Icon iconName={"ExploreContent"} size={IconSize.large} tooltipProps={{ text: "ExploreContent" }} />
+                <Icon iconName={"ExploreData"} size={IconSize.large} tooltipProps={{ text: "ExploreData" }} />
+                <Icon iconName={"Export"} size={IconSize.large} tooltipProps={{ text: "Export" }} />
+                <Icon iconName={"ExportMirrored"} size={IconSize.large} tooltipProps={{ text: "ExportMirrored" }} />
+                <Icon iconName={"EyeHide"} size={IconSize.large} tooltipProps={{ text: "EyeHide" }} />
+                <Icon iconName={"EyeShow"} size={IconSize.large} tooltipProps={{ text: "EyeShow" }} />
+                <Icon iconName={"FabricFolder"} size={IconSize.large} tooltipProps={{ text: "FabricFolder" }} />
+                <Icon iconName={"FabricFolderFill"} size={IconSize.large} tooltipProps={{ text: "FabricFolderFill" }} />
+                <Icon iconName={"FabricNewFolder"} size={IconSize.large} tooltipProps={{ text: "FabricNewFolder" }} />
+                <Icon iconName={"FabricTextHighlightComposite"} size={IconSize.large} tooltipProps={{ text: "FabricTextHighlightComposite" }} />
+                <Icon iconName={"FangBody"} size={IconSize.large} tooltipProps={{ text: "FangBody" }} />
+                <Icon iconName={"FavoriteList"} size={IconSize.large} tooltipProps={{ text: "FavoriteList" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"FavoriteStar"} size={IconSize.large} tooltipProps={{ text: "FavoriteStar" }} />
+                <Icon iconName={"FavoriteStarFill"} size={IconSize.large} tooltipProps={{ text: "FavoriteStarFill" }} />
+                <Icon iconName={"Feedback"} size={IconSize.large} tooltipProps={{ text: "Feedback" }} />
+                <Icon iconName={"FeedbackRequestSolid"} size={IconSize.large} tooltipProps={{ text: "FeedbackRequestSolid" }} />
+                <Icon iconName={"FileBug"} size={IconSize.large} tooltipProps={{ text: "FileBug" }} />
+                <Icon iconName={"FileCode"} size={IconSize.large} tooltipProps={{ text: "FileCode" }} />
+                <Icon iconName={"FileCSS"} size={IconSize.large} tooltipProps={{ text: "FileCSS" }} />
+                <Icon iconName={"FileHTML"} size={IconSize.large} tooltipProps={{ text: "FileHTML" }} />
+                <Icon iconName={"FileImage"} size={IconSize.large} tooltipProps={{ text: "FileImage" }} />
+                <Icon iconName={"FileJAVA"} size={IconSize.large} tooltipProps={{ text: "FileJAVA" }} />
+                <Icon iconName={"FilePDB"} size={IconSize.large} tooltipProps={{ text: "FilePDB" }} />
+                <Icon iconName={"FileSass"} size={IconSize.large} tooltipProps={{ text: "FileSass" }} />
+                <Icon iconName={"FileTemplate"} size={IconSize.large} tooltipProps={{ text: "FileTemplate" }} />
+                <Icon iconName={"FileYML"} size={IconSize.large} tooltipProps={{ text: "FileYML" }} />
+                <Icon iconName={"Filter"} size={IconSize.large} tooltipProps={{ text: "Filter" }} />
+                <Icon iconName={"FilterSolid"} size={IconSize.large} tooltipProps={{ text: "FilterSolid" }} />
+                <Icon iconName={"FiltersSolid"} size={IconSize.large} tooltipProps={{ text: "FiltersSolid" }} />
+                <Icon iconName={"FinancialSolid"} size={IconSize.large} tooltipProps={{ text: "FinancialSolid" }} />
+                <Icon iconName={"Fingerprint"} size={IconSize.large} tooltipProps={{ text: "Fingerprint" }} />
+                <Icon iconName={"Flag"} size={IconSize.large} tooltipProps={{ text: "Flag" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"FlameSolid"} size={IconSize.large} tooltipProps={{ text: "FlameSolid" }} />
+                <Icon iconName={"Flashlight"} size={IconSize.large} tooltipProps={{ text: "Flashlight" }} />
+                <Icon iconName={"FlowChart"} size={IconSize.large} tooltipProps={{ text: "FlowChart" }} />
+                <Icon iconName={"Folder"} size={IconSize.large} tooltipProps={{ text: "Folder" }} />
+                <Icon iconName={"FolderArrowRight"} size={IconSize.large} tooltipProps={{ text: "FolderArrowRight" }} />
+                <Icon iconName={"FolderHorizontal"} size={IconSize.large} tooltipProps={{ text: "FolderHorizontal" }} />
+                <Icon iconName={"FolderList"} size={IconSize.large} tooltipProps={{ text: "FolderList" }} />
+                <Icon iconName={"FolderQuery"} size={IconSize.large} tooltipProps={{ text: "FolderQuery" }} />
+                <Icon iconName={"FontColor"} size={IconSize.large} tooltipProps={{ text: "FontColor" }} />
+                <Icon iconName={"FontColorA"} size={IconSize.large} tooltipProps={{ text: "FontColorA" }} />
+                <Icon iconName={"FontSize"} size={IconSize.large} tooltipProps={{ text: "FontSize" }} />
+                <Icon iconName={"Forward"} size={IconSize.large} tooltipProps={{ text: "Forward" }} />
+                <Icon iconName={"FSharpLanguage"} size={IconSize.large} tooltipProps={{ text: "FSharpLanguage" }} />
+                <Icon iconName={"FullHistory"} size={IconSize.large} tooltipProps={{ text: "FullHistory" }} />
+                <Icon iconName={"FullScreen"} size={IconSize.large} tooltipProps={{ text: "FullScreen" }} />
+                <Icon iconName={"Giftbox"} size={IconSize.large} tooltipProps={{ text: "Giftbox" }} />
+                <Icon iconName={"GiftBoxSolid"} size={IconSize.large} tooltipProps={{ text: "GiftBoxSolid" }} />
+                <Icon iconName={"GlobalNavButton"} size={IconSize.large} tooltipProps={{ text: "GlobalNavButton" }} />
+                <Icon iconName={"Globe"} size={IconSize.large} tooltipProps={{ text: "Globe" }} />
+                <Icon iconName={"GridViewSmall"} size={IconSize.large} tooltipProps={{ text: "GridViewSmall" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"GripperDotsVertical"} size={IconSize.large} tooltipProps={{ text: "GripperDotsVertical" }} />
+                <Icon iconName={"Group"} size={IconSize.large} tooltipProps={{ text: "Group" }} />
+                <Icon iconName={"HeadsetSolid"} size={IconSize.large} tooltipProps={{ text: "HeadsetSolid" }} />
+                <Icon iconName={"Heart"} size={IconSize.large} tooltipProps={{ text: "Heart" }} />
+                <Icon iconName={"HeartFill"} size={IconSize.large} tooltipProps={{ text: "HeartFill" }} />
+                <Icon iconName={"Help"} size={IconSize.large} tooltipProps={{ text: "Help" }} />
+                <Icon iconName={"Hide2"} size={IconSize.large} tooltipProps={{ text: "Hide2" }} />
+                <Icon iconName={"History"} size={IconSize.large} tooltipProps={{ text: "History" }} />
+                <Icon iconName={"Home"} size={IconSize.large} tooltipProps={{ text: "Home" }} />
+                <Icon iconName={"Import"} size={IconSize.large} tooltipProps={{ text: "Import" }} />
+                <Icon iconName={"Inbox"} size={IconSize.large} tooltipProps={{ text: "Inbox" }} />
+                <Icon iconName={"IncidentTriangle"} size={IconSize.large} tooltipProps={{ text: "IncidentTriangle" }} />
+                <Icon iconName={"Info"} size={IconSize.large} tooltipProps={{ text: "Info" }} />
+                <Icon iconName={"InfoSolid"} size={IconSize.large} tooltipProps={{ text: "InfoSolid" }} />
+                <Icon iconName={"Insights"} size={IconSize.large} tooltipProps={{ text: "Insights" }} />
+                <Icon iconName={"IssueSolid"} size={IconSize.large} tooltipProps={{ text: "IssueSolid" }} />
+                <Icon iconName={"Italic"} size={IconSize.large} tooltipProps={{ text: "Italic" }} />
+                <Icon iconName={"JavaScriptLanguage"} size={IconSize.large} tooltipProps={{ text: "JavaScriptLanguage" }} />
+                <Icon iconName={"KeyboardClassic"} size={IconSize.large} tooltipProps={{ text: "KeyboardClassic" }} />
+                <Icon iconName={"LaptopSecure"} size={IconSize.large} tooltipProps={{ text: "LaptopSecure" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"Library"} size={IconSize.large} tooltipProps={{ text: "Library" }} />
+                <Icon iconName={"Lightbulb"} size={IconSize.large} tooltipProps={{ text: "Lightbulb" }} />
+                <Icon iconName={"LightningBolt"} size={IconSize.large} tooltipProps={{ text: "LightningBolt" }} />
+                <Icon iconName={"Like"} size={IconSize.large} tooltipProps={{ text: "Like" }} />
+                <Icon iconName={"LikeSolid"} size={IconSize.large} tooltipProps={{ text: "LikeSolid" }} />
+                <Icon iconName={"Link"} size={IconSize.large} tooltipProps={{ text: "Link" }} />
+                <Icon iconName={"List"} size={IconSize.large} tooltipProps={{ text: "List" }} />
+                <Icon iconName={"LocationDot"} size={IconSize.large} tooltipProps={{ text: "LocationDot" }} />
+                <Icon iconName={"Lock"} size={IconSize.large} tooltipProps={{ text: "Lock" }} />
+                <Icon iconName={"LockSolid"} size={IconSize.large} tooltipProps={{ text: "LockSolid" }} />
+                <Icon iconName={"Mail"} size={IconSize.large} tooltipProps={{ text: "Mail" }} />
+                <Icon iconName={"MarkDownLanguage"} size={IconSize.large} tooltipProps={{ text: "MarkDownLanguage" }} />
+                <Icon iconName={"MediaStorageTower"} size={IconSize.large} tooltipProps={{ text: "MediaStorageTower" }} />
+                <Icon iconName={"Megaphone"} size={IconSize.large} tooltipProps={{ text: "Megaphone" }} />
+                <Icon iconName={"MegaphoneSolid"} size={IconSize.large} tooltipProps={{ text: "MegaphoneSolid" }} />
+                <Icon iconName={"MiniExpand"} size={IconSize.large} tooltipProps={{ text: "MiniExpand" }} />
+                <Icon iconName={"More"} size={IconSize.large} tooltipProps={{ text: "More" }} />
+                <Icon iconName={"MoreVertical"} size={IconSize.large} tooltipProps={{ text: "MoreVertical" }} />
+                <Icon iconName={"MSNVideos"} size={IconSize.large} tooltipProps={{ text: "MSNVideos" }} />
+                <Icon iconName={"MSNVideosSolid"} size={IconSize.large} tooltipProps={{ text: "MSNVideosSolid" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"MultiSelect"} size={IconSize.large} tooltipProps={{ text: "MultiSelect" }} />
+                <Icon iconName={"MusicInCollectionFill"} size={IconSize.large} tooltipProps={{ text: "MusicInCollectionFill" }} />
+                <Icon iconName={"MyMoviesTV"} size={IconSize.large} tooltipProps={{ text: "MyMoviesTV" }} />
+                <Icon iconName={"NavigateExternalInline"} size={IconSize.large} tooltipProps={{ text: "NavigateExternalInline" }} />
+                <Icon iconName={"NavigateForward"} size={IconSize.large} tooltipProps={{ text: "NavigateForward" }} />
+                <Icon iconName={"Next"} size={IconSize.large} tooltipProps={{ text: "Next" }} />
+                <Icon iconName={"NotExecuted"} size={IconSize.large} tooltipProps={{ text: "NotExecuted" }} />
+                <Icon iconName={"NotImpactedSolid"} size={IconSize.large} tooltipProps={{ text: "NotImpactedSolid" }} />
+                <Icon iconName={"NumberedList"} size={IconSize.large} tooltipProps={{ text: "NumberedList" }} />
+                <Icon iconName={"NumberSymbol"} size={IconSize.large} tooltipProps={{ text: "NumberSymbol" }} />
+                <Icon iconName={"OEM"} size={IconSize.large} tooltipProps={{ text: "OEM" }} />
+                <Icon iconName={"OfflineStorageSolid"} size={IconSize.large} tooltipProps={{ text: "OfflineStorageSolid" }} />
+                <Icon iconName={"OpenInNewTab"} size={IconSize.large} tooltipProps={{ text: "OpenInNewTab" }} />
+                <Icon iconName={"OpenPane"} size={IconSize.large} tooltipProps={{ text: "OpenPane" }} />
+                <Icon iconName={"OpenSource"} size={IconSize.large} tooltipProps={{ text: "OpenSource" }} />
+                <Icon iconName={"Org"} size={IconSize.large} tooltipProps={{ text: "Org" }} />
+                <Icon iconName={"Package"} size={IconSize.large} tooltipProps={{ text: "Package" }} />
+                <Icon iconName={"Page"} size={IconSize.large} tooltipProps={{ text: "Page" }} />
+                <Icon iconName={"PageAdd"} size={IconSize.large} tooltipProps={{ text: "PageAdd" }} />
+                <Icon iconName={"PageArrowRight"} size={IconSize.large} tooltipProps={{ text: "PageArrowRight" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"PageEdit"} size={IconSize.large} tooltipProps={{ text: "PageEdit" }} />
+                <Icon iconName={"PageListSolid"} size={IconSize.large} tooltipProps={{ text: "PageListSolid" }} />
+                <Icon iconName={"ParkingSolid"} size={IconSize.large} tooltipProps={{ text: "ParkingSolid" }} />
+                <Icon iconName={"PartyLeader"} size={IconSize.large} tooltipProps={{ text: "PartyLeader" }} />
+                <Icon iconName={"Paste"} size={IconSize.large} tooltipProps={{ text: "Paste" }} />
+                <Icon iconName={"PasteAsCode"} size={IconSize.large} tooltipProps={{ text: "PasteAsCode" }} />
+                <Icon iconName={"Pause"} size={IconSize.large} tooltipProps={{ text: "Pause" }} />
+                <Icon iconName={"PaymentCard"} size={IconSize.large} tooltipProps={{ text: "PaymentCard" }} />
+                <Icon iconName={"PC1"} size={IconSize.large} tooltipProps={{ text: "PC1" }} />
+                <Icon iconName={"PDF"} size={IconSize.large} tooltipProps={{ text: "PDF" }} />
+                <Icon iconName={"People"} size={IconSize.large} tooltipProps={{ text: "People" }} />
+                <Icon iconName={"PeopleAdd"} size={IconSize.large} tooltipProps={{ text: "PeopleAdd" }} />
+                <Icon iconName={"PeopleSettings"} size={IconSize.large} tooltipProps={{ text: "PeopleSettings" }} />
+                <Icon iconName={"Permissions"} size={IconSize.large} tooltipProps={{ text: "Permissions" }} />
+                <Icon iconName={"PermissionsSolid"} size={IconSize.large} tooltipProps={{ text: "PermissionsSolid" }} />
+                <Icon iconName={"Phone"} size={IconSize.large} tooltipProps={{ text: "Phone" }} />
+                <Icon iconName={"Photo2"} size={IconSize.large} tooltipProps={{ text: "Photo2" }} />
+                <Icon iconName={"Pin"} size={IconSize.large} tooltipProps={{ text: "Pin" }} />
+                <Icon iconName={"Pinned"} size={IconSize.large} tooltipProps={{ text: "Pinned" }} />
+                <Icon iconName={"PlanView"} size={IconSize.large} tooltipProps={{ text: "PlanView" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"Play"} size={IconSize.large} tooltipProps={{ text: "Play" }} />
+                <Icon iconName={"PlayerSettings"} size={IconSize.large} tooltipProps={{ text: "PlayerSettings" }} />
+                <Icon iconName={"PlayResume"} size={IconSize.large} tooltipProps={{ text: "PlayResume" }} />
+                <Icon iconName={"PlugConnected"} size={IconSize.large} tooltipProps={{ text: "PlugConnected" }} />
+                <Icon iconName={"PlugDisconnected"} size={IconSize.large} tooltipProps={{ text: "PlugDisconnected" }} />
+                <Icon iconName={"POI"} size={IconSize.large} tooltipProps={{ text: "POI" }} />
+                <Icon iconName={"PreviewLink"} size={IconSize.large} tooltipProps={{ text: "PreviewLink" }} />
+                <Icon iconName={"Previous"} size={IconSize.large} tooltipProps={{ text: "Previous" }} />
+                <Icon iconName={"Print"} size={IconSize.large} tooltipProps={{ text: "Print" }} />
+                <Icon iconName={"Processing"} size={IconSize.large} tooltipProps={{ text: "Processing" }} />
+                <Icon iconName={"Product"} size={IconSize.large} tooltipProps={{ text: "Product" }} />
+                <Icon iconName={"ProFootball"} size={IconSize.large} tooltipProps={{ text: "ProFootball" }} />
+                <Icon iconName={"ProgressLoopOuter"} size={IconSize.large} tooltipProps={{ text: "ProgressLoopOuter" }} />
+                <Icon iconName={"Prohibited"} size={IconSize.large} tooltipProps={{ text: "Prohibited" }} />
+                <Icon iconName={"Project"} size={IconSize.large} tooltipProps={{ text: "Project" }} />
+                <Icon iconName={"ProjectCollection"} size={IconSize.large} tooltipProps={{ text: "ProjectCollection" }} />
+                <Icon iconName={"PublishContent"} size={IconSize.large} tooltipProps={{ text: "PublishContent" }} />
+                <Icon iconName={"Puzzle"} size={IconSize.large} tooltipProps={{ text: "Puzzle" }} />
+                <Icon iconName={"PythonLanguage"} size={IconSize.large} tooltipProps={{ text: "PythonLanguage" }} />
+                <Icon iconName={"QueryList"} size={IconSize.large} tooltipProps={{ text: "QueryList" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"QuickNoteSolid"} size={IconSize.large} tooltipProps={{ text: "QuickNoteSolid" }} />
+                <Icon iconName={"RadioBtnOff"} size={IconSize.large} tooltipProps={{ text: "RadioBtnOff" }} />
+                <Icon iconName={"RadioBtnOn"} size={IconSize.large} tooltipProps={{ text: "RadioBtnOn" }} />
+                <Icon iconName={"RawSource"} size={IconSize.large} tooltipProps={{ text: "RawSource" }} />
+                <Icon iconName={"ReadingMode"} size={IconSize.large} tooltipProps={{ text: "ReadingMode" }} />
+                <Icon iconName={"ReadingModeSolid"} size={IconSize.large} tooltipProps={{ text: "ReadingModeSolid" }} />
+                <Icon iconName={"ReceiptCheck"} size={IconSize.large} tooltipProps={{ text: "ReceiptCheck" }} />
+                <Icon iconName={"Recent"} size={IconSize.large} tooltipProps={{ text: "Recent" }} />
+                <Icon iconName={"RedEye"} size={IconSize.large} tooltipProps={{ text: "RedEye" }} />
+                <Icon iconName={"Refresh"} size={IconSize.large} tooltipProps={{ text: "Refresh" }} />
+                <Icon iconName={"ReleaseGate"} size={IconSize.large} tooltipProps={{ text: "ReleaseGate" }} />
+                <Icon iconName={"Remove"} size={IconSize.large} tooltipProps={{ text: "Remove" }} />
+                <Icon iconName={"RemoveLink"} size={IconSize.large} tooltipProps={{ text: "RemoveLink" }} />
+                <Icon iconName={"Rename"} size={IconSize.large} tooltipProps={{ text: "Rename" }} />
+                <Icon iconName={"Repair"} size={IconSize.large} tooltipProps={{ text: "Repair" }} />
+                <Icon iconName={"Reply"} size={IconSize.large} tooltipProps={{ text: "Reply" }} />
+                <Icon iconName={"ReplyMirrored"} size={IconSize.large} tooltipProps={{ text: "ReplyMirrored" }} />
+                <Icon iconName={"Repo"} size={IconSize.large} tooltipProps={{ text: "Repo" }} />
+                <Icon iconName={"ReportHacked"} size={IconSize.large} tooltipProps={{ text: "ReportHacked" }} />
+                <Icon iconName={"ReviewSolid"} size={IconSize.large} tooltipProps={{ text: "ReviewSolid" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"RevToggleKey"} size={IconSize.large} tooltipProps={{ text: "RevToggleKey" }} />
+                <Icon iconName={"Rewind"} size={IconSize.large} tooltipProps={{ text: "Rewind" }} />
+                <Icon iconName={"Ribbon"} size={IconSize.large} tooltipProps={{ text: "Ribbon" }} />
+                <Icon iconName={"RibbonSolid"} size={IconSize.large} tooltipProps={{ text: "RibbonSolid" }} />
+                <Icon iconName={"Ringer"} size={IconSize.large} tooltipProps={{ text: "Ringer" }} />
+                <Icon iconName={"RingerOff"} size={IconSize.large} tooltipProps={{ text: "RingerOff" }} />
+                <Icon iconName={"Rocket"} size={IconSize.large} tooltipProps={{ text: "Rocket" }} />
+                <Icon iconName={"RowsGroup"} size={IconSize.large} tooltipProps={{ text: "RowsGroup" }} />
+                <Icon iconName={"Sad"} size={IconSize.large} tooltipProps={{ text: "Sad" }} />
+                <Icon iconName={"Save"} size={IconSize.large} tooltipProps={{ text: "Save" }} />
+                <Icon iconName={"SaveAll"} size={IconSize.large} tooltipProps={{ text: "SaveAll" }} />
+                <Icon iconName={"SaveAs"} size={IconSize.large} tooltipProps={{ text: "SaveAs" }} />
+                <Icon iconName={"ScheduleEventAction"} size={IconSize.large} tooltipProps={{ text: "ScheduleEventAction" }} />
+                <Icon iconName={"Script"} size={IconSize.large} tooltipProps={{ text: "Script" }} />
+                <Icon iconName={"ScrollUpDown"} size={IconSize.large} tooltipProps={{ text: "ScrollUpDown" }} />
+                <Icon iconName={"Search"} size={IconSize.large} tooltipProps={{ text: "Search" }} />
+                <Icon iconName={"SearchAndApps"} size={IconSize.large} tooltipProps={{ text: "SearchAndApps" }} />
+                <Icon iconName={"SecurityGroup"} size={IconSize.large} tooltipProps={{ text: "SecurityGroup" }} />
+                <Icon iconName={"SemanticZoom"} size={IconSize.large} tooltipProps={{ text: "SemanticZoom" }} />
+                <Icon iconName={"SemiboldWeight"} size={IconSize.large} tooltipProps={{ text: "SemiboldWeight" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"Send"} size={IconSize.large} tooltipProps={{ text: "Send" }} />
+                <Icon iconName={"Server"} size={IconSize.large} tooltipProps={{ text: "Server" }} />
+                <Icon iconName={"ServerEnviroment"} size={IconSize.large} tooltipProps={{ text: "ServerEnviroment" }} />
+                <Icon iconName={"ServerProcesses"} size={IconSize.large} tooltipProps={{ text: "ServerProcesses" }} />
+                <Icon iconName={"Settings"} size={IconSize.large} tooltipProps={{ text: "Settings" }} />
+                <Icon iconName={"SettingsApp"} size={IconSize.large} tooltipProps={{ text: "SettingsApp" }} />
+                <Icon iconName={"Share"} size={IconSize.large} tooltipProps={{ text: "Share" }} />
+                <Icon iconName={"Shield"} size={IconSize.large} tooltipProps={{ text: "Shield" }} />
+                <Icon iconName={"ShieldSolid"} size={IconSize.large} tooltipProps={{ text: "ShieldSolid" }} />
+                <Icon iconName={"Shop"} size={IconSize.large} tooltipProps={{ text: "Shop" }} />
+                <Icon iconName={"ShoppingCart"} size={IconSize.large} tooltipProps={{ text: "ShoppingCart" }} />
+                <Icon iconName={"ShopServer"} size={IconSize.large} tooltipProps={{ text: "ShopServer" }} />
+                <Icon iconName={"ShowResults"} size={IconSize.large} tooltipProps={{ text: "ShowResults" }} />
+                <Icon iconName={"Signin"} size={IconSize.large} tooltipProps={{ text: "Signin" }} />
+                <Icon iconName={"SkypeCircleMinus"} size={IconSize.large} tooltipProps={{ text: "SkypeCircleMinus" }} />
+                <Icon iconName={"Snowflake"} size={IconSize.large} tooltipProps={{ text: "Snowflake" }} />
+                <Icon iconName={"Soccer"} size={IconSize.large} tooltipProps={{ text: "Soccer" }} />
+                <Icon iconName={"SortDown"} size={IconSize.large} tooltipProps={{ text: "SortDown" }} />
+                <Icon iconName={"SortLines"} size={IconSize.large} tooltipProps={{ text: "SortLines" }} />
+                <Icon iconName={"SortUp"} size={IconSize.large} tooltipProps={{ text: "SortUp" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"Sprint"} size={IconSize.large} tooltipProps={{ text: "Sprint" }} />
+                <Icon iconName={"StackedBarChart"} size={IconSize.large} tooltipProps={{ text: "StackedBarChart" }} />
+                <Icon iconName={"StackedLineChart"} size={IconSize.large} tooltipProps={{ text: "StackedLineChart" }} />
+                <Icon iconName={"Starburst"} size={IconSize.large} tooltipProps={{ text: "Starburst" }} />
+                <Icon iconName={"StarburstSolid"} size={IconSize.large} tooltipProps={{ text: "StarburstSolid" }} />
+                <Icon iconName={"StatusCircleCheckmark"} size={IconSize.large} tooltipProps={{ text: "StatusCircleCheckmark" }} />
+                <Icon iconName={"StatusCircleErrorX"} size={IconSize.large} tooltipProps={{ text: "StatusCircleErrorX" }} />
+                <Icon iconName={"StatusCircleInner"} size={IconSize.large} tooltipProps={{ text: "StatusCircleInner" }} />
+                <Icon iconName={"StatusCircleRing"} size={IconSize.large} tooltipProps={{ text: "StatusCircleRing" }} />
+                <Icon iconName={"StatusErrorFull"} size={IconSize.large} tooltipProps={{ text: "StatusErrorFull" }} />
+                <Icon iconName={"StockDown"} size={IconSize.large} tooltipProps={{ text: "StockDown" }} />
+                <Icon iconName={"StockUp"} size={IconSize.large} tooltipProps={{ text: "StockUp" }} />
+                <Icon iconName={"Stopwatch"} size={IconSize.large} tooltipProps={{ text: "Stopwatch" }} />
+                <Icon iconName={"Streaming"} size={IconSize.large} tooltipProps={{ text: "Streaming" }} />
+                <Icon iconName={"StreamingOff"} size={IconSize.large} tooltipProps={{ text: "StreamingOff" }} />
+                <Icon iconName={"Strikethrough"} size={IconSize.large} tooltipProps={{ text: "Strikethrough" }} />
+                <Icon iconName={"SurveyQuestions"} size={IconSize.large} tooltipProps={{ text: "SurveyQuestions" }} />
+                <Icon iconName={"Switch"} size={IconSize.large} tooltipProps={{ text: "Switch" }} />
+                <Icon iconName={"SwitcherStartEnd"} size={IconSize.large} tooltipProps={{ text: "SwitcherStartEnd" }} />
+                <Icon iconName={"Table"} size={IconSize.large} tooltipProps={{ text: "Table" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"Tag"} size={IconSize.large} tooltipProps={{ text: "Tag" }} />
+                <Icon iconName={"TaskSolid"} size={IconSize.large} tooltipProps={{ text: "TaskSolid" }} />
+                <Icon iconName={"TeamFavorite"} size={IconSize.large} tooltipProps={{ text: "TeamFavorite" }} />
+                <Icon iconName={"Teamwork"} size={IconSize.large} tooltipProps={{ text: "Teamwork" }} />
+                <Icon iconName={"TestAutoSolid"} size={IconSize.large} tooltipProps={{ text: "TestAutoSolid" }} />
+                <Icon iconName={"TestBeaker"} size={IconSize.large} tooltipProps={{ text: "TestBeaker" }} />
+                <Icon iconName={"TestBeakerSolid"} size={IconSize.large} tooltipProps={{ text: "TestBeakerSolid" }} />
+                <Icon iconName={"TestPlan"} size={IconSize.large} tooltipProps={{ text: "TestPlan" }} />
+                <Icon iconName={"TextDocument"} size={IconSize.large} tooltipProps={{ text: "TextDocument" }} />
+                <Icon iconName={"TextField"} size={IconSize.large} tooltipProps={{ text: "TextField" }} />
+                <Icon iconName={"Tiles"} size={IconSize.large} tooltipProps={{ text: "Tiles" }} />
+                <Icon iconName={"TimeEntry"} size={IconSize.large} tooltipProps={{ text: "TimeEntry" }} />
+                <Icon iconName={"Trending12"} size={IconSize.large} tooltipProps={{ text: "Trending12" }} />
+                <Icon iconName={"TriangleRight12"} size={IconSize.large} tooltipProps={{ text: "TriangleRight12" }} />
+                <Icon iconName={"TriangleSolidDown12"} size={IconSize.large} tooltipProps={{ text: "TriangleSolidDown12" }} />
+                <Icon iconName={"TriangleSolidRight12"} size={IconSize.large} tooltipProps={{ text: "TriangleSolidRight12" }} />
+                <Icon iconName={"TriangleSolidUp12"} size={IconSize.large} tooltipProps={{ text: "TriangleSolidUp12" }} />
+                <Icon iconName={"TriggerApproval"} size={IconSize.large} tooltipProps={{ text: "TriggerApproval" }} />
+                <Icon iconName={"TriggerAuto"} size={IconSize.large} tooltipProps={{ text: "TriggerAuto" }} />
+                <Icon iconName={"TripleColumnEdit"} size={IconSize.large} tooltipProps={{ text: "TripleColumnEdit" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"Trophy2Solid"} size={IconSize.large} tooltipProps={{ text: "Trophy2Solid" }} />
+                <Icon iconName={"TwoKeys"} size={IconSize.large} tooltipProps={{ text: "TwoKeys" }} />
+                <Icon iconName={"TypeScriptLanguage"} size={IconSize.large} tooltipProps={{ text: "TypeScriptLanguage" }} />
+                <Icon iconName={"Underline"} size={IconSize.large} tooltipProps={{ text: "Underline" }} />
+                <Icon iconName={"Undo"} size={IconSize.large} tooltipProps={{ text: "Undo" }} />
+                <Icon iconName={"Unknown"} size={IconSize.large} tooltipProps={{ text: "Unknown" }} />
+                <Icon iconName={"Unlock"} size={IconSize.large} tooltipProps={{ text: "Unlock" }} />
+                <Icon iconName={"UnlockSolid"} size={IconSize.large} tooltipProps={{ text: "UnlockSolid" }} />
+                <Icon iconName={"Unpin"} size={IconSize.large} tooltipProps={{ text: "Unpin" }} />
+                <Icon iconName={"Up"} size={IconSize.large} tooltipProps={{ text: "Up" }} />
+                <Icon iconName={"Upload"} size={IconSize.large} tooltipProps={{ text: "Upload" }} />
+                <Icon iconName={"UserFollowed"} size={IconSize.large} tooltipProps={{ text: "UserFollowed" }} />
+                <Icon iconName={"UserRemove"} size={IconSize.large} tooltipProps={{ text: "UserRemove" }} />
+                <Icon iconName={"Variable"} size={IconSize.large} tooltipProps={{ text: "Variable" }} />
+                <Icon iconName={"VerifiedBrand"} size={IconSize.large} tooltipProps={{ text: "VerifiedBrand" }} />
+                <Icon iconName={"VerifiedBrandSolid"} size={IconSize.large} tooltipProps={{ text: "VerifiedBrandSolid" }} />
+                <Icon iconName={"Video"} size={IconSize.large} tooltipProps={{ text: "Video" }} />
+                <Icon iconName={"View"} size={IconSize.large} tooltipProps={{ text: "View" }} />
+                <Icon iconName={"ViewAll"} size={IconSize.large} tooltipProps={{ text: "ViewAll" }} />
+                <Icon iconName={"ViewDashboard"} size={IconSize.large} tooltipProps={{ text: "ViewDashboard" }} />
+            </div>
+            <div className="flex-row rhythm-horizontal-16">
+                <Icon iconName={"ViewList"} size={IconSize.large} tooltipProps={{ text: "ViewList" }} />
+                <Icon iconName={"ViewListGroup"} size={IconSize.large} tooltipProps={{ text: "ViewListGroup" }} />
+                <Icon iconName={"ViewListTree"} size={IconSize.large} tooltipProps={{ text: "ViewListTree" }} />
+                <Icon iconName={"VisualBasicLanguage"} size={IconSize.large} tooltipProps={{ text: "VisualBasicLanguage" }} />
+                <Icon iconName={"Waffle"} size={IconSize.large} tooltipProps={{ text: "Waffle" }} />
+                <Icon iconName={"WaffleOffice365"} size={IconSize.large} tooltipProps={{ text: "WaffleOffice365" }} />
+                <Icon iconName={"WaitlistConfirm"} size={IconSize.large} tooltipProps={{ text: "WaitlistConfirm" }} />
+                <Icon iconName={"Warning"} size={IconSize.large} tooltipProps={{ text: "Warning" }} />
+                <Icon iconName={"Work"} size={IconSize.large} tooltipProps={{ text: "Work" }} />
+                <Icon iconName={"WorkFlow"} size={IconSize.large} tooltipProps={{ text: "WorkFlow" }} />
+                <Icon iconName={"WorkItem"} size={IconSize.large} tooltipProps={{ text: "WorkItem" }} />
+                <Icon iconName={"World"} size={IconSize.large} tooltipProps={{ text: "World" }} />
+                <Icon iconName={"WorldClock"} size={IconSize.large} tooltipProps={{ text: "WorldClock" }} />
+                <Icon iconName={"ZipFolder"} size={IconSize.large} tooltipProps={{ text: "ZipFolder" }} />
+                <Icon iconName={"Zoom"} size={IconSize.large} tooltipProps={{ text: "Zoom" }} />
+                <Icon iconName={"ZoomIn"} size={IconSize.large} tooltipProps={{ text: "ZoomIn" }} />
+                <Icon iconName={"ZoomOut"} size={IconSize.large} tooltipProps={{ text: "ZoomOut" }} />
+            </div>
+        </div>
+    )
 }

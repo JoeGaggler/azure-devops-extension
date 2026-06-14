@@ -424,6 +424,10 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         dispatch({ selectedActivePullRequestIds: ids });
     }
 
+    function onActivateActivePullRequest(_id: number) {
+        onEnqueuePullRequest();
+    }
+
     return (
         <Page className="">
             <Header
@@ -457,6 +461,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     pullRequests={state.activePullRequests}
                     selectedIds={state.selectedActivePullRequestIds}
                     onSelectPullRequestIds={onSelectActivePullRequestIds}
+                    onActivatePullRequest={onActivateActivePullRequest}
                 />
             </Card>
 
@@ -472,18 +477,24 @@ export interface PullRequestListProps {
     pullRequests: any[]; // TODO: pull request type
     selectedIds: number[];
     onSelectPullRequestIds: (id: number[]) => void;
+    onActivatePullRequest?: (id: number) => void;
 }
 
-export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequestIds }: PullRequestListProps) {
+export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequestIds, onActivatePullRequest }: PullRequestListProps) {
     let listSelection = new ListSelection(true);
-
-    // let [selectedPullRequests, setSelectedPullRequests] = useState<number[]>([]);
 
     applySelections(listSelection, pullRequests, (pr) => pr.pullRequestId, selectedIds);
 
     function onSelectRow(row: IListRow<any>) { // TODO: pull request type
         console.log("NextRunTab -> targetPipelineSelect", row);
         onSelectPullRequestIds([row.data.pullRequestId]);
+    }
+
+    function onActivateRow(row: IListRow<any>) { // TODO: pull request type
+        console.log("NextRunTab -> targetPipelineActivate", row);
+        if (onActivatePullRequest) {
+            onActivatePullRequest(row.data.pullRequestId);
+        }
     }
 
     function renderRow(
@@ -516,7 +527,7 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
                 itemProvider={new ArrayItemProvider(pullRequests || [])}
                 selection={listSelection}
                 onSelect={(_evt, listRow) => { onSelectRow(listRow); }}
-                // onActivate={showRunTargetPipelinePanel}
+                onActivate={(_evt, listRow) => { onActivateRow(listRow); }}
                 renderRow={renderRow}
                 width="100%"
             />

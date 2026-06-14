@@ -315,10 +315,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     function renderMergeQueueCommandBarItems(): IHeaderCommandBarItem[] {
-        if (state.selectedMergeQueuePullRequestIds.length === 0) {
-            return [];
-        }
-
         return [
             {
                 id: "dequeue",
@@ -326,16 +322,12 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 onActivate: () => { onDequeuePullRequest(); },
                 isPrimary: true,
                 important: true,
-                disabled: false
+                disabled: (state.selectedMergeQueuePullRequestIds.length === 0)
             }
         ];
     }
 
     function renderAllPullRequestsCommandBarItems(): IHeaderCommandBarItem[] {
-        if (state.selectedActivePullRequestIds.length === 0) {
-            return [];
-        }
-
         return [
             {
                 id: "enqueue",
@@ -343,7 +335,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 onActivate: () => { onEnqueuePullRequest(); },
                 isPrimary: true,
                 important: true,
-                disabled: false
+                disabled: (state.selectedActivePullRequestIds.length === 0)
             }
         ];
     }

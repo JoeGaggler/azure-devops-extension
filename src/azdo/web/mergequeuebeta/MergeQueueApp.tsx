@@ -545,8 +545,8 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
                 index={index}
                 details={details}
             >
-                <div className="flex-row rhythm-horizontal-8">
-                    <Icon iconName={item.icon} size={IconSize.small} />
+                <div className="flex-row rhythm-horizontal-8 padding-4">
+                    <Icon iconName={item.icon} size={IconSize.medium} />
                     <div>{item.pullRequestId}</div>
                     <div>{item.repository}</div>
                     <div>{item.title}</div>

@@ -56,19 +56,24 @@ interface MergeQueueDocument {
 
 interface ReducerState {
     mergeQueueItems: MergeQueueItemInfo[];
+    selectedMergeQueuePullRequestIds: number[];
     mergeQueuePullRequests: PullRequestInfo[];
 
     activePullRequests: PullRequestInfo[];
-    selectedMergeQueuePullRequestIds: number[];
     selectedActivePullRequestIds: number[];
 }
 
 interface ReducerAction {
+    // collection loading
     mergeQueueItems?: MergeQueueItemInfo[];
     activePullRequests?: PullRequestInfo[];
-    enqueuePullRequests?: PullRequestInfo[];
+
+    // selection changes
     selectedMergeQueuePullRequestIds?: number[];
     selectedActivePullRequestIds?: number[];
+
+    // actions
+    enqueuePullRequests?: PullRequestInfo[];
 }
 
 function applySelections<T, TItem>(listSelection: ListSelection, all: T[], accessor: (t: T) => TItem, ids: TItem[]) {
@@ -147,9 +152,10 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     const [state, dispatch] = React.useReducer<(state: ReducerState, action: ReducerAction) => ReducerState>(reducer, {
         mergeQueueItems: [],
         mergeQueuePullRequests: [],
-        activePullRequests: [],
         selectedMergeQueuePullRequestIds: [],
-        selectedActivePullRequestIds: []
+
+        activePullRequests: [],
+        selectedActivePullRequestIds: [],
     })
 
     // initialize the app
@@ -267,16 +273,16 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
     }
 
-    async function getMergeQueueDocument(): Promise<MergeQueueDocument | undefined> {
-        let doc = await getDocument(extensionManagementClient.current, collectionId, mergeQueueDocumentId);
+    async function getAppDocument<T>(appDocumentId: string): Promise<T | undefined> {
+        let doc = await getDocument(extensionManagementClient.current, collectionId, appDocumentId);
         if (!doc) {
-            doc = await createDocument(extensionManagementClient.current, collectionId, mergeQueueDocumentId, {});
+            doc = await createDocument(extensionManagementClient.current, collectionId, appDocumentId, {});
             if (!doc) {
-                console.error("Failed to create active pull request document");
+                console.error("Failed to create app document");
                 return undefined;
             }
         }
-        if (doc.id !== mergeQueueDocumentId) {
+        if (doc.id !== appDocumentId) {
             console.error("Wrong document ID", doc.id);
             return undefined;
         }
@@ -284,28 +290,15 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             console.error("Failed to get document etag");
             return undefined;
         }
-        return doc;
+        return doc as T;
     }
 
-    // TODO: generalize getter
+    async function getMergeQueueDocument(): Promise<MergeQueueDocument | undefined> {
+        return await getAppDocument<MergeQueueDocument>(mergeQueueDocumentId);
+    }
+
     async function getActivePullRequestDocument(): Promise<PullRequestDocument | undefined> {
-        let doc = await getDocument(extensionManagementClient.current, collectionId, activePullRequestsDocumentId);
-        if (!doc) {
-            doc = await createDocument(extensionManagementClient.current, collectionId, activePullRequestsDocumentId, {});
-            if (!doc) {
-                console.error("Failed to create active pull request document");
-                return undefined;
-            }
-        }
-        if (doc.id !== activePullRequestsDocumentId) {
-            console.error("Wrong document ID", doc.id);
-            return undefined;
-        }
-        if (!doc.__etag) {
-            console.error("Failed to get document etag");
-            return undefined;
-        }
-        return doc;
+        return await getAppDocument<PullRequestDocument>(activePullRequestsDocumentId);
     }
 
     async function updateActivePullRequestDocument(doc: PullRequestDocument): Promise<PullRequestDocument | undefined> {
@@ -322,12 +315,27 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     function renderMergeQueueCommandBarItems(): IHeaderCommandBarItem[] {
-        // TODO: return command bar items for the merge queue
-        return [];
+        if (state.selectedMergeQueuePullRequestIds.length === 0) {
+            return [];
+        }
+
+        return [
+            {
+                id: "dequeue",
+                text: "Dequeue",
+                onActivate: () => { onDequeuePullRequest(); },
+                isPrimary: true,
+                important: true,
+                disabled: false
+            }
+        ];
     }
 
     function renderAllPullRequestsCommandBarItems(): IHeaderCommandBarItem[] {
-        // TODO: return command bar items for all pull requests
+        if (state.selectedActivePullRequestIds.length === 0) {
+            return [];
+        }
+
         return [
             {
                 id: "enqueue",
@@ -338,6 +346,10 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 disabled: false
             }
         ];
+    }
+
+    async function onDequeuePullRequest() {
+        // TODO: implement
     }
 
     async function onEnqueuePullRequest() {

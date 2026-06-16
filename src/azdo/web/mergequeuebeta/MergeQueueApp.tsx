@@ -10,17 +10,20 @@ import { Page } from "azure-devops-ui/Components/Page/Page";
 import { TitleSize } from "azure-devops-ui/Components/Header/Header.Props";
 import { Card } from "azure-devops-ui/Card";
 
-import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo } from "./azuredevops";
+import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, getDefaultBranchCommitId, getRefCommitId } from "./azuredevops";
 
 import { GitPullRequestSearchCriteria, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
 import { ExtensionManagementRestClient } from "azure-devops-extension-api/ExtensionManagement/ExtensionManagementClient";
 import { Icon, IconSize } from "azure-devops-ui/Icon";
+import { distinctBy } from "./lib";
+import { GitRestClient } from "azure-devops-extension-api/Git/GitClient";
 
 const publisher = "pingmint";
 const extensionName = "pingmint-extension";
 const collectionId = "mergequeue";
 const mergeQueueDocumentId = "mergequeue";
 const activePullRequestsDocumentId = "activepullrequests";
+const zeroCommitId = "0000000000000000000000000000000000000000";
 
 export interface MergeQueueAppSingleton {
     bearerToken: string;
@@ -36,12 +39,21 @@ interface PullRequestInfo {
     id: number;
     title: string;
     repository: RepositoryInfo;
+    sourceRefName: string;
 }
 
 interface MergeQueueItemInfo {
-    pr: PullRequestInfo;
+    id: number;
+    title: string;
+    repository: RepositoryInfo;
+    status: MergeQueueStatus;
+    sourceRefName: string;
+    sourceCommitId: string;
+    targetCommitId: string;
 }
 
+type MergeQueueStatus = 
+    "queued" ; // requires recalculation
 
 interface PullRequestDocument {
     id: string;
@@ -102,7 +114,14 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     if (action.mergeQueueItems) {
         console.log("MQ: reducer -> updating merge queue items", action.mergeQueueItems);
         next.mergeQueueItems = action.mergeQueueItems;
-        next.mergeQueuePullRequests = action.mergeQueueItems.map((item) => item.pr);
+        next.mergeQueuePullRequests = action.mergeQueueItems.map((item): PullRequestInfo => {
+            return {
+                id: item.id,
+                title: item.title,
+                repository: item.repository,
+                sourceRefName: item.sourceRefName,
+            };
+        });
         // TODO: confirm selections
     }
 
@@ -209,8 +228,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }, []);
     async function ticktock() {
         try {
-            console.log("MQ: ticktock");
-
             if (!singleton.current) {
                 console.error("MQ: ticktock -> no singleton available");
                 return;
@@ -223,62 +240,76 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             }
 
             let git = gitClient.current;
-            let criteria: GitPullRequestSearchCriteria = {
-                creatorId: undefined!,
-                includeLinks: false,
-                maxTime: undefined!,
-                minTime: undefined!,
-                queryTimeRangeType: PullRequestTimeRangeType.Created,
-                repositoryId: undefined!,
-                reviewerId: undefined!,
-                sourceRefName: undefined!,
-                sourceRepositoryId: undefined!,
-                status: PullRequestStatus.Active,
-                targetRefName: undefined!,
-                title: undefined!
-            };
-            let prs1 = await git.getPullRequestsByProject(ti.project, criteria, undefined, undefined, undefined);
-            let prs2 = prs1.map((pr): PullRequestInfo => {
-                return {
-                    ...pr, // HACK: smuggle full response
-                    id: pr.pullRequestId,
-                    title: pr.title,
-                    repository: (function (): RepositoryInfo {
-                        if (!pr.repository || !pr.repository.id || !pr.repository.name) {
-                            // TODO: log and skip
-                            return {
-                                id: '00000000-0000-0000-0000-000000000000',
-                                name: 'Unknown'
-                            };
-                        }
-                        return {
-                            id: pr.repository.id,
-                            name: pr.repository.name
-                        }
-                    })(),
-                };
-            });
-
-            dispatch({ activePullRequests: prs2 });
-            console.log("MQ: pull requests", prs2);
-
-            let adoc = await getActivePullRequestDocument();
-            if (adoc) {
-                adoc.pullRequests = prs2;
-                let adoc2 = await updateActivePullRequestDocument(adoc);
-                if (adoc2) {
-                    console.log("MQ: updated active pull request document", adoc2);
-                }
+            if (!git) {
+                console.error("MQ: ticktock -> no git client available");
+                return;
             }
 
-            await runMergeQueue();
-
+            // TODO: run concurrently
+            await refreshActivePullRequests(git, ti);
+            await runMergeQueue(git, ti);
         } catch (error) {
             console.error("MQ: ticktock -> error occurred", error);
         }
     }
 
-    async function runMergeQueue(): Promise<void> {
+    async function refreshActivePullRequests(gitClient: GitRestClient, tenantInfo: TenantInfo): Promise<void> {
+        let criteria: GitPullRequestSearchCriteria = {
+            creatorId: undefined!,
+            includeLinks: false,
+            maxTime: undefined!,
+            minTime: undefined!,
+            queryTimeRangeType: PullRequestTimeRangeType.Created,
+            repositoryId: undefined!,
+            reviewerId: undefined!,
+            sourceRefName: undefined!,
+            sourceRepositoryId: undefined!,
+            status: PullRequestStatus.Active,
+            targetRefName: undefined!,
+            title: undefined!
+        };
+        let gitPRs = await gitClient.getPullRequestsByProject(tenantInfo.project, criteria, undefined, undefined, undefined);
+        let newPullRequests: PullRequestInfo[] = [];
+        for (const pr of gitPRs) {
+            const repoId = pr.repository?.id;
+            if (!repoId) { continue; }
+
+            const repoName = pr.repository?.name;
+            if (!repoName) { continue; }
+
+            const sourceRefName = pr.sourceRefName;
+            if (!sourceRefName) { continue; }
+
+            // const commitId = await getRefCommitId(gitClient, tenantInfo.project, repoId, sourceRefName);
+            // if (!commitId) { continue; }
+
+            // console.log("MQ: pull request CHECK", pr.pullRequestId, pr.title, sourceRefName, commitId, pr);
+
+            newPullRequests.push({
+                ...pr, // HACK: smuggle full response for debugging
+                id: pr.pullRequestId,
+                title: pr.title,
+                repository: {
+                    id: pr.repository.id,
+                    name: pr.repository.name
+                },
+            });
+        }
+
+        dispatch({ activePullRequests: newPullRequests });
+        console.log("MQ: refreshActivePullRequests -> updated pull requests", newPullRequests);
+
+        let adoc = await getActivePullRequestDocument();
+        if (adoc) {
+            adoc.pullRequests = newPullRequests;
+            let adoc2 = await updateActivePullRequestDocument(adoc);
+            if (adoc2) {
+                console.log("MQ: refreshActivePullRequests ->updated active pull request document", adoc2);
+            }
+        }
+    }
+
+    async function runMergeQueue(gitClient: GitRestClient, tenantInfo: TenantInfo): Promise<void> {
         if (isMergeQueueRunning.current === true) {
             console.log("MQ: merge queue is already running");
             return;
@@ -287,14 +318,63 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         try {
             isMergeQueueRunning.current = true;
 
-            // TODO: remove fake processing delay
-            await new Promise(resolve => setTimeout(resolve, 7000));
-            
+            let project = tenantInfo.project;
+            if (!project) {
+                console.error("MQ: runMergeQueue -> failed to get project");
+                return;
+            }
+
+            var mqdoc = await getMergeQueueDocument();
+            if (!mqdoc) {
+                console.error("MQ: runMergeQueue -> failed to get merge queue document");
+                return;
+            }
+
+            // get unique repositories referenced by the merge queue items
+            const mqitems = mqdoc.mergeQueueItems;
+            const repos = mqitems.map(i => i.repository);
+            const repoSet = distinctBy(repos, r => r.id);
+            const gitRepos = await Promise.all(repoSet.map(r => gitClient.getRepository(r.id, project)));
+            console.log("MQ: runMergeQueue -> retrieved git repositories", gitRepos);
+
+            let repoBaseCommits: { repoId: string; baseCommitId: string }[] = [];
+            for (const repo of gitRepos) {
+                const commitId = await getDefaultBranchCommitId(gitClient, project, repo.id);
+                if (!commitId) {
+                    console.error("MQ: runMergeQueue -> failed to get default branch commit ID for repository", repo.id);
+                    continue;
+                }
+                repoBaseCommits.push({ repoId: repo.id, baseCommitId: commitId });
+            }
+
+            let new_mqitems: MergeQueueItemInfo[] = [];
+            for (const mqitem of mqitems) {
+                const repoid = mqitem.repository.id;
+                const baseCommit = repoBaseCommits.find(r => r.repoId === repoid);
+                if (!baseCommit) {
+                    console.error("MQ: runMergeQueue -> failed to find base commit for repository", repoid);
+                    continue;
+                }
+
+                const sourceRefName = mqitem.sourceRefName;
+                const sourceCommitId = 
+                    await getRefCommitId(gitClient, tenantInfo.project, repoid, sourceRefName) ||
+                    mqitem.sourceCommitId;
+
+                new_mqitems.push({
+                    ...mqitem,
+                    sourceCommitId: sourceCommitId,
+                    targetCommitId: baseCommit.baseCommitId,
+                });
+            }
+            dispatch({ mergeQueueItems: new_mqitems });
+
             // TODO: Implement merge queue logic
+
         } catch (error) {
             console.error("MQ: runMergeQueue -> error occurred", error);
         } finally {
-            console.log("MQ: finished running merge queue");
+            console.log("MQ: runMergeQueue -> finished");
             isMergeQueueRunning.current = false;
         }
     }
@@ -384,7 +464,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         dispatch({ mergeQueueItems: mitems });
 
         let oldids = state.selectedMergeQueuePullRequestIds;
-        let newMergeQueueItems = mitems.filter(m => !oldids.includes(m.pr.id));
+        let newMergeQueueItems = mitems.filter(m => !oldids.includes(m.id));
         console.log("MQ: onDequeuePullRequest -> new pull requests", newMergeQueueItems);
 
         mdoc.mergeQueueItems = [...newMergeQueueItems];
@@ -419,7 +499,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         console.log("MQ: onEnqueuePullRequest -> next pull requests", nextids, nextprs);
 
         // exclude nextprs that are already in the merge queue
-        let filteredprs = nextprs.filter(pr => !mitems.some(mpr => mpr.pr.id === pr.id));
+        let filteredprs = nextprs.filter(pr => !mitems.some(mpr => mpr.id === pr.id));
         console.log("MQ: onEnqueuePullRequest -> filtered pull requests", filteredprs);
         if (filteredprs.length === 0) {
             console.warn("MQ: onEnqueuePullRequest -> no pull requests to enqueue");
@@ -428,7 +508,13 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
         var newMergeQueueItems = filteredprs.map((pr): MergeQueueItemInfo => {
             return {
-                pr: pr
+                id: pr.id,
+                title: pr.title,
+                repository: pr.repository,
+                status: "queued",
+                sourceRefName: pr.sourceRefName,
+                sourceCommitId: zeroCommitId,
+                targetCommitId: zeroCommitId,
             };
         });
 
@@ -458,9 +544,9 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         return state.mergeQueueItems.map((item): PullRequestListItem => {
             return {
                 icon: "Starburst",
-                pullRequestId: item.pr.id,
-                repository: item.pr.repository.name,
-                title: item.pr.title
+                pullRequestId: item.id,
+                repository: item.repository.name,
+                title: `"${item.title}" - ${item.sourceCommitId} -> ${item.targetCommitId}`
             };
         });
     }
@@ -575,7 +661,6 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
                     <div>{item.pullRequestId}</div>
                     <div>{item.repository}</div>
                     <div>{item.title}</div>
-                    <div>{selectedIds.length > 0 && selectedIds.includes(item.pullRequestId) ? "Selected" : ""}</div>
                 </div>
             </ListItem>
         )

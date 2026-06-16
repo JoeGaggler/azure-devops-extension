@@ -12,7 +12,7 @@ import { Card } from "azure-devops-ui/Card";
 
 import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, getDefaultBranchCommitId, getRefCommitId } from "./azuredevops";
 
-import { GitMergeParameters, GitPullRequestSearchCriteria, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
+import { GitAsyncOperationStatus, GitMergeParameters, GitPullRequestSearchCriteria, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
 import { ExtensionManagementRestClient } from "azure-devops-extension-api/ExtensionManagement/ExtensionManagementClient";
 import { Icon, IconSize } from "azure-devops-ui/Icon";
 import { distinctBy } from "./lib";
@@ -50,6 +50,7 @@ interface MergeQueueItemInfo {
     sourceRefName: string;
     sourceCommitId: string;
     targetCommitId: string;
+    mergedCommitId: string;
 }
 
 type MergeQueueStatus =
@@ -380,8 +381,9 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 const isQueuedStatus = status === 'queued';
                 const isSameSourceCommit = sourceCommitId === old_mqitem.sourceCommitId;
                 const isSameTargetCommit = targetCommitId === old_mqitem.targetCommitId;
+                const needsMergedCommit = (old_mqitem.mergedCommitId || zeroCommitId) === zeroCommitId;
 
-                if (isQueuedStatus) {
+                if (isQueuedStatus || needsMergedCommit) {
                     console.log(`MQ: runMergeQueue -> ${index}: queued`);
                     // must refresh merge commit
                 }
@@ -422,6 +424,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 console.log(`MQ: runMergeQueue -> ${index}: updated merge request`, mergeRequest2);
                 let new_status: MergeQueueStatus = 'valid'; // TODO: check for conflicts
                 new_mqitem.status = new_status;
+                new_mqitem.mergedCommitId = mergeRequest2.status === GitAsyncOperationStatus.Completed ? mergeRequest2.detailedStatus.mergeCommitId : zeroCommitId;
 
                 // invalidate subsequent merge queue items in the same repository
                 for (let i2 = index + 1; i2 < old_mqitems.length; i2++) {
@@ -595,6 +598,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 sourceRefName: pr.sourceRefName,
                 sourceCommitId: zeroCommitId,
                 targetCommitId: zeroCommitId,
+                mergedCommitId: zeroCommitId,
             };
         });
 
@@ -636,7 +640,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 icon: icon,
                 pullRequestId: item.id,
                 repository: item.repository.name,
-                title: `"${item.title}" - ${item.sourceCommitId} -> ${item.targetCommitId}`
+                title: `"${item.title}" - ${item.sourceCommitId} onto ${item.targetCommitId} is ${item.mergedCommitId}`
             };
         });
     }

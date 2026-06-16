@@ -52,8 +52,8 @@ interface MergeQueueItemInfo {
     targetCommitId: string;
 }
 
-type MergeQueueStatus = 
-    "queued" ; // requires recalculation
+type MergeQueueStatus =
+    "queued"; // requires recalculation
 
 interface PullRequestDocument {
     id: string;
@@ -239,6 +239,12 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 return;
             }
 
+            let proj = ti.project;
+            if (!proj) {
+                console.error("MQ: ticktock -> no project available");
+                return;
+            }
+
             let git = gitClient.current;
             if (!git) {
                 console.error("MQ: ticktock -> no git client available");
@@ -247,7 +253,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
             // TODO: run concurrently
             await refreshActivePullRequests(git, ti);
-            await runMergeQueue(git, ti);
+            await runMergeQueue(git, proj);
         } catch (error) {
             console.error("MQ: ticktock -> error occurred", error);
         }
@@ -270,28 +276,23 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         };
         let gitPRs = await gitClient.getPullRequestsByProject(tenantInfo.project, criteria, undefined, undefined, undefined);
         let newPullRequests: PullRequestInfo[] = [];
-        for (const pr of gitPRs) {
-            const repoId = pr.repository?.id;
+        for (const gitPR of gitPRs) {
+            const repoId = gitPR.repository?.id;
             if (!repoId) { continue; }
 
-            const repoName = pr.repository?.name;
+            const repoName = gitPR.repository?.name;
             if (!repoName) { continue; }
 
-            const sourceRefName = pr.sourceRefName;
+            const sourceRefName = gitPR.sourceRefName;
             if (!sourceRefName) { continue; }
 
-            // const commitId = await getRefCommitId(gitClient, tenantInfo.project, repoId, sourceRefName);
-            // if (!commitId) { continue; }
-
-            // console.log("MQ: pull request CHECK", pr.pullRequestId, pr.title, sourceRefName, commitId, pr);
-
             newPullRequests.push({
-                ...pr, // HACK: smuggle full response for debugging
-                id: pr.pullRequestId,
-                title: pr.title,
+                id: gitPR.pullRequestId,
+                title: gitPR.title,
+                sourceRefName: gitPR.sourceRefName,
                 repository: {
-                    id: pr.repository.id,
-                    name: pr.repository.name
+                    id: gitPR.repository.id,
+                    name: gitPR.repository.name
                 },
             });
         }
@@ -309,7 +310,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
     }
 
-    async function runMergeQueue(gitClient: GitRestClient, tenantInfo: TenantInfo): Promise<void> {
+    async function runMergeQueue(gitClient: GitRestClient, project: string): Promise<void> {
         if (isMergeQueueRunning.current === true) {
             console.log("MQ: merge queue is already running");
             return;
@@ -318,21 +319,16 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         try {
             isMergeQueueRunning.current = true;
 
-            let project = tenantInfo.project;
-            if (!project) {
-                console.error("MQ: runMergeQueue -> failed to get project");
-                return;
-            }
-
-            var mqdoc = await getMergeQueueDocument();
-            if (!mqdoc) {
+            var old_mqdoc = await getMergeQueueDocument();
+            if (!old_mqdoc) {
                 console.error("MQ: runMergeQueue -> failed to get merge queue document");
                 return;
             }
-
+            
             // get unique repositories referenced by the merge queue items
-            const mqitems = mqdoc.mergeQueueItems;
-            const repos = mqitems.map(i => i.repository);
+            const old_mqitems = [...old_mqdoc.mergeQueueItems];
+            dispatch( { mergeQueueItems: old_mqdoc.mergeQueueItems });
+            const repos = old_mqitems.map(i => i.repository);
             const repoSet = distinctBy(repos, r => r.id);
             const gitRepos = await Promise.all(repoSet.map(r => gitClient.getRepository(r.id, project)));
             console.log("MQ: runMergeQueue -> retrieved git repositories", gitRepos);
@@ -347,30 +343,69 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 repoBaseCommits.push({ repoId: repo.id, baseCommitId: commitId });
             }
 
+            async function syncDocument(): Promise<boolean> {
+                var doc = await updateDocument(extensionManagementClient.current, collectionId, mergeQueueDocumentId, old_mqdoc);
+                if (!doc) {
+                    return false;
+                }
+                // console.log("MQ: runMergeQueue -> updated merge queue document", doc2);
+                old_mqdoc = doc;
+                return true;
+            }
+
             let new_mqitems: MergeQueueItemInfo[] = [];
-            for (const mqitem of mqitems) {
-                const repoid = mqitem.repository.id;
-                const baseCommit = repoBaseCommits.find(r => r.repoId === repoid);
-                if (!baseCommit) {
+            for (const [index, old_mqitem] of old_mqitems.entries()) {
+                // calculate target commit
+                const repoid = old_mqitem.repository.id;
+                const targetCommitId = repoBaseCommits.find(r => r.repoId === repoid)?.baseCommitId;
+                if (!targetCommitId) {
                     console.error("MQ: runMergeQueue -> failed to find base commit for repository", repoid);
+                    new_mqitems.push(old_mqitem);
                     continue;
                 }
 
-                const sourceRefName = mqitem.sourceRefName;
-                const sourceCommitId = 
-                    await getRefCommitId(gitClient, tenantInfo.project, repoid, sourceRefName) ||
-                    mqitem.sourceCommitId;
+                // calculate source commit
+                const sourceRefName = old_mqitem.sourceRefName;
+                const sourceCommitId = await getRefCommitId(gitClient, project, repoid, sourceRefName);
+                if (!sourceCommitId) {
+                    console.error("MQ: runMergeQueue -> failed to get source commit ID for repository", repoid, sourceRefName);
+                    new_mqitems.push(old_mqitem);
+                    continue;
+                }
 
-                new_mqitems.push({
-                    ...mqitem,
+                // TODO: Implement merge queue logic
+                const isSameSourceCommit = sourceCommitId === old_mqitem.sourceCommitId;
+                const isSameTargetCommit = targetCommitId === old_mqitem.targetCommitId;
+
+                if (isSameSourceCommit && isSameTargetCommit) {
+                    console.log(`MQ: runMergeQueue -> ${index}: same commits`);
+                    new_mqitems.push(old_mqitem);
+                    continue;
+                } else if (!isSameSourceCommit) {
+                    console.log(`MQ: runMergeQueue -> ${index}: new source commit`, sourceCommitId, old_mqitem.sourceCommitId);
+                } else if (!isSameTargetCommit) {
+                    console.log(`MQ: runMergeQueue -> ${index}: new target commit`, targetCommitId, old_mqitem.targetCommitId);
+                }
+
+                const new_mqitem = {
+                    ...old_mqitem,
                     sourceCommitId: sourceCommitId,
-                    targetCommitId: baseCommit.baseCommitId,
-                });
+                    targetCommitId: targetCommitId,
+                };
+                new_mqitems.push(new_mqitem);
+                old_mqitems[index] = new_mqitem; // TODO: progressive update document
+                if (!(await syncDocument())) {
+                    console.error(`MQ: runMergeQueue -> ${index}: failed to sync document`);
+                    return;
+                }
             }
+
             dispatch({ mergeQueueItems: new_mqitems });
-
-            // TODO: Implement merge queue logic
-
+            old_mqdoc.mergeQueueItems = new_mqitems;
+            if (!(await syncDocument())) {
+                console.error(`MQ: runMergeQueue -> end: failed to sync document`);
+                return;
+            }
         } catch (error) {
             console.error("MQ: runMergeQueue -> error occurred", error);
         } finally {

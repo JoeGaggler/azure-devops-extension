@@ -129,7 +129,7 @@ async function updateDocument(client: ExtensionManagementRestClient, collectionI
         document.id = documentId;
         return await client.updateDocumentByName(document, publisher, extensionName, "Default", "Current", collectionId);
     } catch (error) {
-        console.error("MQ: getDocument -> error occurred", error);
+        console.error("MQ: updateDocument -> error occurred", error);
         return undefined;
     }
 }
@@ -149,6 +149,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     let singleton = React.useRef(p.singleton);
     let gitClient = React.useRef(getGitClient());
     let extensionManagementClient = React.useRef(getExtensionManagementClient());
+    let isMergeQueueRunning = React.useRef(false);
 
     const [state, dispatch] = React.useReducer<(state: ReducerState, action: ReducerAction) => ReducerState>(reducer, {
         mergeQueueItems: [],
@@ -269,8 +270,32 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     console.log("MQ: updated active pull request document", adoc2);
                 }
             }
+
+            await runMergeQueue();
+
         } catch (error) {
             console.error("MQ: ticktock -> error occurred", error);
+        }
+    }
+
+    async function runMergeQueue(): Promise<void> {
+        if (isMergeQueueRunning.current === true) {
+            console.log("MQ: merge queue is already running");
+            return;
+        }
+        console.log("MQ: running merge queue");
+        try {
+            isMergeQueueRunning.current = true;
+
+            // TODO: remove fake processing delay
+            await new Promise(resolve => setTimeout(resolve, 7000));
+            
+            // TODO: Implement merge queue logic
+        } catch (error) {
+            console.error("MQ: runMergeQueue -> error occurred", error);
+        } finally {
+            console.log("MQ: finished running merge queue");
+            isMergeQueueRunning.current = false;
         }
     }
 

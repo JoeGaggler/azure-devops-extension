@@ -361,7 +361,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             for (const [index, old_mqitem] of old_mqitems.entries()) {
                 // calculate target commit
                 const repoid = old_mqitem.repository.id;
-                const targetCommitId = repoBaseCommits.find(r => r.repoId === repoid)?.baseCommitId;
+                const targetCommitEntry = repoBaseCommits.find(r => r.repoId === repoid);
+                const targetCommitId = targetCommitEntry?.baseCommitId;
                 if (!targetCommitId) {
                     console.error("MQ: runMergeQueue -> failed to find base commit for repository", repoid);
                     new_mqitems.push(old_mqitem);
@@ -377,27 +378,36 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     continue;
                 }
 
+                // skip item if no changes are needed
                 const status = old_mqitem.status ?? 'queued';
-                const isQueuedStatus = status === 'queued';
+                const isQueuedStatus = status === 'queued' || status === 'recalculating';
                 const isSameSourceCommit = sourceCommitId === old_mqitem.sourceCommitId;
                 const isSameTargetCommit = targetCommitId === old_mqitem.targetCommitId;
                 const needsMergedCommit = (old_mqitem.mergedCommitId || zeroCommitId) === zeroCommitId;
-
-                if (isQueuedStatus || needsMergedCommit) {
-                    console.log(`MQ: runMergeQueue -> ${index}: queued`);
-                    // must refresh merge commit
-                }
-                else if (isSameSourceCommit && isSameTargetCommit) {
+                if (isQueuedStatus || needsMergedCommit) { console.log(`MQ: runMergeQueue -> ${index}: queued`); }
+                else if (!isSameSourceCommit) { console.log(`MQ: runMergeQueue -> ${index}: new source commit`, sourceCommitId, old_mqitem.sourceCommitId); }
+                else if (!isSameTargetCommit) { console.log(`MQ: runMergeQueue -> ${index}: new target commit`, targetCommitId, old_mqitem.targetCommitId); }
+                else {
+                    // skip!
                     console.log(`MQ: runMergeQueue -> ${index}: same commits`);
                     new_mqitems.push(old_mqitem);
+                    targetCommitEntry.baseCommitId = old_mqitem.mergedCommitId;
                     continue;
-                } else if (!isSameSourceCommit) {
-                    console.log(`MQ: runMergeQueue -> ${index}: new source commit`, sourceCommitId, old_mqitem.sourceCommitId);
-                } else if (!isSameTargetCommit) {
-                    console.log(`MQ: runMergeQueue -> ${index}: new target commit`, targetCommitId, old_mqitem.targetCommitId);
                 }
 
-                // Checkout item
+                // invalidate subsequent merge queue items in the same repository
+                for (let i2 = index + 1; i2 < old_mqitems.length; i2++) {
+                    let itr_mqitem = old_mqitems[i2];
+                    if (itr_mqitem.repository.id !== repoid) { continue; }
+
+                    console.log(`MQ: runMergeQueue -> ${i2}: invalidating`);
+                    old_mqitems[i2] = {
+                        ...old_mqitems[i2],
+                        status: 'queued',
+                    };
+                }
+
+                // checkout item
                 console.log(`MQ: runMergeQueue -> ${index}: recalculating`, sourceCommitId, targetCommitId);
                 const new_mqitem: MergeQueueItemInfo = {
                     ...old_mqitem,
@@ -412,7 +422,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     return;
                 }
 
-                // TODO: Implement merge queue logic
+                // merge request
                 let mergeRequestParams: GitMergeParameters = {
                     parents: [sourceCommitId, targetCommitId],
                     comment: `Merge Queue: ${sourceCommitId} into ${targetCommitId}`
@@ -420,23 +430,17 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 let mergeRequest = await gitClient.createMergeRequest(mergeRequestParams, project, repoid)
                 console.log(`MQ: runMergeQueue -> ${index}: created merge request`, mergeRequest);
                 await new Promise(resolve => setTimeout(resolve, 10000));
+                // TODO: LOOP UNTIL RESOLVED OR TIMEOUT
                 let mergeRequest2 = await gitClient.getMergeRequest(project, repoid, mergeRequest.mergeOperationId)
                 console.log(`MQ: runMergeQueue -> ${index}: updated merge request`, mergeRequest2);
-                let new_status: MergeQueueStatus = 'valid'; // TODO: check for conflicts
-                new_mqitem.status = new_status;
-                new_mqitem.mergedCommitId = mergeRequest2.status === GitAsyncOperationStatus.Completed ? mergeRequest2.detailedStatus.mergeCommitId : zeroCommitId;
-
-                // invalidate subsequent merge queue items in the same repository
-                for (let i2 = index + 1; i2 < old_mqitems.length; i2++) {
-                    let itr_mqitem = old_mqitems[i2];
-                    if (itr_mqitem.repository.id !== repoid) { continue; }
-
-                    console.log(`MQ: runMergeQueue -> ${i2}: invalidating`);
-                    old_mqitems[i2] = {
-                        ...old_mqitems[i2],
-                        status: 'queued',
-                    };
+                if (!mergeRequest2 || mergeRequest2.status !== GitAsyncOperationStatus.Completed) {
+                    console.error(`MQ: runMergeQueue -> ${index}: failed to complete merge request`);
+                    return;
                 }
+                const mergedCommitId = mergeRequest2.detailedStatus.mergeCommitId;
+                new_mqitem.status = 'valid'; // TODO: check for conflicts
+                new_mqitem.mergedCommitId = mergedCommitId;
+                targetCommitEntry.baseCommitId = mergedCommitId;
 
                 // append and sync
                 new_mqitems.push(new_mqitem);

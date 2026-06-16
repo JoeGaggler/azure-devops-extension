@@ -5,6 +5,7 @@ import * as GetClientAPI from 'azure-devops-extension-api/Git/GitClient';
 import * as ExtMgmtAPI from 'azure-devops-extension-api/ExtensionManagement/ExtensionManagementClient'
 import * as SDK from 'azure-devops-extension-sdk';
 import { IProjectPageService } from 'azure-devops-extension-api/Common';
+import { GitAsyncOperationStatus, GitMergeParameters } from "azure-devops-extension-api/Git/Git";
 
 export function getBuildClient() { return ClientAPI.getClient(BuildClientAPI.BuildRestClient); }
 export function getGitClient() { return ClientAPI.getClient(GetClientAPI.GitRestClient); }
@@ -46,8 +47,50 @@ export async function getRefCommitId(gitClient: GetClientAPI.GitRestClient, proj
     return repoObjectId;
 }
 
-export async function getDefaultBranchCommitId(gitClient:GetClientAPI.GitRestClient,projectId: string, repoId: string): Promise<string | undefined> {
+export async function getDefaultBranchCommitId(gitClient: GetClientAPI.GitRestClient, projectId: string, repoId: string): Promise<string | undefined> {
     const gitRepo = await gitClient.getRepository(repoId);
     const defaultRef = gitRepo.defaultBranch;
     return await getRefCommitId(gitClient, projectId, repoId, defaultRef);
+}
+
+export async function mergeCommits(gitClient: GetClientAPI.GitRestClient, projectId: string, repoId: string, sourceCommitId: string, targetCommitId: string): Promise<string | undefined> {
+    let mergeRequestParams: GitMergeParameters = {
+        parents: [sourceCommitId, targetCommitId],
+        comment: `Merge Queue: ${sourceCommitId} into ${targetCommitId}`
+    };
+    let mergeRequest = await gitClient.createMergeRequest(mergeRequestParams, projectId, repoId);
+    if (!mergeRequest) {
+        return undefined;
+    }
+    var didTimeout = false;
+    var timeout = setTimeout(() => {
+        didTimeout = true;
+    }, 10000);
+    while (!didTimeout) {
+        console.log("Checking merge request status...");
+        let mergeRequest2 = await gitClient.getMergeRequest(projectId, repoId, mergeRequest.mergeOperationId);
+        if (mergeRequest2) {
+            let newStatus = mergeRequest2.status;
+            if (newStatus == GitAsyncOperationStatus.InProgress) { }
+            else if (newStatus == GitAsyncOperationStatus.Queued) { }
+            else if (newStatus === GitAsyncOperationStatus.Completed) {
+                clearTimeout(timeout);
+                return mergeRequest2.detailedStatus?.mergeCommitId;
+            }
+            else if (mergeRequest2.status === GitAsyncOperationStatus.Failed) {
+                clearTimeout(timeout);
+                return undefined;
+            }
+            else if (mergeRequest2.status === GitAsyncOperationStatus.Abandoned) {
+                clearTimeout(timeout);
+                return undefined;
+            }
+            else { // unexpected
+                clearTimeout(timeout);
+                return undefined;
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000)); // delay
+        }
+    }
+    return undefined;
 }

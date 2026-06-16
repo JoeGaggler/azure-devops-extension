@@ -10,9 +10,9 @@ import { Page } from "azure-devops-ui/Components/Page/Page";
 import { TitleSize } from "azure-devops-ui/Components/Header/Header.Props";
 import { Card } from "azure-devops-ui/Card";
 
-import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, getDefaultBranchCommitId, getRefCommitId } from "./azuredevops";
+import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, getDefaultBranchCommitId, getRefCommitId, mergeCommits } from "./azuredevops";
 
-import { GitAsyncOperationStatus, GitMergeParameters, GitPullRequestSearchCriteria, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
+import { GitPullRequestSearchCriteria, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
 import { ExtensionManagementRestClient } from "azure-devops-extension-api/ExtensionManagement/ExtensionManagementClient";
 import { Icon, IconSize } from "azure-devops-ui/Icon";
 import { distinctBy } from "./lib";
@@ -423,21 +423,11 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 }
 
                 // merge request
-                let mergeRequestParams: GitMergeParameters = {
-                    parents: [sourceCommitId, targetCommitId],
-                    comment: `Merge Queue: ${sourceCommitId} into ${targetCommitId}`
-                };
-                let mergeRequest = await gitClient.createMergeRequest(mergeRequestParams, project, repoid)
-                console.log(`MQ: runMergeQueue -> ${index}: created merge request`, mergeRequest);
-                await new Promise(resolve => setTimeout(resolve, 10000));
-                // TODO: LOOP UNTIL RESOLVED OR TIMEOUT
-                let mergeRequest2 = await gitClient.getMergeRequest(project, repoid, mergeRequest.mergeOperationId)
-                console.log(`MQ: runMergeQueue -> ${index}: updated merge request`, mergeRequest2);
-                if (!mergeRequest2 || mergeRequest2.status !== GitAsyncOperationStatus.Completed) {
-                    console.error(`MQ: runMergeQueue -> ${index}: failed to complete merge request`);
+                let mergedCommitId = await mergeCommits(gitClient, project, repoid, sourceCommitId, targetCommitId);
+                if (!mergedCommitId) {
+                    console.error(`MQ: runMergeQueue -> ${index}: failed to merge commits`);
                     return;
                 }
-                const mergedCommitId = mergeRequest2.detailedStatus.mergeCommitId;
                 new_mqitem.status = 'valid'; // TODO: check for conflicts
                 new_mqitem.mergedCommitId = mergedCommitId;
                 targetCommitEntry.baseCommitId = mergedCommitId;

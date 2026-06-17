@@ -1,6 +1,8 @@
 // TODO: dequeue must still update the final commit id
 // TODO: merge conflict chain reaction
 // TODO: special icon for status checks incomplete
+// TODO: too much concurrency is preventing any progress?
+// TODO: draft PR causes skip
 import React from "react";
 import * as luxon from 'luxon'
 import * as SDK from 'azure-devops-extension-sdk';
@@ -73,6 +75,7 @@ interface MergeQueueItemInfo {
 type MergeQueueStatus =
     "queued" | // requires recalculation
     "recalculating" | // currently being recalculated
+    "conflict" | // has a merge conflict with another item in the queue
     "valid"; // can be merged
 
 interface PullRequestDocument {
@@ -476,8 +479,9 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     targetCommitEntry.baseCommitId = mergedCommitId;
                 } else {
                     console.error(`MQ: runMergeQueue -> ${index}: failed to merge commits 2`, mergeResult);
+                    new_mqitem.status = 'conflict'; // TODO: check for conflicts
+                    new_mqitem.mergedCommitId = zeroCommitId;
                     invalidateDependentPullRequests(old_mqitems, index, repoid);
-                    return;
                 }
 
                 // append and sync
@@ -866,8 +870,12 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         return state.mergeQueueItems.map((item): PullRequestListItem => {
             let status = item.status;
             let icon = "Starburst";
+            let className: string | undefined = undefined;
             if (status === "queued") {
                 icon = "CircleRing";
+            } else if (status === "conflict") {
+                icon = "BlockedSolid";
+                className = "color-red";
             } else if (status === "recalculating") {
                 icon = "WorkFlow";
             } else {
@@ -878,6 +886,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
             return {
                 icon: icon,
+                className: className,
                 pullRequestId: item.id,
                 repository: item.repository.name,
                 author: item.author,
@@ -957,6 +966,7 @@ export interface PullRequestListItem {
     repository: string;
     title: string;
     icon: string;
+    className?: string;
     author: AuthorInfo;
     dateString?: string;
 }
@@ -994,6 +1004,9 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
         if (!pullRequest) { return <></> }
         let extra = "";
         let className = `scroll-hidden flex-row flex-center rhythm-horizontal-8 flex-grow padding-4 ${extra}`;
+        if (pullRequest.className) {
+            className += ` ${pullRequest.className}`;
+        }
 
         let initialsIdentityProvider = {
             getDisplayName() {

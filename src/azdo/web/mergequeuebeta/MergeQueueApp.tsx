@@ -1,6 +1,7 @@
 // TODO: dequeue must still update the final commit id
 import React from "react";
 import * as luxon from 'luxon'
+import * as SDK from 'azure-devops-extension-sdk';
 
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Header } from "azure-devops-ui/Components/Header/Header";
@@ -20,6 +21,7 @@ import { Icon, IconSize } from "azure-devops-ui/Icon";
 import { distinctBy } from "./lib";
 import { GitRestClient } from "azure-devops-extension-api/Git/GitClient";
 import { VssPersona } from "azure-devops-ui/Components/VssPersona/VssPersona";
+import { IHostNavigationService } from "azure-devops-extension-api/Common/CommonServices";
 
 const publisher = "pingmint";
 const extensionName = "pingmint-extension";
@@ -767,8 +769,23 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         dispatch({ selectedActivePullRequestIds: ids });
     }
 
-    function onActivateActivePullRequest(_id: number) {
-        onEnqueuePullRequest();
+    function onActivateMergeQueuePullRequest(id: number, repo: string) {
+        activatePullRequest(id, repo);
+    }
+
+    function onActivateActivePullRequest(id: number, repo: string) {
+        activatePullRequest(id, repo);
+    }
+
+    async function activatePullRequest(id: number, repo: string) {
+        let ten = tenantInfo.current; if (!ten) { return; }
+        let org = ten.organization; if (!org) { return; }
+        let proj = ten.project; if (!proj) { return; }
+
+        const navService = await SDK.getService<IHostNavigationService>("ms.vss-features.host-navigation-service");
+        let url = `https://dev.azure.com/${org}/${proj}/_git/${repo}/pullrequest/${id}`;
+        console.log("url: ", url);
+        navService.openNewWindow(url, "");
     }
 
     function mapMergeQueueItemToPullRequestListItems(): PullRequestListItem[] {
@@ -830,6 +847,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     pullRequests={mapMergeQueueItemToPullRequestListItems()}
                     selectedIds={state.selectedMergeQueuePullRequestIds}
                     onSelectPullRequestIds={onSelectMergeQueuePullRequestIds}
+                    onActivatePullRequest={onActivateMergeQueuePullRequest}
                 />
             </Card>
 
@@ -873,7 +891,7 @@ export interface PullRequestListProps {
     pullRequests: PullRequestListItem[];
     selectedIds: number[];
     onSelectPullRequestIds: (id: number[]) => void;
-    onActivatePullRequest?: (id: number) => void;
+    onActivatePullRequest?: (id: number, repo: string) => void;
 }
 
 export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequestIds, onActivatePullRequest }: PullRequestListProps) {
@@ -889,7 +907,7 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
     function onActivateRow(row: IListRow<PullRequestListItem>) {
         console.log("NextRunTab -> targetPipelineActivate", row);
         if (onActivatePullRequest) {
-            onActivatePullRequest(row.data.pullRequestId);
+            onActivatePullRequest(row.data.pullRequestId, row.data.repository);
         }
     }
 

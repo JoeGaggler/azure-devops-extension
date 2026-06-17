@@ -53,10 +53,10 @@ export async function getDefaultBranchCommitId(gitClient: GetClientAPI.GitRestCl
     return await getRefCommitId(gitClient, projectId, repoId, defaultRef);
 }
 
-export async function mergeCommits(gitClient: GetClientAPI.GitRestClient, projectId: string, repoId: string, sourceCommitId: string, targetCommitId: string): Promise<GitMerge | undefined> {
+export async function mergeCommits(gitClient: GetClientAPI.GitRestClient, projectId: string, repoId: string, sourceCommitId: string, targetCommitId: string, comment: string): Promise<GitMerge | undefined> {
     let mergeRequestParams: GitMergeParameters = {
         parents: [sourceCommitId, targetCommitId],
-        comment: `Merge Queue: ${sourceCommitId} into ${targetCommitId}`
+        comment: comment,
     };
     let mergeRequest = await gitClient.createMergeRequest(mergeRequestParams, projectId, repoId);
     if (!mergeRequest) {

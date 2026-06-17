@@ -15,7 +15,7 @@ import { Card } from "azure-devops-ui/Card";
 
 import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, getDefaultBranchCommitId, getRefCommitId, mergeCommits } from "./azuredevops";
 
-import { GitAsyncOperationStatus, GitPullRequestSearchCriteria, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
+import { GitAsyncOperationStatus, GitPullRequestSearchCriteria, GitRefUpdate, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
 import { ExtensionManagementRestClient } from "azure-devops-extension-api/ExtensionManagement/ExtensionManagementClient";
 import { Icon, IconSize } from "azure-devops-ui/Icon";
 import { distinctBy } from "./lib";
@@ -29,6 +29,7 @@ const collectionId = "mergequeue";
 const mergeQueueDocumentId = "mergequeue";
 const activePullRequestsDocumentId = "activepullrequests";
 const zeroCommitId = "0000000000000000000000000000000000000000";
+const refMergeQueue = "refs/heads/merge-queue";
 
 export interface MergeQueueAppSingleton {
     bearerToken: string;
@@ -322,8 +323,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
 
         dispatch({ activePullRequests: newPullRequests });
-        // console.log("MQ: refreshActivePullRequests -> updated pull requests", newPullRequests);
 
+        // TODO: avoid redundant updates
         let adoc = await getActivePullRequestDocument();
         if (adoc) {
             adoc.pullRequests = newPullRequests;
@@ -410,7 +411,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 else if (!isSameTargetCommit) { console.log(`MQ: runMergeQueue -> ${index}: new target commit`, targetCommitId, old_mqitem.targetCommitId); }
                 else {
                     // skip!
-                    console.log(`MQ: runMergeQueue -> ${index}: same commits`);
+                    console.log(`MQ: runMergeQueue -> ${index}: same commits`, status, old_mqitem.title);
                     new_mqitems.push(old_mqitem);
                     targetCommitEntry.baseCommitId = old_mqitem.mergedCommitId;
                     continue;
@@ -435,7 +436,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 }
 
                 // merge request
-                let mergeResult = await mergeCommits(gitClient, project, repoid, sourceCommitId, targetCommitId);
+                let comment = `Merge Queue: ${sourceCommitId} into ${targetCommitId}`;
+                let mergeResult = await mergeCommits(gitClient, project, repoid, sourceCommitId, targetCommitId, comment);
                 if (!mergeResult) {
                     console.error(`MQ: runMergeQueue -> ${index}: failed to merge commits`);
                     return;
@@ -448,6 +450,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     targetCommitEntry.baseCommitId = mergedCommitId;
                 } else {
                     invalidateDependentPullRequests(old_mqitems, index, repoid);
+                    console.error(`MQ: runMergeQueue -> ${index}: failed to merge commits`);
                     return;
                 }
 
@@ -467,6 +470,40 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             //     console.error(`MQ: runMergeQueue -> end: failed to sync document`);
             //     return;
             // }
+
+            // push to the merge-queue branch
+            // let repoBaseCommits: { repoId: string; baseCommitId: string }[] = [];
+            for (const repo of gitRepos) {
+                let oldCommitId = await getRefCommitId(gitClient, project, repo.id, refMergeQueue);
+                if (!oldCommitId) {
+                    oldCommitId = zeroCommitId;
+                }
+
+                const newCommitId = repoBaseCommits.find(r => r.repoId === repo.id)?.baseCommitId;
+                if (!newCommitId) {
+                    console.error("MQ: runMergeQueue -> failed to find final commit for repository", repo.id);
+                    continue;
+                }
+
+                if (oldCommitId === newCommitId) {
+                    console.log("MQ: runMergeQueue -> no changes needed for repository", repo.id, repo.name);
+                    continue;
+                }
+
+                console.log("MQ: runMergeQueue -> updating merge queue ref", repo.id, repo.name, oldCommitId, newCommitId);
+
+                // repoBaseCommits.push({ repoId: repo.id, baseCommitId: commitId });
+                const refUpdate: GitRefUpdate = {
+                    name: refMergeQueue,
+                    repositoryId: repo.id,
+                    oldObjectId: oldCommitId,
+                    newObjectId: newCommitId,
+                    isLocked: undefined!, // HACK: API does not require this
+                };
+                let refResult = await gitClient.updateRefs([refUpdate], repo.id, project, project);
+                console.log("MQ: runMergeQueue -> updateRefs result", refResult);
+            }
+
         } catch (error) {
             console.error("MQ: runMergeQueue -> error occurred", error);
         } finally {

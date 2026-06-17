@@ -769,7 +769,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 icon = "Starburst";
             }
 
-            let dateString = item.createdTimestamp ? luxon.DateTime.fromSeconds(item.createdTimestamp || 0).toRelative() || "" : "";
+            let dateString = item.createdTimestamp ? luxon.DateTime.fromSeconds(item.createdTimestamp).toRelative() || undefined : undefined;
 
             return {
                 icon: icon,
@@ -783,8 +783,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
     function mapActivePullRequestsToPullRequestListItems(): PullRequestListItem[] {
         return state.activePullRequests.map((pr): PullRequestListItem => {
-            let dateString = pr.createdTimestamp ? luxon.DateTime.fromSeconds(pr.createdTimestamp || 0).toRelative() || "" : "";
-            
+            let dateString = pr.createdTimestamp ? luxon.DateTime.fromSeconds(pr.createdTimestamp).toRelative() || undefined : undefined;
+
             return {
                 icon: "CircleRing",
                 pullRequestId: pr.id,
@@ -849,7 +849,7 @@ export interface PullRequestListItem {
     repository: string;
     title: string;
     icon: string;
-    dateString: string;
+    dateString?: string;
 }
 
 export interface PullRequestListProps {
@@ -883,6 +883,8 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
         key?: string
     ): JSX.Element {
         if (!item) { return <></> }
+        let extra = "";
+        let className = `scroll-hidden flex-row flex-center rhythm-horizontal-8 flex-grow padding-4 ${extra}`;
 
         return (
             <ListItem
@@ -890,12 +892,15 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
                 index={index}
                 details={details}
             >
-                <div className="flex-row rhythm-horizontal-8 padding-4">
+                <div className={className}>
                     <Icon iconName={item.icon} size={IconSize.medium} />
-                    <div>{item.pullRequestId}</div>
-                    <div>{item.repository}</div>
-                    <div>{item.title}</div>
-                    <div>{item.dateString}</div>
+                    <div className="font-size-m flex-row flex-center flex-shrink">{item.pullRequestId}</div>
+                    <div className="font-size-m">{item.repository}</div>
+                    <div className="font-size-m italic text-neutral-70 text-ellipsis">{item.title}</div>
+                    <div className="font-size-m flex-row flex-center flex-grow rhythm-horizontal-8">
+                        <div className="flex-grow" />
+                        <div>{item.dateString}</div>
+                    </div>
                 </div>
             </ListItem>
         )

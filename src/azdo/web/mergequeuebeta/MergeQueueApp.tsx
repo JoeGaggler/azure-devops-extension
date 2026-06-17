@@ -397,14 +397,14 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             const gitRepos = await Promise.all(repoSet.map(r => gitClient.getRepository(r.id, project)));
             console.log("MQ: runMergeQueue -> retrieved git repositories", gitRepos);
 
-            let repoBaseCommits: { repoId: string; baseCommitId: string }[] = [];
+            let repoBaseCommits: { repoId: string; baseCommitId: string, blockRepo: boolean }[] = [];
             for (const repo of gitRepos) {
                 const commitId = await getDefaultBranchCommitId(gitClient, project, repo.id);
                 if (!commitId) {
                     console.error("MQ: runMergeQueue -> failed to get default branch commit ID for repository", repo.id);
                     continue;
                 }
-                repoBaseCommits.push({ repoId: repo.id, baseCommitId: commitId });
+                repoBaseCommits.push({ repoId: repo.id, baseCommitId: commitId, blockRepo: false });
             }
 
             let new_mqitems: MergeQueueItemInfo[] = [];
@@ -430,11 +430,13 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
                 // skip item if no changes are needed
                 const status = old_mqitem.status ?? 'queued';
-                const isQueuedStatus = status === 'queued' || status === 'recalculating';
+                const isQueuedStatus = status === 'queued';
+                const isRecalculatingStatus = status === 'recalculating';
+                const isConflictStatus = status === 'conflict';
                 const isSameSourceCommit = sourceCommitId === old_mqitem.sourceCommitId;
                 const isSameTargetCommit = targetCommitId === old_mqitem.targetCommitId;
-                const needsMergedCommit = (old_mqitem.mergedCommitId || zeroCommitId) === zeroCommitId;
-                if (isQueuedStatus || needsMergedCommit) { console.log(`MQ: runMergeQueue -> ${index}: queued`); }
+                if (isQueuedStatus) { console.log(`MQ: runMergeQueue -> ${index}: queued`); }
+                else if (isRecalculatingStatus) { console.log(`MQ: runMergeQueue -> ${index}: recalculating`); }
                 else if (!isSameSourceCommit) { console.log(`MQ: runMergeQueue -> ${index}: new source commit`, sourceCommitId, old_mqitem.sourceCommitId); }
                 else if (!isSameTargetCommit) { console.log(`MQ: runMergeQueue -> ${index}: new target commit`, targetCommitId, old_mqitem.targetCommitId); }
                 else {
@@ -442,6 +444,17 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     console.log(`MQ: runMergeQueue -> ${index}: same commits`, status, old_mqitem.title);
                     new_mqitems.push(old_mqitem);
                     targetCommitEntry.baseCommitId = old_mqitem.mergedCommitId;
+                    continue;
+                }
+
+                // propagate conflict status to subsequent items
+                if (isConflictStatus) {
+                    targetCommitEntry.blockRepo = true;
+                    invalidateDependentPullRequests(old_mqitems, index, repoid);
+                }
+                if (targetCommitEntry.blockRepo) {
+                    console.log(`MQ: runMergeQueue -> ${index}: has conflicts`);
+                    new_mqitems.push(old_mqitem);
                     continue;
                 }
 
@@ -462,7 +475,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     console.error(`MQ: runMergeQueue -> ${index}: failed to sync document`);
                     return;
                 }
-                
+
                 // merge request
                 let comment = `Merge Queue: ${sourceCommitId} into ${targetCommitId}`;
                 let mergeResult = await mergeCommits(gitClient, project, repoid, sourceCommitId, targetCommitId, comment);
@@ -481,6 +494,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     console.error(`MQ: runMergeQueue -> ${index}: failed to merge commits 2`, mergeResult);
                     new_mqitem.status = 'conflict'; // TODO: check for conflicts
                     new_mqitem.mergedCommitId = zeroCommitId;
+                    targetCommitEntry.blockRepo = true;
                     invalidateDependentPullRequests(old_mqitems, index, repoid);
                 }
 
@@ -502,7 +516,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             // }
 
             // push to the merge-queue branch
-            // let repoBaseCommits: { repoId: string; baseCommitId: string }[] = [];
             for (const repo of gitRepos) {
                 let oldCommitId = await getRefCommitId(gitClient, project, repo.id, refMergeQueue);
                 if (!oldCommitId) {
@@ -870,12 +883,12 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         return state.mergeQueueItems.map((item): PullRequestListItem => {
             let status = item.status;
             let icon = "Starburst";
-            let className: string | undefined = undefined;
+            let iconClassName: string | undefined = undefined;
             if (status === "queued") {
                 icon = "CircleRing";
             } else if (status === "conflict") {
                 icon = "BlockedSolid";
-                className = "color-red";
+                iconClassName = "color-red";
             } else if (status === "recalculating") {
                 icon = "WorkFlow";
             } else {
@@ -886,7 +899,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
             return {
                 icon: icon,
-                className: className,
+                iconClassName: iconClassName,
                 pullRequestId: item.id,
                 repository: item.repository.name,
                 author: item.author,
@@ -966,7 +979,7 @@ export interface PullRequestListItem {
     repository: string;
     title: string;
     icon: string;
-    className?: string;
+    iconClassName?: string;
     author: AuthorInfo;
     dateString?: string;
 }
@@ -1004,9 +1017,6 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
         if (!pullRequest) { return <></> }
         let extra = "";
         let className = `scroll-hidden flex-row flex-center rhythm-horizontal-8 flex-grow padding-4 ${extra}`;
-        if (pullRequest.className) {
-            className += ` ${pullRequest.className}`;
-        }
 
         let initialsIdentityProvider = {
             getDisplayName() {
@@ -1024,7 +1034,7 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
                 details={details}
             >
                 <div className={className}>
-                    <Icon iconName={pullRequest.icon} size={IconSize.medium} />
+                    <Icon iconName={pullRequest.icon} size={IconSize.medium} className={pullRequest.iconClassName} />
                     <div className="font-size-m flex-row flex-center flex-shrink">{pullRequest.pullRequestId}</div>
                     <VssPersona size={"extra-small"} identityDetailsProvider={initialsIdentityProvider} />
                     <div className="font-size-m">{pullRequest.repository}</div>

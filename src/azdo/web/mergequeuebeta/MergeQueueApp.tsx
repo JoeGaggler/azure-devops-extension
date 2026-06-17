@@ -1,5 +1,6 @@
 // TODO: dequeue must still update the final commit id
 import React from "react";
+import * as luxon from 'luxon'
 
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Header } from "azure-devops-ui/Components/Header/Header";
@@ -40,6 +41,7 @@ interface PullRequestInfo {
     id: number;
     title: string;
     repository: RepositoryInfo;
+    createdTimestamp: number;
     sourceRefName: string;
 }
 
@@ -48,6 +50,7 @@ interface MergeQueueItemInfo {
     title: string;
     repository: RepositoryInfo;
     status: MergeQueueStatus;
+    createdTimestamp: number;
     sourceRefName: string;
     sourceCommitId: string;
     targetCommitId: string;
@@ -124,6 +127,7 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
                 title: item.title,
                 repository: item.repository,
                 sourceRefName: item.sourceRefName,
+                createdTimestamp: item.createdTimestamp,
             };
         });
         // TODO: confirm selections
@@ -131,7 +135,7 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
 
     if (action.activePullRequests) {
         console.log("MQ: reducer -> updating active pull requests", action.activePullRequests);
-        next.activePullRequests = action.activePullRequests;
+        next.activePullRequests = action.activePullRequests.sort((a, b) => b.createdTimestamp - a.createdTimestamp);
         // TODO: confirm selections
     }
 
@@ -293,6 +297,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             newPullRequests.push({
                 id: gitPR.pullRequestId,
                 title: gitPR.title,
+                createdTimestamp: luxon.DateTime.fromJSDate(gitPR.creationDate).toUnixInteger(),
                 sourceRefName: gitPR.sourceRefName,
                 repository: {
                     id: gitPR.repository.id,
@@ -720,6 +725,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 title: pr.title,
                 repository: pr.repository,
                 status: "queued",
+                createdTimestamp: pr.createdTimestamp,
                 sourceRefName: pr.sourceRefName,
                 sourceCommitId: zeroCommitId,
                 targetCommitId: zeroCommitId,
@@ -763,22 +769,28 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 icon = "Starburst";
             }
 
+            let dateString = item.createdTimestamp ? luxon.DateTime.fromSeconds(item.createdTimestamp || 0).toRelative() || "" : "";
+
             return {
                 icon: icon,
                 pullRequestId: item.id,
                 repository: item.repository.name,
-                title: `"${item.title}" - ${item.sourceCommitId} onto ${item.targetCommitId} is ${item.mergedCommitId}`
+                title: `${item.title}`,// - ${item.sourceCommitId} onto ${item.targetCommitId} is ${item.mergedCommitId}`,
+                dateString: dateString
             };
         });
     }
 
     function mapActivePullRequestsToPullRequestListItems(): PullRequestListItem[] {
         return state.activePullRequests.map((pr): PullRequestListItem => {
+            let dateString = pr.createdTimestamp ? luxon.DateTime.fromSeconds(pr.createdTimestamp || 0).toRelative() || "" : "";
+            
             return {
                 icon: "CircleRing",
                 pullRequestId: pr.id,
                 repository: pr.repository.name,
-                title: pr.title
+                title: pr.title,
+                dateString: dateString
             };
         });
     }
@@ -837,6 +849,7 @@ export interface PullRequestListItem {
     repository: string;
     title: string;
     icon: string;
+    dateString: string;
 }
 
 export interface PullRequestListProps {
@@ -882,6 +895,7 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
                     <div>{item.pullRequestId}</div>
                     <div>{item.repository}</div>
                     <div>{item.title}</div>
+                    <div>{item.dateString}</div>
                 </div>
             </ListItem>
         )

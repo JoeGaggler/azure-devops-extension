@@ -5,7 +5,7 @@ import * as GetClientAPI from 'azure-devops-extension-api/Git/GitClient';
 import * as ExtMgmtAPI from 'azure-devops-extension-api/ExtensionManagement/ExtensionManagementClient'
 import * as SDK from 'azure-devops-extension-sdk';
 import { IProjectPageService } from 'azure-devops-extension-api/Common';
-import { GitAsyncOperationStatus, GitMergeParameters } from "azure-devops-extension-api/Git/Git";
+import { GitAsyncOperationStatus, GitMerge, GitMergeParameters } from "azure-devops-extension-api/Git/Git";
 
 export function getBuildClient() { return ClientAPI.getClient(BuildClientAPI.BuildRestClient); }
 export function getGitClient() { return ClientAPI.getClient(GetClientAPI.GitRestClient); }
@@ -53,7 +53,7 @@ export async function getDefaultBranchCommitId(gitClient: GetClientAPI.GitRestCl
     return await getRefCommitId(gitClient, projectId, repoId, defaultRef);
 }
 
-export async function mergeCommits(gitClient: GetClientAPI.GitRestClient, projectId: string, repoId: string, sourceCommitId: string, targetCommitId: string): Promise<string | undefined> {
+export async function mergeCommits(gitClient: GetClientAPI.GitRestClient, projectId: string, repoId: string, sourceCommitId: string, targetCommitId: string): Promise<GitMerge | undefined> {
     let mergeRequestParams: GitMergeParameters = {
         parents: [sourceCommitId, targetCommitId],
         comment: `Merge Queue: ${sourceCommitId} into ${targetCommitId}`
@@ -75,11 +75,12 @@ export async function mergeCommits(gitClient: GetClientAPI.GitRestClient, projec
             else if (newStatus == GitAsyncOperationStatus.Queued) { }
             else if (newStatus === GitAsyncOperationStatus.Completed) {
                 clearTimeout(timeout);
-                return mergeRequest2.detailedStatus?.mergeCommitId;
+                return mergeRequest2;
             }
             else if (mergeRequest2.status === GitAsyncOperationStatus.Failed) {
+                // TODO:
                 clearTimeout(timeout);
-                return undefined;
+                return mergeRequest2;
             }
             else if (mergeRequest2.status === GitAsyncOperationStatus.Abandoned) {
                 clearTimeout(timeout);

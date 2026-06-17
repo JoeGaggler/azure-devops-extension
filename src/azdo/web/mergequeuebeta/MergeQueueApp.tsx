@@ -12,7 +12,7 @@ import { Card } from "azure-devops-ui/Card";
 
 import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, getDefaultBranchCommitId, getRefCommitId, mergeCommits } from "./azuredevops";
 
-import { GitPullRequestSearchCriteria, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
+import { GitAsyncOperationStatus, GitPullRequestSearchCriteria, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
 import { ExtensionManagementRestClient } from "azure-devops-extension-api/ExtensionManagement/ExtensionManagementClient";
 import { Icon, IconSize } from "azure-devops-ui/Icon";
 import { distinctBy } from "./lib";
@@ -226,7 +226,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
     // ticktock
     React.useEffect(() => {
-        let id = setInterval(() => { ticktock(); }, 5000);
+        let id = setInterval(() => { ticktock(); }, 10000);
         return () => clearInterval(id);
     }, []);
     async function ticktock() {
@@ -396,16 +396,19 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 }
 
                 // invalidate subsequent merge queue items in the same repository
-                for (let i2 = index + 1; i2 < old_mqitems.length; i2++) {
-                    let itr_mqitem = old_mqitems[i2];
-                    if (itr_mqitem.repository.id !== repoid) { continue; }
+                function invalidateRemaining() {
+                    for (let i2 = index + 1; i2 < old_mqitems.length; i2++) {
+                        let itr_mqitem = old_mqitems[i2];
+                        if (itr_mqitem.repository.id !== repoid) { continue; }
 
-                    console.log(`MQ: runMergeQueue -> ${i2}: invalidating`);
-                    old_mqitems[i2] = {
-                        ...old_mqitems[i2],
-                        status: 'queued',
-                    };
+                        console.log(`MQ: runMergeQueue -> ${i2}: invalidating`);
+                        old_mqitems[i2] = {
+                            ...old_mqitems[i2],
+                            status: 'queued',
+                        };
+                    }
                 }
+                invalidateRemaining();
 
                 // checkout item
                 console.log(`MQ: runMergeQueue -> ${index}: recalculating`, sourceCommitId, targetCommitId);
@@ -423,14 +426,21 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 }
 
                 // merge request
-                let mergedCommitId = await mergeCommits(gitClient, project, repoid, sourceCommitId, targetCommitId);
-                if (!mergedCommitId) {
+                let mergeResult = await mergeCommits(gitClient, project, repoid, sourceCommitId, targetCommitId);
+                if (!mergeResult) {
                     console.error(`MQ: runMergeQueue -> ${index}: failed to merge commits`);
                     return;
                 }
-                new_mqitem.status = 'valid'; // TODO: check for conflicts
-                new_mqitem.mergedCommitId = mergedCommitId;
-                targetCommitEntry.baseCommitId = mergedCommitId;
+                let mergeResultStatus = mergeResult.status;
+                if (mergeResultStatus === GitAsyncOperationStatus.Completed) {
+                    let mergedCommitId = mergeResult.detailedStatus.mergeCommitId;
+                    new_mqitem.status = 'valid'; // TODO: check for conflicts
+                    new_mqitem.mergedCommitId = mergedCommitId;
+                    targetCommitEntry.baseCommitId = mergedCommitId;
+                } else {
+                    invalidateRemaining();
+                    return;
+                }
 
                 // append and sync
                 new_mqitems.push(new_mqitem);
@@ -552,6 +562,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
         console.log("MQ: onDequeuePullRequest -> updated merge queue document", updatedMdoc);
         dispatch({ mergeQueueItems: updatedMdoc.mergeQueueItems });
+
+        await ticktock(); // immediate refresh
     }
 
     async function onEnqueuePullRequest() {
@@ -604,6 +616,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
         console.log("MQ: onEnqueuePullRequest -> updated merge queue document", updatedMdoc);
         dispatch({ mergeQueueItems: updatedMdoc.mergeQueueItems });
+
+        await ticktock(); // immediate refresh
     }
 
     function onSelectMergeQueuePullRequestIds(ids: number[]) {

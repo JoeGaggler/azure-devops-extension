@@ -19,6 +19,7 @@ import { ExtensionManagementRestClient } from "azure-devops-extension-api/Extens
 import { Icon, IconSize } from "azure-devops-ui/Icon";
 import { distinctBy } from "./lib";
 import { GitRestClient } from "azure-devops-extension-api/Git/GitClient";
+import { VssPersona } from "azure-devops-ui/Components/VssPersona/VssPersona";
 
 const publisher = "pingmint";
 const extensionName = "pingmint-extension";
@@ -37,10 +38,16 @@ interface RepositoryInfo {
     name: string;
 }
 
+interface AuthorInfo {
+    displayName: string;
+    imageUrl?: string;
+}
+
 interface PullRequestInfo {
     id: number;
     title: string;
     repository: RepositoryInfo;
+    author: AuthorInfo;
     createdTimestamp: number;
     sourceRefName: string;
 }
@@ -49,6 +56,7 @@ interface MergeQueueItemInfo {
     id: number;
     title: string;
     repository: RepositoryInfo;
+    author: AuthorInfo;
     status: MergeQueueStatus;
     createdTimestamp: number;
     sourceRefName: string;
@@ -128,6 +136,7 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
                 repository: item.repository,
                 sourceRefName: item.sourceRefName,
                 createdTimestamp: item.createdTimestamp,
+                author: item.author,
             };
         });
         // TODO: confirm selections
@@ -303,6 +312,10 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     id: gitPR.repository.id,
                     name: gitPR.repository.name
                 },
+                author: {
+                    displayName: gitPR.createdBy?.displayName || "Unknown User",
+                    imageUrl: gitPR.createdBy?.imageUrl
+                }
             });
         }
 
@@ -724,6 +737,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 id: pr.id,
                 title: pr.title,
                 repository: pr.repository,
+                author: pr.author,
                 status: "queued",
                 createdTimestamp: pr.createdTimestamp,
                 sourceRefName: pr.sourceRefName,
@@ -775,8 +789,9 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 icon: icon,
                 pullRequestId: item.id,
                 repository: item.repository.name,
+                author: item.author,
                 title: `${item.title}`,// - ${item.sourceCommitId} onto ${item.targetCommitId} is ${item.mergedCommitId}`,
-                dateString: dateString
+                dateString: dateString,
             };
         });
     }
@@ -789,6 +804,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 icon: "CircleRing",
                 pullRequestId: pr.id,
                 repository: pr.repository.name,
+                author: pr.author,
                 title: pr.title,
                 dateString: dateString
             };
@@ -849,6 +865,7 @@ export interface PullRequestListItem {
     repository: string;
     title: string;
     icon: string;
+    author: AuthorInfo;
     dateString?: string;
 }
 
@@ -878,13 +895,22 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
 
     function renderRow(
         index: number,
-        item: PullRequestListItem,
+        pullRequest: PullRequestListItem,
         details: IListItemDetails<PullRequestListItem>,
         key?: string
     ): JSX.Element {
-        if (!item) { return <></> }
+        if (!pullRequest) { return <></> }
         let extra = "";
         let className = `scroll-hidden flex-row flex-center rhythm-horizontal-8 flex-grow padding-4 ${extra}`;
+
+        let initialsIdentityProvider = {
+            getDisplayName() {
+                return pullRequest.author?.displayName || "?";
+            },
+            getIdentityImageUrl(_size: number) {
+                return pullRequest.author?.imageUrl || undefined;
+            }
+        }
 
         return (
             <ListItem
@@ -893,13 +919,14 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
                 details={details}
             >
                 <div className={className}>
-                    <Icon iconName={item.icon} size={IconSize.medium} />
-                    <div className="font-size-m flex-row flex-center flex-shrink">{item.pullRequestId}</div>
-                    <div className="font-size-m">{item.repository}</div>
-                    <div className="font-size-m italic text-neutral-70 text-ellipsis">{item.title}</div>
+                    <Icon iconName={pullRequest.icon} size={IconSize.medium} />
+                    <div className="font-size-m flex-row flex-center flex-shrink">{pullRequest.pullRequestId}</div>
+                    <VssPersona size={"extra-small"} identityDetailsProvider={initialsIdentityProvider} />
+                    <div className="font-size-m">{pullRequest.repository}</div>
+                    <div className="font-size-m italic text-neutral-70 text-ellipsis">{pullRequest.title}</div>
                     <div className="font-size-m flex-row flex-center flex-grow rhythm-horizontal-8">
                         <div className="flex-grow" />
-                        <div>{item.dateString}</div>
+                        <div>{pullRequest.dateString}</div>
                     </div>
                 </div>
             </ListItem>

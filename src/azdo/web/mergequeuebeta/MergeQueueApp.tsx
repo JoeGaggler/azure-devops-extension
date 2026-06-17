@@ -1,3 +1,4 @@
+// TODO: dequeue must still update the final commit id
 import React from "react";
 
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
@@ -396,19 +397,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 }
 
                 // invalidate subsequent merge queue items in the same repository
-                function invalidateRemaining() {
-                    for (let i2 = index + 1; i2 < old_mqitems.length; i2++) {
-                        let itr_mqitem = old_mqitems[i2];
-                        if (itr_mqitem.repository.id !== repoid) { continue; }
-
-                        console.log(`MQ: runMergeQueue -> ${i2}: invalidating`);
-                        old_mqitems[i2] = {
-                            ...old_mqitems[i2],
-                            status: 'queued',
-                        };
-                    }
-                }
-                invalidateRemaining();
+                invalidateDependentPullRequests(old_mqitems, index, repoid);
 
                 // checkout item
                 console.log(`MQ: runMergeQueue -> ${index}: recalculating`, sourceCommitId, targetCommitId);
@@ -438,7 +427,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     new_mqitem.mergedCommitId = mergedCommitId;
                     targetCommitEntry.baseCommitId = mergedCommitId;
                 } else {
-                    invalidateRemaining();
+                    invalidateDependentPullRequests(old_mqitems, index, repoid);
                     return;
                 }
 
@@ -508,7 +497,30 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     function renderMergeQueueCommandBarItems(): IHeaderCommandBarItem[] {
+        let hasSelection = state.selectedMergeQueuePullRequestIds.length === 1;
+        if (hasSelection) {
+        }
         return [
+            {
+                id: "promote",
+                iconProps: {
+                    iconName: "Up"
+                },
+                onActivate: () => { onPromotePullRequest(); },
+                isPrimary: false,
+                important: true,
+                disabled: (state.selectedMergeQueuePullRequestIds.length === 0) // TODO: not at top
+            },
+            {
+                id: "demote",
+                iconProps: {
+                    iconName: "Down"
+                },
+                onActivate: () => { onDemotePullRequest(); },
+                isPrimary: false,
+                important: true,
+                disabled: (state.selectedMergeQueuePullRequestIds.length === 0) // TODO: not at bottom
+            },
             {
                 id: "dequeue",
                 text: "Dequeue",
@@ -531,6 +543,113 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 disabled: (state.selectedActivePullRequestIds.length === 0)
             }
         ];
+    }
+
+    function invalidateDependentPullRequests(array: MergeQueueItemInfo[], index: number, repoid: string) {
+        for (let i2 = index + 1; i2 < array.length; i2++) {
+            let itr_mqitem = array[i2];
+            if (itr_mqitem.repository.id !== repoid) { continue; }
+
+            console.log(`MQ: runMergeQueue -> ${i2}: invalidating`);
+            array[i2] = {
+                ...array[i2],
+                status: 'queued',
+            };
+        }
+    }
+
+    async function onPromotePullRequest() {
+        if (!state.selectedMergeQueuePullRequestIds || state.selectedMergeQueuePullRequestIds.length !== 1) {
+            // TODO: toast error
+            return;
+        }
+        let mq_items = state.mergeQueueItems;
+        let selectedId = state.selectedMergeQueuePullRequestIds[0];
+        let selectedIndex = mq_items.findIndex(m => m.id === selectedId);
+        if (selectedIndex === -1) {
+            // TODO: toast error
+            return;
+        }
+
+        // get remote doc
+        let mdoc = await getMergeQueueDocument();
+        if (!mdoc) {
+            console.error("Failed to get merge queue document");
+            return;
+        }
+        mq_items = mdoc.mergeQueueItems || [];
+        dispatch({ mergeQueueItems: mq_items });
+        if (selectedIndex !== mq_items.findIndex(m => m.id === selectedId)) {
+            // TODO: toast error
+            return;
+        }
+        if (selectedIndex === 0) {
+            // TODO: toast error
+            return;
+        }
+
+        // swap
+        let tmp = mq_items[selectedIndex];
+        mq_items[selectedIndex] = mq_items[selectedIndex - 1];
+        mq_items[selectedIndex - 1] = tmp;
+        invalidateDependentPullRequests(mq_items, selectedIndex - 1, tmp.repository.id);
+
+        // sync
+        let updatedMdoc = await updateMergeQueueDocument(mdoc);
+        if (!updatedMdoc) {
+            console.error("MQ: onDequeuePullRequest -> failed to update merge queue document");
+            return;
+        }
+        dispatch({ mergeQueueItems: updatedMdoc.mergeQueueItems });
+
+        await ticktock(); // immediate refresh
+    }
+
+    async function onDemotePullRequest() {
+        if (!state.selectedMergeQueuePullRequestIds || state.selectedMergeQueuePullRequestIds.length !== 1) {
+            // TODO: toast error
+            return;
+        }
+        let mq_items = state.mergeQueueItems;
+        let selectedId = state.selectedMergeQueuePullRequestIds[0];
+        let selectedIndex = mq_items.findIndex(m => m.id === selectedId);
+        if (selectedIndex === -1) {
+            // TODO: toast error
+            return;
+        }
+
+        // get remote doc
+        let mdoc = await getMergeQueueDocument();
+        if (!mdoc) {
+            console.error("Failed to get merge queue document");
+            return;
+        }
+        mq_items = mdoc.mergeQueueItems || [];
+        dispatch({ mergeQueueItems: mq_items });
+        if (selectedIndex !== mq_items.findIndex(m => m.id === selectedId)) {
+            // TODO: toast error
+            return;
+        }
+        if (selectedIndex === mq_items.length - 1) {
+            // TODO: toast error
+            return;
+        }
+
+        // swap
+        let tmp = mq_items[selectedIndex];
+        mq_items[selectedIndex] = mq_items[selectedIndex + 1];
+        mq_items[selectedIndex + 1] = tmp;
+        invalidateDependentPullRequests(mq_items, selectedIndex, tmp.repository.id);
+
+        // sync
+        let updatedMdoc = await updateMergeQueueDocument(mdoc);
+        if (!updatedMdoc) {
+            console.error("MQ: onDequeuePullRequest -> failed to update merge queue document");
+            return;
+        }
+        dispatch({ mergeQueueItems: updatedMdoc.mergeQueueItems });
+
+        await ticktock(); // immediate refresh
     }
 
     async function onDequeuePullRequest() {

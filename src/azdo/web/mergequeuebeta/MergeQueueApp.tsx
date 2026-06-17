@@ -1,4 +1,6 @@
 // TODO: dequeue must still update the final commit id
+// TODO: merge conflict chain reaction
+// TODO: special icon for status checks incomplete
 import React from "react";
 import * as luxon from 'luxon'
 import * as SDK from 'azure-devops-extension-sdk';
@@ -235,10 +237,13 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 dispatch({ activePullRequests: adoc.pullRequests });
             }
 
+
             console.log("MQ: init -> done");
         } catch (error) {
             console.error("MQ: init -> error occurred", error);
         }
+
+        await ticktock(); // run all logic on first load
     }
 
     // ticktock
@@ -306,6 +311,10 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             const sourceRefName = gitPR.sourceRefName;
             if (!sourceRefName) { continue; }
 
+            if (gitPR.status === PullRequestStatus.Completed || gitPR.status === PullRequestStatus.Abandoned) {
+                continue;
+            }
+
             newPullRequests.push({
                 id: gitPR.pullRequestId,
                 title: gitPR.title,
@@ -324,6 +333,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
         dispatch({ activePullRequests: newPullRequests });
 
+
         // TODO: avoid redundant updates
         let adoc = await getActivePullRequestDocument();
         if (adoc) {
@@ -331,6 +341,32 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             let adoc2 = await updateActivePullRequestDocument(adoc);
             if (adoc2) {
                 // console.log("MQ: refreshActivePullRequests -> updated active pull request document", adoc2);
+            }
+        }
+
+        // remove inactive pull requests from merge queue
+        let mdoc = await getMergeQueueDocument();
+        if (mdoc) {
+            let mqitems = mdoc.mergeQueueItems;
+            let removed = mqitems.filter(mi => {
+                if (newPullRequests.some(pr => pr.id === mi.id)) {
+                    return false;
+                }
+                return true;
+            });
+
+            console.log("MQ: refreshActivePullRequests -> removed inactive pull requests from merge queue", removed);
+            if (removed.length !== 0) {
+                for (const removedItem of removed) {
+                    let idx = mqitems.findIndex(mi => mi.id === removedItem.id);
+                    if (idx === -1) { continue; }
+
+                    invalidateDependentPullRequests(mqitems, removedItem.id, removedItem.repository.id);
+                    mqitems.splice(idx, 1);
+                }
+
+                mdoc.mergeQueueItems = mqitems;
+                await syncMergeQueueDocument(mdoc, mqitems);
             }
         }
     }
@@ -366,17 +402,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     continue;
                 }
                 repoBaseCommits.push({ repoId: repo.id, baseCommitId: commitId });
-            }
-
-            async function syncDocument(doc: MergeQueueDocument, items: MergeQueueItemInfo[]): Promise<MergeQueueDocument | undefined> {
-                doc.mergeQueueItems = items;
-                var doc2 = await updateDocument(extensionManagementClient.current, collectionId, mergeQueueDocumentId, doc);
-                if (!doc2 || !doc2.mergeQueueItems) {
-                    return undefined;
-                }
-                // console.log("MQ: runMergeQueue -> updated merge queue document", doc2);
-                dispatch({ mergeQueueItems: doc2.mergeQueueItems });
-                return doc2;
             }
 
             let new_mqitems: MergeQueueItemInfo[] = [];
@@ -429,17 +454,18 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     targetCommitId: targetCommitId,
                 };
                 old_mqitems[index] = new_mqitem; // TODO: progressive update document
-                old_mqdoc = await syncDocument(old_mqdoc, old_mqitems);
+                old_mqdoc = await syncMergeQueueDocument(old_mqdoc, old_mqitems);
                 if (!old_mqdoc) {
                     console.error(`MQ: runMergeQueue -> ${index}: failed to sync document`);
                     return;
                 }
-
+                
                 // merge request
                 let comment = `Merge Queue: ${sourceCommitId} into ${targetCommitId}`;
                 let mergeResult = await mergeCommits(gitClient, project, repoid, sourceCommitId, targetCommitId, comment);
                 if (!mergeResult) {
-                    console.error(`MQ: runMergeQueue -> ${index}: failed to merge commits`);
+                    console.error(`MQ: runMergeQueue -> ${index}: failed to merge commits 1`);
+                    invalidateDependentPullRequests(old_mqitems, index, repoid);
                     return;
                 }
                 let mergeResultStatus = mergeResult.status;
@@ -449,15 +475,15 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     new_mqitem.mergedCommitId = mergedCommitId;
                     targetCommitEntry.baseCommitId = mergedCommitId;
                 } else {
+                    console.error(`MQ: runMergeQueue -> ${index}: failed to merge commits 2`, mergeResult);
                     invalidateDependentPullRequests(old_mqitems, index, repoid);
-                    console.error(`MQ: runMergeQueue -> ${index}: failed to merge commits`);
                     return;
                 }
 
                 // append and sync
                 new_mqitems.push(new_mqitem);
                 old_mqitems[index] = new_mqitem; // TODO: progressive update document
-                old_mqdoc = await syncDocument(old_mqdoc, old_mqitems);
+                old_mqdoc = await syncMergeQueueDocument(old_mqdoc, old_mqitems);
                 if (!old_mqdoc) {
                     console.error(`MQ: runMergeQueue -> ${index}: failed to sync document`);
                     return;
@@ -546,6 +572,17 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
     async function updateMergeQueueDocument(doc: MergeQueueDocument): Promise<MergeQueueDocument | undefined> {
         return await updateDocument(extensionManagementClient.current, collectionId, mergeQueueDocumentId, doc);
+    }
+
+    async function syncMergeQueueDocument(doc: MergeQueueDocument, items: MergeQueueItemInfo[]): Promise<MergeQueueDocument | undefined> {
+        doc.mergeQueueItems = items;
+        let doc2 = await updateMergeQueueDocument(doc);
+        if (!doc2 || !doc2.mergeQueueItems) {
+            return undefined;
+        }
+        // console.log("MQ: runMergeQueue -> updated merge queue document", doc2);
+        dispatch({ mergeQueueItems: doc2.mergeQueueItems });
+        return doc2;
     }
 
     function renderPageCommandBarItems(): IHeaderCommandBarItem[] {

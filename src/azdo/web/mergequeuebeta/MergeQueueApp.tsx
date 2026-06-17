@@ -76,6 +76,7 @@ type MergeQueueStatus =
     "queued" | // requires recalculation
     "recalculating" | // currently being recalculated
     "conflict" | // has a merge conflict with another item in the queue
+    "blocked" | // is blocked by another item in the queue
     "valid"; // can be merged
 
 interface PullRequestDocument {
@@ -336,7 +337,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
         dispatch({ activePullRequests: newPullRequests });
 
-
         // TODO: avoid redundant updates
         let adoc = await getActivePullRequestDocument();
         if (adoc) {
@@ -364,7 +364,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     let idx = mqitems.findIndex(mi => mi.id === removedItem.id);
                     if (idx === -1) { continue; }
 
-                    invalidateDependentPullRequests(mqitems, removedItem.id, removedItem.repository.id);
+                    resetStatusOfDependentPullRequests(mqitems, removedItem.id, removedItem.repository.id, "queued");
                     mqitems.splice(idx, 1);
                 }
 
@@ -439,27 +439,25 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 else if (isRecalculatingStatus) { console.log(`MQ: runMergeQueue -> ${index}: recalculating`); }
                 else if (!isSameSourceCommit) { console.log(`MQ: runMergeQueue -> ${index}: new source commit`, sourceCommitId, old_mqitem.sourceCommitId); }
                 else if (!isSameTargetCommit) { console.log(`MQ: runMergeQueue -> ${index}: new target commit`, targetCommitId, old_mqitem.targetCommitId); }
+                else if (isConflictStatus || targetCommitEntry.blockRepo) {
+                    console.log(`MQ: runMergeQueue -> ${index}: same commits, but in conflict`);
+                    new_mqitems.push(old_mqitem);
+                    resetStatusOfDependentPullRequests(old_mqitems, index, repoid, 'blocked');
+
+                    targetCommitEntry.blockRepo = true;
+                    continue;
+                }
                 else {
                     // skip!
                     console.log(`MQ: runMergeQueue -> ${index}: same commits`, status, old_mqitem.title);
                     new_mqitems.push(old_mqitem);
+
                     targetCommitEntry.baseCommitId = old_mqitem.mergedCommitId;
                     continue;
                 }
 
-                // propagate conflict status to subsequent items
-                if (isConflictStatus) {
-                    targetCommitEntry.blockRepo = true;
-                    invalidateDependentPullRequests(old_mqitems, index, repoid);
-                }
-                if (targetCommitEntry.blockRepo) {
-                    console.log(`MQ: runMergeQueue -> ${index}: has conflicts`);
-                    new_mqitems.push(old_mqitem);
-                    continue;
-                }
-
                 // invalidate subsequent merge queue items in the same repository
-                invalidateDependentPullRequests(old_mqitems, index, repoid);
+                resetStatusOfDependentPullRequests(old_mqitems, index, repoid, "queued");
 
                 // checkout item
                 console.log(`MQ: runMergeQueue -> ${index}: recalculating`, sourceCommitId, targetCommitId);
@@ -481,7 +479,12 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 let mergeResult = await mergeCommits(gitClient, project, repoid, sourceCommitId, targetCommitId, comment);
                 if (!mergeResult) {
                     console.error(`MQ: runMergeQueue -> ${index}: failed to merge commits 1`);
-                    invalidateDependentPullRequests(old_mqitems, index, repoid);
+                    resetStatusOfDependentPullRequests(old_mqitems, index, repoid, 'blocked');
+                    old_mqdoc = await syncMergeQueueDocument(old_mqdoc, old_mqitems);
+                    if (!old_mqdoc) {
+                        console.error(`MQ: runMergeQueue -> ${index}: failed to sync document`);
+                        return;
+                    }
                     return;
                 }
                 let mergeResultStatus = mergeResult.status;
@@ -495,7 +498,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     new_mqitem.status = 'conflict'; // TODO: check for conflicts
                     new_mqitem.mergedCommitId = zeroCommitId;
                     targetCommitEntry.blockRepo = true;
-                    invalidateDependentPullRequests(old_mqitems, index, repoid);
+                    resetStatusOfDependentPullRequests(old_mqitems, index, repoid, 'blocked');
                 }
 
                 // append and sync
@@ -656,7 +659,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         ];
     }
 
-    function invalidateDependentPullRequests(array: MergeQueueItemInfo[], index: number, repoid: string) {
+    function resetStatusOfDependentPullRequests(array: MergeQueueItemInfo[], index: number, repoid: string, status: MergeQueueStatus) {
         for (let i2 = index + 1; i2 < array.length; i2++) {
             let itr_mqitem = array[i2];
             if (itr_mqitem.repository.id !== repoid) { continue; }
@@ -664,7 +667,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             console.log(`MQ: runMergeQueue -> ${i2}: invalidating`);
             array[i2] = {
                 ...array[i2],
-                status: 'queued',
+                status: status,
             };
         }
     }
@@ -700,10 +703,16 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
 
         // swap
-        let tmp = mq_items[selectedIndex];
-        mq_items[selectedIndex] = mq_items[selectedIndex - 1];
-        mq_items[selectedIndex - 1] = tmp;
-        invalidateDependentPullRequests(mq_items, selectedIndex - 1, tmp.repository.id);
+        let up = mq_items[selectedIndex];
+        let dn = mq_items[selectedIndex - 1];
+        mq_items[selectedIndex] = dn;
+        mq_items[selectedIndex - 1] = up;
+
+        // requeue when items in the same repository change positions
+        if (up.repository.id === dn.repository.id) {
+            up.status = 'queued';
+            resetStatusOfDependentPullRequests(mq_items, selectedIndex - 1, up.repository.id, 'queued');
+        }
 
         // sync
         let updatedMdoc = await updateMergeQueueDocument(mdoc);
@@ -747,10 +756,16 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
 
         // swap
-        let tmp = mq_items[selectedIndex];
-        mq_items[selectedIndex] = mq_items[selectedIndex + 1];
-        mq_items[selectedIndex + 1] = tmp;
-        invalidateDependentPullRequests(mq_items, selectedIndex, tmp.repository.id);
+        let dn = mq_items[selectedIndex];
+        let up = mq_items[selectedIndex + 1];
+        mq_items[selectedIndex] = up;
+        mq_items[selectedIndex + 1] = dn;
+
+        // requeue when items in the same repository change positions
+        if (up.repository.id === dn.repository.id) {
+            up.status = 'queued';
+            resetStatusOfDependentPullRequests(mq_items, selectedIndex, dn.repository.id, 'queued');
+        }
 
         // sync
         let updatedMdoc = await updateMergeQueueDocument(mdoc);
@@ -891,6 +906,9 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 iconClassName = "color-red";
             } else if (status === "recalculating") {
                 icon = "WorkFlow";
+            } else if (status === "blocked") {
+                icon = "Blocked2";
+                iconClassName = "color-red";
             } else {
                 icon = "Starburst";
             }

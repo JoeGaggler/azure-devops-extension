@@ -37,9 +37,10 @@ export async function getAzdoInfo(): Promise<TenantInfo | undefined> {
 }
 
 export async function getRefCommitId(gitClient: GetClientAPI.GitRestClient, projectId: string, repoId: string, refName: string): Promise<string | undefined> {
-    const defaultHead = cutPrefix(refName, "refs/");
-    const resultRefs = await gitClient.getRefs(repoId, projectId, defaultHead);
+    const refHead = cutPrefix(refName, "refs/");
+    let resultRefs = (await gitClient.getRefs(repoId, projectId, refHead)).filter((ref) => ref.name === refName);
     if (resultRefs.length !== 1) {
+        console.error(`Expected 1 ref, but got ${resultRefs.length}`, resultRefs);
         return undefined;
     }
     let repoRef = resultRefs[0];

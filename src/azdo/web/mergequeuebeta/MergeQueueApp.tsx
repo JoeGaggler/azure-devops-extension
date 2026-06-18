@@ -907,7 +907,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             } else if (status === "recalculating") {
                 icon = "WorkFlow";
             } else if (status === "blocked") {
-                icon = "Blocked2";
+                icon = "ProgressLoopOuter";
                 iconClassName = "color-red";
             } else {
                 icon = "Starburst";

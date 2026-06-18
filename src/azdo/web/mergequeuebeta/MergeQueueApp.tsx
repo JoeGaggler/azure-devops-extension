@@ -1,8 +1,6 @@
-// TODO: dequeue must still update the final commit id
-// TODO: merge conflict chain reaction
 // TODO: special icon for status checks incomplete
 // TODO: too much concurrency is preventing any progress?
-// TODO: draft PR causes skip
+// TODO: refresh current data after a failed concurrent update
 import React from "react";
 import * as luxon from 'luxon'
 import * as SDK from 'azure-devops-extension-sdk';
@@ -75,6 +73,7 @@ interface MergeQueueItemInfo {
 type MergeQueueStatus =
     "queued" | // requires recalculation
     "recalculating" | // currently being recalculated
+    "draft" | // is a draft pull request
     "conflict" | // has a merge conflict with another item in the queue
     "blocked" | // is blocked by another item in the queue
     "valid"; // can be merged
@@ -347,6 +346,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             }
         }
 
+        // TODO: move this logic to the runMergeQueue function
         // remove inactive pull requests from merge queue
         let mdoc = await getMergeQueueDocument();
         if (mdoc) {
@@ -409,6 +409,27 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
             let new_mqitems: MergeQueueItemInfo[] = [];
             for (const [index, old_mqitem] of old_mqitems.entries()) {
+                // get pull request info
+                const pr = await gitClient.getPullRequestById(old_mqitem.id, project);
+                if (!pr) {
+                    console.error("MQ: runMergeQueue -> failed to get pull request", old_mqitem.id);
+                    old_mqitem.status = "blocked"; // TODO: error icon
+                    new_mqitems.push(old_mqitem);
+                    continue;
+                }
+
+                if (pr.isDraft) {
+                    console.log("MQ: runMergeQueue -> pull request is draft", old_mqitem.id);
+                    old_mqitem.status = "draft";
+                    new_mqitems.push(old_mqitem);
+                    old_mqdoc = await syncMergeQueueDocument(old_mqdoc, old_mqitems);
+                    if (!old_mqdoc) {
+                        console.error(`MQ: runMergeQueue -> ${index}: failed to sync document`);
+                        return;
+                    }
+                    continue;
+                }
+
                 // calculate target commit
                 const repoid = old_mqitem.repository.id;
                 const targetCommitEntry = repoBaseCommits.find(r => r.repoId === repoid);
@@ -904,6 +925,9 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             } else if (status === "conflict") {
                 icon = "BlockedSolid";
                 iconClassName = "color-red";
+            } else if (status === "draft") {
+                icon = "Edit";
+                iconClassName = "color-pencil";
             } else if (status === "recalculating") {
                 icon = "WorkFlow";
             } else if (status === "blocked") {

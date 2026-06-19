@@ -24,6 +24,7 @@ import { distinctBy } from "./lib";
 import { GitRestClient } from "azure-devops-extension-api/Git/GitClient";
 import { VssPersona } from "azure-devops-ui/Components/VssPersona/VssPersona";
 import { IHostNavigationService } from "azure-devops-extension-api/Common/CommonServices";
+import { Toggle } from "azure-devops-ui/Toggle";
 
 const publisher = "pingmint";
 const extensionName = "pingmint-extension";
@@ -36,6 +37,19 @@ const refMergeQueue = "refs/heads/merge-queue";
 export interface MergeQueueAppSingleton {
     bearerToken: string;
     appToken: string;
+}
+
+interface PullRequestFilters {
+    drafts: boolean;
+    blocked: boolean;
+    queued: boolean;
+    allBranches: boolean;
+    repositories: string[];
+}
+
+interface RepositoryDetails {
+    id: string;
+    defaultBranch: string;
 }
 
 interface RepositoryInfo {
@@ -55,6 +69,7 @@ interface PullRequestInfo {
     author: AuthorInfo;
     createdTimestamp: number;
     sourceRefName: string;
+    targetRefName: string;
 }
 
 interface MergeQueueItemInfo {
@@ -65,6 +80,7 @@ interface MergeQueueItemInfo {
     status: MergeQueueStatus;
     createdTimestamp: number;
     sourceRefName: string;
+    targetRefName: string;
     sourceCommitId: string;
     targetCommitId: string;
     mergedCommitId: string;
@@ -94,15 +110,20 @@ interface ReducerState {
     mergeQueueItems: MergeQueueItemInfo[];
     selectedMergeQueuePullRequestIds: number[];
     mergeQueuePullRequests: PullRequestInfo[];
+    repositories: RepositoryDetails[];
 
     activePullRequests: PullRequestInfo[];
+    filteredActivePullRequests: PullRequestInfo[];
     selectedActivePullRequestIds: number[];
+    filters: PullRequestFilters;
 }
 
 interface ReducerAction {
     // collection loading
     mergeQueueItems?: MergeQueueItemInfo[];
     activePullRequests?: PullRequestInfo[];
+    filteredActivePullRequests?: PullRequestInfo[];
+    repositories?: RepositoryDetails[];
 
     // selection changes
     selectedMergeQueuePullRequestIds?: number[];
@@ -110,6 +131,7 @@ interface ReducerAction {
 
     // actions
     enqueuePullRequests?: PullRequestInfo[];
+    filters?: PullRequestFilters;
 }
 
 function applySelections<T, TItem>(listSelection: ListSelection, all: T[], accessor: (t: T) => TItem, ids: TItem[]) {
@@ -124,17 +146,22 @@ function applySelections<T, TItem>(listSelection: ListSelection, all: T[], acces
 function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     let next = { ...state };
 
-    if (action.selectedMergeQueuePullRequestIds) {
+    if (action.repositories !== undefined) {
+        console.log("MQ: reducer -> updating repositories", action.repositories);
+        next.repositories = action.repositories;
+    }
+
+    if (action.selectedMergeQueuePullRequestIds !== undefined) {
         console.log("MQ: reducer -> updating selected merge queue pull request IDs", action.selectedMergeQueuePullRequestIds);
         next.selectedMergeQueuePullRequestIds = action.selectedMergeQueuePullRequestIds;
     }
 
-    if (action.selectedActivePullRequestIds) {
+    if (action.selectedActivePullRequestIds !== undefined) {
         console.log("MQ: reducer -> updating selected active pull request IDs", action.selectedActivePullRequestIds);
         next.selectedActivePullRequestIds = action.selectedActivePullRequestIds;
     }
 
-    if (action.mergeQueueItems) {
+    if (action.mergeQueueItems !== undefined) {
         console.log("MQ: reducer -> updating merge queue items", action.mergeQueueItems);
         next.mergeQueueItems = action.mergeQueueItems;
         next.mergeQueuePullRequests = action.mergeQueueItems.map((item): PullRequestInfo => {
@@ -143,6 +170,7 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
                 title: item.title,
                 repository: item.repository,
                 sourceRefName: item.sourceRefName,
+                targetRefName: item.targetRefName,
                 createdTimestamp: item.createdTimestamp,
                 author: item.author,
             };
@@ -150,10 +178,27 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         // TODO: confirm selections
     }
 
-    if (action.activePullRequests) {
+    if (action.activePullRequests !== undefined) {
         console.log("MQ: reducer -> updating active pull requests", action.activePullRequests);
         next.activePullRequests = action.activePullRequests.sort((a, b) => b.createdTimestamp - a.createdTimestamp);
         // TODO: confirm selections
+    }
+
+    if (action.filters !== undefined) {
+        console.log("MQ: reducer -> updating filters", action.filters);
+        next.filters = action.filters;
+    }
+
+    // reapply filters
+    if (action.filters !== undefined || action.activePullRequests !== undefined) {
+        console.log("MQ: reducer -> reapplying filters");
+        next.filteredActivePullRequests = next.activePullRequests.flatMap(pr => {
+            if (next.filters.allBranches === false) {
+                return next.repositories.some(r => r.id === pr.repository.id && r.defaultBranch === pr.targetRefName) ? pr : [];
+            } else {
+                return pr;
+            }
+        });
     }
 
     return next;
@@ -199,9 +244,19 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         mergeQueueItems: [],
         mergeQueuePullRequests: [],
         selectedMergeQueuePullRequestIds: [],
+        repositories: [],
 
         activePullRequests: [],
+        filteredActivePullRequests: [],
         selectedActivePullRequestIds: [],
+
+        filters: {
+            drafts: false,
+            blocked: false,
+            queued: false,
+            allBranches: false,
+            repositories: [],
+        }
     })
 
     // initialize the app
@@ -220,15 +275,9 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             let em = getExtensionManagementClient();
             extensionManagementClient.current = em;
 
-            // TODO: REMOVE THIS
-            // await extensionManagementClient.current.deleteDocumentByName(
-            //     publisher,
-            //     extensionName,
-            //     "Default",
-            //     "Current",
-            //     collectionId,
-            //     mergeQueueDocumentId
-            // );
+            let gitRepos = await gitClient.current.getRepositories(tenantInfo.current.project);
+            const repoDetails = gitRepos.map(r => ({ id: r.id, defaultBranch: r.defaultBranch }));
+            dispatch({ repositories: repoDetails });
 
             var mdoc = await getMergeQueueDocument();
             if (mdoc) {
@@ -323,6 +372,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 title: gitPR.title,
                 createdTimestamp: luxon.DateTime.fromJSDate(gitPR.creationDate).toUnixInteger(),
                 sourceRefName: gitPR.sourceRefName,
+                targetRefName: gitPR.targetRefName,
                 repository: {
                     id: gitPR.repository.id,
                     name: gitPR.repository.name
@@ -841,6 +891,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 status: "queued",
                 createdTimestamp: pr.createdTimestamp,
                 sourceRefName: pr.sourceRefName,
+                targetRefName: pr.targetRefName,
                 sourceCommitId: zeroCommitId,
                 targetCommitId: zeroCommitId,
                 mergedCommitId: zeroCommitId,
@@ -923,7 +974,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     function mapActivePullRequestsToPullRequestListItems(): PullRequestListItem[] {
-        return state.activePullRequests.map((pr): PullRequestListItem => {
+        return state.filteredActivePullRequests.map((pr): PullRequestListItem => {
             let dateString = pr.createdTimestamp ? luxon.DateTime.fromSeconds(pr.createdTimestamp).toRelative() || undefined : undefined;
 
             return {
@@ -935,6 +986,21 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 dateString: dateString
             };
         });
+    }
+
+    async function saveUserFilters(value: PullRequestFilters) {
+        dispatch({ filters: value });
+
+        // let userFiltersDoc = { ...value };
+        // userFiltersDoc = await Azdo.getOrCreateUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
+
+        // userFiltersDoc.drafts = value.drafts;
+        // userFiltersDoc.blocked = value.blocked;
+        // userFiltersDoc.queued = value.queued;
+        // userFiltersDoc.allBranches = value.allBranches;
+        // userFiltersDoc.repositories = value.repositories;
+
+        // Azdo.trySaveUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
     }
 
     return (
@@ -959,6 +1025,15 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     onActivatePullRequest={onActivateMergeQueuePullRequest}
                 />
             </Card>
+
+            <div className="padding-8 flex-row rhythm-horizontal-8">
+                <Toggle
+                    id="allBranches"
+                    text="All Branches"
+                    checked={state.filters.allBranches}
+                    onChange={(_event, value) => { saveUserFilters({ ...state.filters, allBranches: value }) }}
+                />
+            </div>
 
             <Card
                 className="padding-8 margin-8"

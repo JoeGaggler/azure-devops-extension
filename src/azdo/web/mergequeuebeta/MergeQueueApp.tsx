@@ -12,7 +12,7 @@ import { Page } from "azure-devops-ui/Components/Page/Page";
 import { TitleSize } from "azure-devops-ui/Components/Header/Header.Props";
 import { Card } from "azure-devops-ui/Card";
 
-import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, getDefaultBranchCommitId, getRefCommitId, mergeCommits, AuthorInfo, summarizeVotes, PullRequestVotingResult } from "./azuredevops";
+import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, getDefaultBranchCommitId, getRefCommitId, mergeCommits, AuthorInfo, summarizeVotes, PullRequestVotingResult, getRunClient } from "./azuredevops";
 
 import { GitAsyncOperationStatus, GitPullRequestSearchCriteria, GitRefUpdate, PullRequestAsyncStatus, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
 import { ExtensionManagementRestClient } from "azure-devops-extension-api/ExtensionManagement/ExtensionManagementClient";
@@ -22,6 +22,8 @@ import { GitRestClient } from "azure-devops-extension-api/Git/GitClient";
 import { IHostNavigationService } from "azure-devops-extension-api/Common/CommonServices";
 import { Toggle } from "azure-devops-ui/Toggle";
 import { PullRequestList, PullRequestListItem } from "./PullRequestList";
+import { PipelineList, PipelineListItem } from "./PipelineList";
+import { BuildQueryOrder } from "azure-devops-extension-api/Build/Build";
 
 const publisher = "pingmint";
 const extensionName = "pingmint-extension";
@@ -108,6 +110,14 @@ interface MergeQueueDocument {
     mergeQueueItems: MergeQueueItemInfo[];
 }
 
+interface PipelineRunInfo {
+    runId: number;
+    runName: string;
+    pipelineId: number;
+    pipelineName: string;
+    sourceVersion: string;
+}
+
 interface ReducerState {
     mergeQueueItems: MergeQueueItemInfo[];
     selectedMergeQueuePullRequestIds: number[];
@@ -118,6 +128,9 @@ interface ReducerState {
     filteredActivePullRequests: PullRequestInfo[];
     selectedActivePullRequestIds: number[];
     filters: PullRequestFilters;
+
+    pipelineRuns: PipelineRunInfo[];
+    filteredPipelineRuns: PipelineRunInfo[];
 }
 
 interface ReducerAction {
@@ -134,6 +147,9 @@ interface ReducerAction {
     // actions
     enqueuePullRequests?: PullRequestInfo[];
     filters?: PullRequestFilters;
+
+    // pipeline runs
+    pipelineRuns?: PipelineRunInfo[];
 }
 
 function reducer(state: ReducerState, action: ReducerAction): ReducerState {
@@ -203,6 +219,24 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         next.filteredActivePullRequests = filt;
     }
 
+    // pipeline runs
+    if (action.pipelineRuns !== undefined) {
+        console.log("MQ: reducer -> updating pipeline runs", action.pipelineRuns);
+        next.pipelineRuns = action.pipelineRuns;
+    }
+
+    // filter pipeline runs
+    {
+        next.filteredPipelineRuns = [...next.pipelineRuns];
+        next.filteredPipelineRuns = next.filteredPipelineRuns.filter(run => {
+            return next.mergeQueueItems.some(mqi => mqi.mergedCommitId === run.sourceVersion);
+        });
+        // for (let i = 0; i < next.filteredPipelineRuns.length; i++) {
+        //     const run = next.filteredPipelineRuns[i];
+        //     run.isLinked = next.mergeQueueItems.some(mqi => mqi.mergedCommitId === run.sourceVersion);
+        // }
+    }
+
     return next;
 }
 
@@ -239,6 +273,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     let tenantInfo = React.useRef<TenantInfo>();
     let singleton = React.useRef(p.singleton);
     let gitClient = React.useRef(getGitClient());
+    let runClient = React.useRef(getRunClient());
     let extensionManagementClient = React.useRef(getExtensionManagementClient());
     let isMergeQueueRunning = React.useRef(false);
     let [showIcons, setShowIcons] = React.useState(false);
@@ -259,7 +294,10 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             queued: false,
             allBranches: false,
             repositories: [],
-        }
+        },
+
+        pipelineRuns: [],
+        filteredPipelineRuns: [],
     })
 
     // initialize the app
@@ -277,6 +315,9 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
             let em = getExtensionManagementClient();
             extensionManagementClient.current = em;
+
+            // TODO: LOAD DOC
+            await refreshPipelineRuns(tenantInfo.current.project);
 
             let gitRepos = await gitClient.current.getRepositories(tenantInfo.current.project);
             const repoDetails = gitRepos.map(r => ({ id: r.id, defaultBranch: r.defaultBranch }));
@@ -333,6 +374,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             // TODO: run concurrently
             await refreshActivePullRequests(git, ti);
             await runMergeQueue(git, proj);
+            await refreshPipelineRuns(proj);
         } catch (error) {
             console.error("MQ: ticktock -> error occurred", error);
         }
@@ -607,6 +649,48 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         } finally {
             console.log("MQ: runMergeQueue -> finished");
             isMergeQueueRunning.current = false;
+        }
+    }
+
+    async function refreshPipelineRuns(project: string) {
+        console.log("MQ: refreshPipelineRuns -> starting");
+        try {
+            // (project: string, definitions?: number[], queues?: number[], buildNumber?: string, minTime?: Date, maxTime?: Date, requestedFor?: string, 
+            // reasonFilter?: Build.BuildReason, statusFilter?: Build.BuildStatus, resultFilter?: Build.BuildResult, tagFilters?: string[],
+            //  properties?: string[], top?: number, continuationToken?: string, maxBuildsPerDefinition?: number, deletedFilter?: Build.QueryDeletedOption, queryOrder?: Build.BuildQueryOrder, branchName?: string, buildIds?: number[], repositoryId?: string, repositoryType?: string)
+            let allBuilds = await runClient.current.getBuilds(
+                project, // project
+                undefined, // definitions
+                undefined, // queues
+                undefined, // buildNumber
+                undefined, // minTime
+                undefined, // maxTime
+                undefined, // requestedFor
+                undefined, // reasonFilter
+                undefined, // statusFilter
+                undefined, // resultFilter
+                undefined, // tagFilters
+                undefined, // properties
+                100, // top
+                undefined, // continuationToken
+                undefined, // maxBuildsPerDefinition
+                undefined, // deletedFilter
+                BuildQueryOrder.StartTimeDescending, // queryOrder
+                undefined, // branchName
+                undefined, // buildIds
+                undefined, // repositoryId
+                undefined  // repositoryType
+            );
+            let pipelineRuns = allBuilds.map((run): PipelineRunInfo => ({
+                runId: run.id || 0,
+                pipelineId: run.definition.id || 0,
+                runName: run.buildNumber,
+                pipelineName: run.definition.name || "Unknown",
+                sourceVersion: run.sourceVersion,
+            }));
+            dispatch({ pipelineRuns: pipelineRuns });
+        } catch (error) {
+            console.error("MQ: refreshPipelineRuns -> error occurred", error);
         }
     }
 
@@ -1043,6 +1127,16 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         // Azdo.trySaveUserDocument(mergeQueueDocumentCollectionId, userPullRequestFiltersDocumentId, userFiltersDoc);
     }
 
+    function mapPipelinesForMergeQueue(): PipelineListItem[] {
+        return state.filteredPipelineRuns.map((run) => ({
+            runId: run.runId,
+            runName: run.runName,
+            pipelineId: run.pipelineId,
+            pipelineName: run.pipelineName,
+            sourceVersion: run.sourceVersion,
+        }));
+    }
+
     return (
         <Page className="">
             <Header
@@ -1063,6 +1157,22 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     selectedIds={state.selectedMergeQueuePullRequestIds}
                     onSelectPullRequestIds={onSelectMergeQueuePullRequestIds}
                     onActivatePullRequest={onActivateMergeQueuePullRequest}
+                />
+            </Card>
+
+            <Card
+                className="padding-8 margin-8"
+                contentProps={{ contentPadding: false }}
+                titleProps={{ text: "Pipelines", className: "", size: TitleSize.Medium }}
+                headerClassName=""
+                headerCommandBarItems={[]}
+            >
+                <PipelineList
+                    pipelines={mapPipelinesForMergeQueue()}
+                    selectedIds={[]}
+                // selectedIds={state.selectedMergeQueuePullRequestIds}
+                // onSelectPullRequestIds={onSelectMergeQueuePullRequestIds}
+                // onActivatePullRequest={onActivateMergeQueuePullRequest}
                 />
             </Card>
 

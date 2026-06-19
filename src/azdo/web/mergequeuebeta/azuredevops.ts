@@ -8,6 +8,7 @@ import { IProjectPageService } from 'azure-devops-extension-api/Common';
 import { GitAsyncOperationStatus, GitMerge, GitMergeParameters } from "azure-devops-extension-api/Git/Git";
 
 export function getBuildClient() { return ClientAPI.getClient(BuildClientAPI.BuildRestClient); }
+export function getRunClient() { return ClientAPI.getClient(BuildClientAPI.BuildRestClient); }
 export function getGitClient() { return ClientAPI.getClient(GetClientAPI.GitRestClient); }
 export function getExtensionManagementClient() { return ClientAPI.getClient(ExtMgmtAPI.ExtensionManagementRestClient); }
 

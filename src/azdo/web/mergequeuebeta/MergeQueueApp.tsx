@@ -155,6 +155,7 @@ interface ReducerAction {
 
     // pipeline runs
     pipelineRuns?: PipelineRunInfo[];
+    selectedPipelineRunIds?: number[];
 }
 
 function reducer(state: ReducerState, action: ReducerAction): ReducerState {
@@ -256,6 +257,22 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
 
         next.selectedFilteredPipelineRunIds = runIds;
         console.log("MQ: reducer -> updating selected pipeline runs", next.selectedFilteredPipelineRunIds);
+    }
+
+    if (action.selectedPipelineRunIds !== undefined) {
+        let selIds = action.selectedPipelineRunIds;
+        console.log("MQ: reducer -> updating selected pipeline runs", selIds);
+
+        let runs = next.filteredPipelineRuns.filter(run => selIds.includes(run.runId))
+        let runIds = runs.map(run => run.runId);
+        let selectedCommitIds = runs.map(run => run.sourceVersion);
+
+        next.selectedFilteredPipelineRunIds = runIds;
+        next.selectedMergeQueuePullRequestIds = (next.mergeQueueItems
+            .filter(mqi => selectedCommitIds.includes(mqi.mergedCommitId))
+            .map(mqi => mqi.id)
+        );
+        next.selectedActivePullRequestIds = next.selectedMergeQueuePullRequestIds;
     }
 
     return next;
@@ -1179,6 +1196,11 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
     }
 
+    function onSelectPipelines(runIds: number[]) {
+        console.log("MQ: selecting pipelines", runIds);
+        dispatch({ selectedPipelineRunIds: runIds });
+    }
+
     return (
         <Page className="">
             <Header
@@ -1212,7 +1234,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 <PipelineList
                     pipelines={mapPipelinesForMergeQueue()}
                     selectedIds={state.selectedFilteredPipelineRunIds}
-                    // onSelectPullRequestIds={onSelectMergeQueuePullRequestIds}
+                    onSelectPipelines={onSelectPipelines}
                     onActivatePipeline={onActivatePipeline}
                 />
             </Card>

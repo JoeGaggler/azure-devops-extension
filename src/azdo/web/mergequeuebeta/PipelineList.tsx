@@ -36,7 +36,7 @@ export function PipelineList({ pipelines, selectedIds, onSelectPipelines, onActi
 
     function onSelectRow(row: IListRow<PipelineListItem>) {
         console.log("NextRunTab -> targetPipelineSelect", row);
-        onSelectPipelines?.([row.data.pipelineId]);
+        onSelectPipelines?.([row.data.runId]);
     }
 
     function onActivateRow(row: IListRow<PipelineListItem>) {

@@ -891,6 +891,15 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         let nextprs = aprs.filter(pr => nextids.includes(pr.id));
         console.log("MQ: onEnqueuePullRequest -> next pull requests", nextids, nextprs);
 
+        // block if any prs are not going to the default branch
+        if (!nextprs.every(pr => {
+            let repo = state.repositories.find(r => r.id === pr.repository.id);
+            return repo && repo.defaultBranch === pr.targetRefName;
+        })) {
+            console.error("MQ: onEnqueuePullRequest -> some pull requests are not going to the default branch");
+            return;
+        }
+
         // exclude nextprs that are already in the merge queue
         let filteredprs = nextprs.filter(pr => !mitems.some(mpr => mpr.id === pr.id));
         console.log("MQ: onEnqueuePullRequest -> filtered pull requests", filteredprs);
@@ -899,6 +908,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             return;
         }
 
+        // create new merge queue items
         var newMergeQueueItems = filteredprs.map((pr): MergeQueueItemInfo => {
             return {
                 id: pr.id,

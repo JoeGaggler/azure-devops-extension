@@ -60,6 +60,7 @@ interface PullRequestInfo {
     author: AuthorInfo;
     createdTimestamp: number;
     isDraft: boolean;
+    isAutoComplete: boolean;
     sourceRefName: string;
     targetRefName: string;
     voting: PullRequestVotingResult;
@@ -70,6 +71,7 @@ interface MergeQueueItemInfo {
     title: string;
     repository: RepositoryInfo;
     author: AuthorInfo;
+    isAutoComplete: boolean;
     status: MergeQueueStatus;
     createdTimestamp: number;
     isDraft: boolean;
@@ -162,6 +164,7 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
                 createdTimestamp: item.createdTimestamp,
                 author: item.author,
                 isDraft: item.isDraft,
+                isAutoComplete: item.isAutoComplete,
                 voting: item.voting,
             };
         });
@@ -371,6 +374,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 title: gitPR.title,
                 createdTimestamp: luxon.DateTime.fromJSDate(gitPR.creationDate).toUnixInteger(),
                 isDraft: gitPR.isDraft,
+                isAutoComplete: gitPR.autoCompleteSetBy !== undefined,
                 sourceRefName: gitPR.sourceRefName,
                 targetRefName: gitPR.targetRefName,
                 repository: {
@@ -904,6 +908,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 status: "queued",
                 createdTimestamp: pr.createdTimestamp,
                 isDraft: pr.isDraft,
+                isAutoComplete: pr.isAutoComplete,
                 sourceRefName: pr.sourceRefName,
                 targetRefName: pr.targetRefName,
                 sourceCommitId: zeroCommitId,
@@ -987,6 +992,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 title: `${item.title}`,// - ${item.sourceCommitId} onto ${item.targetCommitId} is ${item.mergedCommitId}`,
                 dateString: dateString,
                 isDraft: item.isDraft,
+                isAutoComplete: item.isAutoComplete,
                 voting: item.voting || { status: "none", count: 0 },
                 nonDefaultTargetBranch: isDefaultBranch ? null : item.targetRefName,
             };
@@ -1007,6 +1013,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 title: pr.title,
                 dateString: dateString,
                 isDraft: pr.isDraft,
+                isAutoComplete: pr.isAutoComplete,
                 voting: pr.voting || { status: "none", count: 0 },
                 nonDefaultTargetBranch: isDefaultBranch ? null : pr.targetRefName,
             };

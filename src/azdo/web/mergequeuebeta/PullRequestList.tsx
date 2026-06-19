@@ -14,6 +14,7 @@ export interface PullRequestListItem {
     iconClassName?: string;
     author: AuthorInfo;
     dateString?: string;
+    isAutoComplete: boolean;
     isDraft: boolean;
     voting?: PullRequestVotingResult;
     nonDefaultTargetBranch: string | null;
@@ -77,12 +78,14 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
             let voteCountString = voteCount > 1 ? ` (${voteCount})` : "";
 
             return <PillGroup className="padding-left-16 padding-right-16">
-                {pullRequest.isDraft && (<Pill size={PillSize.compact}>Draft</Pill>)}
 
                 {voteStatus == "approved" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 128, blue: 64 }}>Approved{voteCountString}</Pill>)}
                 {voteStatus == "suggestions" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 64, blue: 128 }}>Suggestions{voteCountString}</Pill>)}
                 {voteStatus == "waiting" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 169, green: 154, blue: 60 }}>Waiting{voteCountString}</Pill>)}
                 {voteStatus == "rejected" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Rejected{voteCountString}</Pill>)}
+
+                {pullRequest.isDraft && (<Pill size={PillSize.compact}>Draft</Pill>)}
+                {pullRequest.isAutoComplete && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 92, green: 128, blue: 92 }}>Auto-Complete</Pill>)}
 
                 {pullRequest.nonDefaultTargetBranch && (<Pill size={PillSize.compact} variant={PillVariant.outlined}>{pullRequest.nonDefaultTargetBranch}</Pill>)}
             </PillGroup>

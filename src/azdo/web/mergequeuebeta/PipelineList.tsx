@@ -10,6 +10,7 @@ export interface PipelineListItem {
     sourceVersion: string;
     status: string;
     result: string;
+    createdAt: number;
 }
 
 export interface PullRequestListProps {
@@ -66,7 +67,7 @@ export function PipelineList({ pipelines, selectedIds, onSelectPipelines, onActi
                     definitionName={item.pipelineName}
                     status={GetRunStatusType(item.status, item.result)}
                     comment={""}
-                    started={0}
+                    started={item.createdAt}
                     isAlternate={false}
                     isKnown={true}
                     knownTags={[]}

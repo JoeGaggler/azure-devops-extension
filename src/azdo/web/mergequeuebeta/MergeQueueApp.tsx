@@ -118,6 +118,7 @@ interface PipelineRunInfo {
     sourceVersion: string;
     status: string;
     result: string;
+    createdAt: number;
 }
 
 interface ReducerState {
@@ -705,6 +706,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 sourceVersion: run.sourceVersion,
                 status: getRunStatus(run.status),
                 result: getRunResult(run.result),
+                createdAt: luxon.DateTime.fromJSDate(run.startTime).toSeconds(),
             }));
             dispatch({ pipelineRuns: pipelineRuns });
         } catch (error) {
@@ -1154,6 +1156,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             sourceVersion: run.sourceVersion,
             status: run.status,
             result: run.result,
+            createdAt: run.createdAt
         }));
     }
 

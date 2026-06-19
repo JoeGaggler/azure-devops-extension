@@ -12,7 +12,7 @@ import { Page } from "azure-devops-ui/Components/Page/Page";
 import { TitleSize } from "azure-devops-ui/Components/Header/Header.Props";
 import { Card } from "azure-devops-ui/Card";
 
-import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, getDefaultBranchCommitId, getRefCommitId, mergeCommits, AuthorInfo, summarizeVotes, PullRequestVotingResult, getRunClient } from "./azuredevops";
+import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, getDefaultBranchCommitId, getRefCommitId, mergeCommits, AuthorInfo, summarizeVotes, PullRequestVotingResult, getRunClient, getRunStatus, getRunResult } from "./azuredevops";
 
 import { GitAsyncOperationStatus, GitPullRequestSearchCriteria, GitRefUpdate, PullRequestAsyncStatus, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
 import { ExtensionManagementRestClient } from "azure-devops-extension-api/ExtensionManagement/ExtensionManagementClient";
@@ -116,6 +116,8 @@ interface PipelineRunInfo {
     pipelineId: number;
     pipelineName: string;
     sourceVersion: string;
+    status: string;
+    result: string;
 }
 
 interface ReducerState {
@@ -687,6 +689,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 runName: run.buildNumber,
                 pipelineName: run.definition.name || "Unknown",
                 sourceVersion: run.sourceVersion,
+                status: getRunStatus(run.status),
+                result: getRunResult(run.result),
             }));
             dispatch({ pipelineRuns: pipelineRuns });
         } catch (error) {
@@ -1134,6 +1138,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             pipelineId: run.pipelineId,
             pipelineName: run.pipelineName,
             sourceVersion: run.sourceVersion,
+            status: run.status,
+            result: run.result,
         }));
     }
 

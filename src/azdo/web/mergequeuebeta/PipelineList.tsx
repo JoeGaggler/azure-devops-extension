@@ -1,5 +1,6 @@
 import { IListItemDetails, IListRow, ListItem, ListSelection, ScrollableList } from "azure-devops-ui/List";
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
+import { GetRunStatusType, Run } from "../currentruns/Run";
 // import { Icon, IconSize } from "azure-devops-ui/Icon";
 // import { VssPersona } from "azure-devops-ui/VssPersona";
 // import { PillGroup } from "azure-devops-ui/PillGroup";
@@ -12,6 +13,8 @@ export interface PipelineListItem {
     pipelineId: number;
     pipelineName: string;
     sourceVersion: string;
+    status: string;
+    result: string;
 }
 
 export interface PullRequestListProps {
@@ -54,40 +57,8 @@ export function PipelineList({ pipelines, selectedIds, onSelectPipelines, onActi
         key?: string
     ): JSX.Element {
         if (!item) { return <></> }
-        let extra = "";
-        let className = `scroll-hidden flex-row flex-center rhythm-horizontal-8 flex-grow padding-4 ${extra}`;
-
-        // let initialsIdentityProvider = {
-        //     getDisplayName() {
-        //         return pullRequest.author?.displayName || "?";
-        //     },
-        //     getIdentityImageUrl(_size: number) {
-        //         return pullRequest.author?.imageUrl || undefined;
-        //     }
-        // }
-
-        // function renderPills(pullRequest: PipelineListItem): JSX.Element {
-        //     let mergeStatus = pullRequest.mergeStatus;
-        //     let voteStatus = pullRequest.voting?.status;
-        //     let voteCount = pullRequest.voting?.count || 0;
-        //     let voteCountString = voteCount > 1 ? ` (${voteCount})` : "";
-
-        //     return <PillGroup className="padding-left-16 padding-right-16">
-        //         {mergeStatus === PullRequestAsyncStatus.Conflicts && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Conflicts</Pill>)}
-        //         {mergeStatus === PullRequestAsyncStatus.Failure && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Failure</Pill>)}
-        //         {mergeStatus === PullRequestAsyncStatus.RejectedByPolicy && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Policy</Pill>)}
-
-        //         {voteStatus === "approved" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 128, blue: 64 }}>Approved{voteCountString}</Pill>)}
-        //         {voteStatus === "suggestions" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 64, blue: 128 }}>Suggestions{voteCountString}</Pill>)}
-        //         {voteStatus === "waiting" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 169, green: 154, blue: 60 }}>Waiting{voteCountString}</Pill>)}
-        //         {voteStatus === "rejected" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Rejected{voteCountString}</Pill>)}
-
-        //         {pullRequest.isDraft && (<Pill size={PillSize.compact}>Draft</Pill>)}
-        //         {pullRequest.isAutoComplete && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 92, green: 128, blue: 92 }}>Auto-Complete</Pill>)}
-
-        //         {pullRequest.nonDefaultTargetBranch && (<Pill size={PillSize.compact} variant={PillVariant.outlined}>{pullRequest.nonDefaultTargetBranch}</Pill>)}
-        //     </PillGroup>
-        // }
+        // let extra = "";
+        // let className = `scroll-hidden flex-row flex-center rhythm-horizontal-8 flex-grow padding-4 ${extra}`;
 
         return (
             <ListItem
@@ -95,23 +66,24 @@ export function PipelineList({ pipelines, selectedIds, onSelectPipelines, onActi
                 index={index}
                 details={details}
             >
-                <div className={className}>
+                <Run
+                    name={item.runName}
+                    definitionName={item.pipelineName}
+                    status={GetRunStatusType(item.status, item.result)}
+                    comment={""}
+                    started={0}
+                    isAlternate={false}
+                    isKnown={true}
+                    knownTags={[]}
+                />
+
+                {/* <div className={className}>
                     <div>{item.runId}</div>
                     <div>{item.runName}</div>
                     <div>{item.pipelineId}</div>
                     <div>{item.pipelineName}</div>
                     <div>{item.sourceVersion}</div>
-                    {/* <Icon iconName={pullRequest.icon} size={IconSize.medium} className={pullRequest.iconClassName} />
-                    <div className="font-size-m flex-row flex-center flex-shrink">{pullRequest.pullRequestId}</div>
-                    <VssPersona size={"extra-small"} identityDetailsProvider={initialsIdentityProvider} />
-                    <div className="font-size-m">{pullRequest.repository}</div>
-                    <div className="font-size-m italic text-neutral-70 text-ellipsis">{pullRequest.title}</div>
-                    <div>{renderPills(pullRequest)}</div>
-                    <div className="font-size-m flex-row flex-center flex-grow rhythm-horizontal-8">
-                        <div className="flex-grow" />
-                        <div>{pullRequest.dateString}</div>
-                    </div> */}
-                </div>
+                </div> */}
             </ListItem>
         )
     }

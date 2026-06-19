@@ -6,6 +6,7 @@ import * as ExtMgmtAPI from 'azure-devops-extension-api/ExtensionManagement/Exte
 import * as SDK from 'azure-devops-extension-sdk';
 import { IProjectPageService } from 'azure-devops-extension-api/Common';
 import { GitAsyncOperationStatus, GitMerge, GitMergeParameters } from "azure-devops-extension-api/Git/Git";
+import { BuildResult, BuildStatus } from "azure-devops-extension-api/Build/Build";
 
 export function getBuildClient() { return ClientAPI.getClient(BuildClientAPI.BuildRestClient); }
 export function getRunClient() { return ClientAPI.getClient(BuildClientAPI.BuildRestClient); }
@@ -149,5 +150,27 @@ export function summarizeVotes(reviewers: any): PullRequestVotingResult {
         case -5: return { status: "waiting", count: finalCount }
         case -10: return { status: "rejected", count: finalCount }
         default: return { status: "unknown", count: 0 };
+    }
+}
+
+export function getRunStatus(result: BuildStatus): string {
+    switch (result) {
+        case BuildStatus.Cancelling: return "cancelling";
+        case BuildStatus.Completed: return "completed";
+        case BuildStatus.InProgress: return "inProgress";
+        case BuildStatus.NotStarted: return "notStarted";
+        case BuildStatus.Postponed: return "postponed";
+        case BuildStatus.Abandoned: return "abandoned";
+        default: return "unknown";
+    }
+}
+
+export function getRunResult(result: BuildResult): string {
+    switch (result) {
+        case BuildResult.Succeeded: return "succeeded";
+        case BuildResult.Failed: return "failed";
+        case BuildResult.Canceled: return "canceled";
+        case BuildResult.PartiallySucceeded: return "partiallySucceeded";
+        default: return "unknown";
     }
 }

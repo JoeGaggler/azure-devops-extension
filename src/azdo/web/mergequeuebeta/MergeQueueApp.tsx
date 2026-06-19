@@ -62,7 +62,7 @@ interface PullRequestInfo {
     isDraft: boolean;
     sourceRefName: string;
     targetRefName: string;
-    voting?: PullRequestVotingResult; // TODO: make mandatory
+    voting: PullRequestVotingResult;
 }
 
 interface MergeQueueItemInfo {
@@ -78,6 +78,7 @@ interface MergeQueueItemInfo {
     sourceCommitId: string;
     targetCommitId: string;
     mergedCommitId: string;
+    voting: PullRequestVotingResult;
 }
 
 type MergeQueueStatus =
@@ -161,6 +162,7 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
                 createdTimestamp: item.createdTimestamp,
                 author: item.author,
                 isDraft: item.isDraft,
+                voting: item.voting,
             };
         });
         // TODO: confirm selections
@@ -907,6 +909,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 sourceCommitId: zeroCommitId,
                 targetCommitId: zeroCommitId,
                 mergedCommitId: zeroCommitId,
+                voting: pr.voting,
             };
         });
 
@@ -973,6 +976,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
             let dateString = item.createdTimestamp ? luxon.DateTime.fromSeconds(item.createdTimestamp).toRelative() || undefined : undefined;
 
+            let isDefaultBranch = (state.repositories.find((r) => r.id === item.repository.id)?.defaultBranch || "") == item.targetRefName;
+
             return {
                 icon: icon,
                 iconClassName: iconClassName,
@@ -982,6 +987,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 title: `${item.title}`,// - ${item.sourceCommitId} onto ${item.targetCommitId} is ${item.mergedCommitId}`,
                 dateString: dateString,
                 isDraft: item.isDraft,
+                voting: item.voting || { status: "none", count: 0 },
+                nonDefaultTargetBranch: isDefaultBranch ? null : item.targetRefName,
             };
         });
     }
@@ -989,6 +996,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     function mapActivePullRequestsToPullRequestListItems(): PullRequestListItem[] {
         return state.filteredActivePullRequests.map((pr): PullRequestListItem => {
             let dateString = pr.createdTimestamp ? luxon.DateTime.fromSeconds(pr.createdTimestamp).toRelative() || undefined : undefined;
+
+            let isDefaultBranch = (state.repositories.find((r) => r.id === pr.repository.id)?.defaultBranch || "") == pr.targetRefName;
 
             return {
                 icon: "CircleRing",
@@ -998,7 +1007,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 title: pr.title,
                 dateString: dateString,
                 isDraft: pr.isDraft,
-                voting: pr.voting || { status: "none", count: 0 }
+                voting: pr.voting || { status: "none", count: 0 },
+                nonDefaultTargetBranch: isDefaultBranch ? null : pr.targetRefName,
             };
         });
     }

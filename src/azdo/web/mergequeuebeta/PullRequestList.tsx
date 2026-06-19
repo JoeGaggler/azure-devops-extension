@@ -16,6 +16,7 @@ export interface PullRequestListItem {
     dateString?: string;
     isDraft: boolean;
     voting?: PullRequestVotingResult;
+    nonDefaultTargetBranch: string | null;
 }
 
 export interface PullRequestListProps {
@@ -83,6 +84,7 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
                 {voteStatus == "waiting" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 169, green: 154, blue: 60 }}>Waiting{voteCountString}</Pill>)}
                 {voteStatus == "rejected" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Rejected{voteCountString}</Pill>)}
 
+                {pullRequest.nonDefaultTargetBranch && (<Pill size={PillSize.compact} variant={PillVariant.outlined}>{pullRequest.nonDefaultTargetBranch}</Pill>)}
             </PillGroup>
         }
 

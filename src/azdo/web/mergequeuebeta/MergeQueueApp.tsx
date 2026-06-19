@@ -68,6 +68,7 @@ interface PullRequestInfo {
     repository: RepositoryInfo;
     author: AuthorInfo;
     createdTimestamp: number;
+    isDraft: boolean;
     sourceRefName: string;
     targetRefName: string;
 }
@@ -79,6 +80,7 @@ interface MergeQueueItemInfo {
     author: AuthorInfo;
     status: MergeQueueStatus;
     createdTimestamp: number;
+    isDraft: boolean;
     sourceRefName: string;
     targetRefName: string;
     sourceCommitId: string;
@@ -173,6 +175,7 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
                 targetRefName: item.targetRefName,
                 createdTimestamp: item.createdTimestamp,
                 author: item.author,
+                isDraft: item.isDraft,
             };
         });
         // TODO: confirm selections
@@ -189,16 +192,15 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         next.filters = action.filters;
     }
 
-    // reapply filters
-    if (action.filters !== undefined || action.activePullRequests !== undefined) {
-        console.log("MQ: reducer -> reapplying filters");
+    // apply filters
+    next.filteredActivePullRequests = [...next.activePullRequests];
+    if (next.filters.allBranches === false) {
         next.filteredActivePullRequests = next.activePullRequests.flatMap(pr => {
-            if (next.filters.allBranches === false) {
-                return next.repositories.some(r => r.id === pr.repository.id && r.defaultBranch === pr.targetRefName) ? pr : [];
-            } else {
-                return pr;
-            }
+            return next.repositories.some(r => r.id === pr.repository.id && r.defaultBranch === pr.targetRefName) ? pr : [];
         });
+    }
+    if (next.filters.drafts === false) {
+        next.filteredActivePullRequests = next.filteredActivePullRequests.filter(pr => !pr.isDraft);
     }
 
     return next;
@@ -371,6 +373,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 id: gitPR.pullRequestId,
                 title: gitPR.title,
                 createdTimestamp: luxon.DateTime.fromJSDate(gitPR.creationDate).toUnixInteger(),
+                isDraft: gitPR.isDraft,
                 sourceRefName: gitPR.sourceRefName,
                 targetRefName: gitPR.targetRefName,
                 repository: {
@@ -890,6 +893,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 author: pr.author,
                 status: "queued",
                 createdTimestamp: pr.createdTimestamp,
+                isDraft: pr.isDraft,
                 sourceRefName: pr.sourceRefName,
                 targetRefName: pr.targetRefName,
                 sourceCommitId: zeroCommitId,
@@ -1026,12 +1030,31 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 />
             </Card>
 
-            <div className="padding-8 flex-row rhythm-horizontal-8">
+            <div className="padding-8 flex-row rhythm-horizontal-8 flex-grow">
+                <div className="flex-grow" />
                 <Toggle
                     id="allBranches"
                     text="All Branches"
                     checked={state.filters.allBranches}
                     onChange={(_event, value) => { saveUserFilters({ ...state.filters, allBranches: value }) }}
+                />
+                <Toggle
+                    id="drafts"
+                    text="Drafts"
+                    checked={state.filters.drafts}
+                    onChange={(_event, value) => { saveUserFilters({ ...state.filters, drafts: value }) }}
+                />
+                <Toggle
+                    id="blocked"
+                    text="Blocked"
+                    checked={state.filters.blocked}
+                    onChange={(_event, value) => { saveUserFilters({ ...state.filters, blocked: value }) }}
+                />
+                <Toggle
+                    id="Queued"
+                    text="Queued"
+                    checked={state.filters.queued}
+                    onChange={(_event, value) => { saveUserFilters({ ...state.filters, queued: value }) }}
                 />
             </div>
 

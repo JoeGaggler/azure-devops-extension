@@ -98,12 +98,14 @@ type MergeQueueStatus =
 
 interface PullRequestDocument {
     id: string;
+    viaVersion: string;
     __etag: number;
     pullRequests: PullRequestInfo[];
 }
 
 interface MergeQueueDocument {
     id: string;
+    viaVersion: string;
     __etag: number;
     mergeQueueItems: MergeQueueItemInfo[];
 }
@@ -193,17 +195,20 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     }
 
     // apply filters
-    next.filteredActivePullRequests = [...next.activePullRequests];
-    if (next.filters.allBranches === false) {
-        next.filteredActivePullRequests = next.activePullRequests.flatMap(pr => {
-            return next.repositories.some(r => r.id === pr.repository.id && r.defaultBranch === pr.targetRefName) ? pr : [];
-        });
-    }
-    if (next.filters.drafts === false) {
-        next.filteredActivePullRequests = next.filteredActivePullRequests.filter(pr => !pr.isDraft);
-    }
-    if (next.filters.queued === false) {
-        next.filteredActivePullRequests = next.filteredActivePullRequests.filter(pr => false === next.mergeQueueItems.some(mqi => mqi.id === pr.id));
+    {
+        let filt = [...next.activePullRequests];
+        if (next.filters.allBranches === false) {
+            filt = filt.flatMap(pr => {
+                return next.repositories.some(r => r.id === pr.repository.id && r.defaultBranch === pr.targetRefName) ? pr : [];
+            });
+        }
+        if (next.filters.drafts === false) {
+            filt = filt.filter(pr => !pr.isDraft);
+        }
+        if (next.filters.queued === false) {
+            filt = filt.filter(pr => false === next.mergeQueueItems.some(mqi => mqi.id === pr.id));
+        }
+        next.filteredActivePullRequests = filt;
     }
 
     return next;
@@ -295,7 +300,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 dispatch({ activePullRequests: adoc.pullRequests });
             }
 
-
             console.log("MQ: init -> done");
         } catch (error) {
             console.error("MQ: init -> error occurred", error);
@@ -358,6 +362,10 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             title: undefined!
         };
         let gitPRs = await gitClient.getPullRequestsByProject(tenantInfo.project, criteria, undefined, undefined, undefined);
+        if (!gitPRs) {
+            console.error("MQ: refreshActivePullRequests -> failed to fetch pull requests");
+            return;
+        }
         let newPullRequests: PullRequestInfo[] = [];
         for (const gitPR of gitPRs) {
             const repoId = gitPR.repository?.id;
@@ -398,8 +406,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         if (adoc) {
             adoc.pullRequests = newPullRequests;
             let adoc2 = await updateActivePullRequestDocument(adoc);
-            if (adoc2) {
-                // console.log("MQ: refreshActivePullRequests -> updated active pull request document", adoc2);
+            if (!adoc2) {
+                console.error("MQ: refreshActivePullRequests -> failed to update active pull request document");
             }
         }
     }
@@ -636,10 +644,12 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     async function updateActivePullRequestDocument(doc: PullRequestDocument): Promise<PullRequestDocument | undefined> {
+        doc.viaVersion = "__MERGEQUEUEVERSION__";
         return await updateDocument(extensionManagementClient.current, collectionId, activePullRequestsDocumentId, doc);
     }
 
     async function updateMergeQueueDocument(doc: MergeQueueDocument): Promise<MergeQueueDocument | undefined> {
+        doc.viaVersion = "__MERGEQUEUEVERSION__";
         return await updateDocument(extensionManagementClient.current, collectionId, mergeQueueDocumentId, doc);
     }
 
@@ -819,7 +829,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         // sync
         let updatedMdoc = await updateMergeQueueDocument(mdoc);
         if (!updatedMdoc) {
-            console.error("MQ: onDequeuePullRequest -> failed to update merge queue document");
+            console.error("MQ: onDemotePullRequest -> failed to update merge queue document");
             return;
         }
         dispatch({ mergeQueueItems: updatedMdoc.mergeQueueItems });
@@ -1079,7 +1089,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
             <div className="text-neutral-30 flex-row padding-4">
                 <div className="flex-grow"></div>
-                <div onClick={() => {setShowIcons(!showIcons);}}>__MERGEQUEUEVERSION__</div>
+                <div onClick={() => { setShowIcons(!showIcons); }}>__MERGEQUEUEVERSION__</div>
             </div>
 
             <div>

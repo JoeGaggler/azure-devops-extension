@@ -13,7 +13,7 @@ import { Card } from "azure-devops-ui/Card";
 
 import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, getDefaultBranchCommitId, getRefCommitId, mergeCommits, AuthorInfo, summarizeVotes, PullRequestVotingResult } from "./azuredevops";
 
-import { GitAsyncOperationStatus, GitPullRequestSearchCriteria, GitRefUpdate, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
+import { GitAsyncOperationStatus, GitPullRequestSearchCriteria, GitRefUpdate, PullRequestAsyncStatus, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
 import { ExtensionManagementRestClient } from "azure-devops-extension-api/ExtensionManagement/ExtensionManagementClient";
 import { Icon, IconSize } from "azure-devops-ui/Icon";
 import { distinctBy } from "./lib";
@@ -64,6 +64,7 @@ interface PullRequestInfo {
     sourceRefName: string;
     targetRefName: string;
     voting: PullRequestVotingResult;
+    mergeStatus: PullRequestAsyncStatus;
 }
 
 interface MergeQueueItemInfo {
@@ -81,6 +82,7 @@ interface MergeQueueItemInfo {
     targetCommitId: string;
     mergedCommitId: string;
     voting: PullRequestVotingResult;
+    mergeStatus: PullRequestAsyncStatus;
 }
 
 type MergeQueueStatus =
@@ -166,6 +168,7 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
                 isDraft: item.isDraft,
                 isAutoComplete: item.isAutoComplete,
                 voting: item.voting,
+                mergeStatus: item.mergeStatus,
             };
         });
         // TODO: confirm selections
@@ -385,7 +388,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     displayName: gitPR.createdBy?.displayName || "Unknown User",
                     imageUrl: gitPR.createdBy?.imageUrl
                 },
-                voting: summarizeVotes(gitPR.reviewers)
+                voting: summarizeVotes(gitPR.reviewers),
+                mergeStatus: gitPR.mergeStatus,
             });
         }
 
@@ -915,6 +919,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 targetCommitId: zeroCommitId,
                 mergedCommitId: zeroCommitId,
                 voting: pr.voting,
+                mergeStatus: pr.mergeStatus
             };
         });
 
@@ -995,6 +1000,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 isAutoComplete: item.isAutoComplete,
                 voting: item.voting || { status: "none", count: 0 },
                 nonDefaultTargetBranch: isDefaultBranch ? null : item.targetRefName,
+                mergeStatus: item.mergeStatus,
             };
         });
     }
@@ -1016,6 +1022,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 isAutoComplete: pr.isAutoComplete,
                 voting: pr.voting || { status: "none", count: 0 },
                 nonDefaultTargetBranch: isDefaultBranch ? null : pr.targetRefName,
+                mergeStatus: pr.mergeStatus,
             };
         });
     }

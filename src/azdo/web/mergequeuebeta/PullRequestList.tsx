@@ -5,6 +5,7 @@ import { VssPersona } from "azure-devops-ui/VssPersona";
 import { AuthorInfo, PullRequestVotingResult } from "./azuredevops";
 import { PillGroup } from "azure-devops-ui/PillGroup";
 import { Pill, PillSize, PillVariant } from "azure-devops-ui/Pill";
+import { PullRequestAsyncStatus } from "azure-devops-extension-api/Git/Git";
 
 export interface PullRequestListItem {
     pullRequestId: number;
@@ -18,6 +19,7 @@ export interface PullRequestListItem {
     isDraft: boolean;
     voting?: PullRequestVotingResult;
     nonDefaultTargetBranch: string | null;
+    mergeStatus: PullRequestAsyncStatus;
 }
 
 export interface PullRequestListProps {
@@ -73,16 +75,20 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
         }
 
         function renderPills(pullRequest: PullRequestListItem): JSX.Element {
+            let mergeStatus = pullRequest.mergeStatus;
             let voteStatus = pullRequest.voting?.status;
             let voteCount = pullRequest.voting?.count || 0;
             let voteCountString = voteCount > 1 ? ` (${voteCount})` : "";
 
             return <PillGroup className="padding-left-16 padding-right-16">
+                {mergeStatus === PullRequestAsyncStatus.Conflicts && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Conflicts</Pill>)}
+                {mergeStatus === PullRequestAsyncStatus.Failure && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Failure</Pill>)}
+                {mergeStatus === PullRequestAsyncStatus.RejectedByPolicy && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Policy</Pill>)}
 
-                {voteStatus == "approved" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 128, blue: 64 }}>Approved{voteCountString}</Pill>)}
-                {voteStatus == "suggestions" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 64, blue: 128 }}>Suggestions{voteCountString}</Pill>)}
-                {voteStatus == "waiting" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 169, green: 154, blue: 60 }}>Waiting{voteCountString}</Pill>)}
-                {voteStatus == "rejected" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Rejected{voteCountString}</Pill>)}
+                {voteStatus === "approved" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 128, blue: 64 }}>Approved{voteCountString}</Pill>)}
+                {voteStatus === "suggestions" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 64, blue: 128 }}>Suggestions{voteCountString}</Pill>)}
+                {voteStatus === "waiting" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 169, green: 154, blue: 60 }}>Waiting{voteCountString}</Pill>)}
+                {voteStatus === "rejected" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Rejected{voteCountString}</Pill>)}
 
                 {pullRequest.isDraft && (<Pill size={PillSize.compact}>Draft</Pill>)}
                 {pullRequest.isAutoComplete && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 92, green: 128, blue: 92 }}>Auto-Complete</Pill>)}

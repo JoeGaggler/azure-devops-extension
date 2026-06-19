@@ -1,6 +1,7 @@
 // TODO: special icon for status checks incomplete
-// TODO: too much concurrency is preventing any progress?
 // TODO: refresh current data after a failed concurrent update
+// TODO: show different icon for dependent pull requests in same repo
+// TODO: show builds from same commit id as pull request MERGE commit id
 import React from "react";
 import * as luxon from 'luxon'
 import * as SDK from 'azure-devops-extension-sdk';
@@ -1045,7 +1046,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     return (
         <Page className="">
             <Header
-                title="Merge Queue Beta __MERGEQUEUEVERSION__ "
+                title="Merge Queue"
                 titleSize={TitleSize.Large}
                 commandBarItems={renderPageCommandBarItems()}
             />
@@ -1053,7 +1054,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             <Card
                 className="padding-8 margin-8"
                 contentProps={{ contentPadding: false }}
-                titleProps={{ text: "Merge Queue", className: "", size: TitleSize.Medium }}
+                titleProps={{ text: "Main", className: "", size: TitleSize.Medium }}
                 headerClassName=""
                 headerCommandBarItems={renderMergeQueueCommandBarItems()}
             >

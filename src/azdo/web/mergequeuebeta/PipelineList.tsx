@@ -1,11 +1,6 @@
 import { IListItemDetails, IListRow, ListItem, ListSelection, ScrollableList } from "azure-devops-ui/List";
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { GetRunStatusType, Run } from "../currentruns/Run";
-// import { Icon, IconSize } from "azure-devops-ui/Icon";
-// import { VssPersona } from "azure-devops-ui/VssPersona";
-// import { PillGroup } from "azure-devops-ui/PillGroup";
-// import { Pill, PillSize, PillVariant } from "azure-devops-ui/Pill";
-// import { PullRequestAsyncStatus } from "azure-devops-extension-api/Git/Git";
 
 export interface PipelineListItem {
     runId: number;

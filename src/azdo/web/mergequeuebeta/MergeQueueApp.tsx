@@ -133,6 +133,7 @@ interface ReducerState {
 
     pipelineRuns: PipelineRunInfo[];
     filteredPipelineRuns: PipelineRunInfo[];
+    selectedFilteredPipelineRunIds: number[];
 }
 
 interface ReducerAction {
@@ -233,10 +234,22 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         next.filteredPipelineRuns = next.filteredPipelineRuns.filter(run => {
             return next.mergeQueueItems.some(mqi => mqi.mergedCommitId === run.sourceVersion);
         });
-        // for (let i = 0; i < next.filteredPipelineRuns.length; i++) {
-        //     const run = next.filteredPipelineRuns[i];
-        //     run.isLinked = next.mergeQueueItems.some(mqi => mqi.mergedCommitId === run.sourceVersion);
-        // }
+    }
+
+    // select pipeline runs via merge queue selection
+    if (action.selectedMergeQueuePullRequestIds !== undefined) {
+        let prids = action.selectedMergeQueuePullRequestIds;
+        let selectedCommitIds: string[] = (next.mergeQueueItems
+            .filter(mqi => prids.includes(mqi.id))
+            .map(mqi => mqi.mergedCommitId)
+        );
+        let runIds: number[] = (next.filteredPipelineRuns
+            .filter(run => selectedCommitIds.includes(run.sourceVersion))
+            .map(run => run.runId)
+        );
+
+        next.selectedFilteredPipelineRunIds = runIds;
+        console.log("MQ: reducer -> updating selected pipeline runs", next.selectedFilteredPipelineRunIds);
     }
 
     return next;
@@ -300,6 +313,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
         pipelineRuns: [],
         filteredPipelineRuns: [],
+        selectedFilteredPipelineRunIds: [],
     })
 
     // initialize the app
@@ -1175,7 +1189,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             >
                 <PipelineList
                     pipelines={mapPipelinesForMergeQueue()}
-                    selectedIds={[]}
+                    selectedIds={state.selectedFilteredPipelineRunIds}
                 // selectedIds={state.selectedMergeQueuePullRequestIds}
                 // onSelectPullRequestIds={onSelectMergeQueuePullRequestIds}
                 // onActivatePullRequest={onActivateMergeQueuePullRequest}

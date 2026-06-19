@@ -13,3 +13,12 @@ export function distinctBy<T, K>(array: T[], keySelector: (item: T) => K): T[] {
         return true;
     });
 }
+
+export function firstDefined<T>(...values: (T | undefined)[]): T | undefined {
+    for (const value of values) {
+        if (value !== undefined) {
+            return value;
+        }
+    }
+    return undefined;
+}

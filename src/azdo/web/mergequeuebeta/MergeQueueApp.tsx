@@ -1,7 +1,8 @@
 // TODO: special icon for status checks incomplete
 // TODO: refresh current data after a failed concurrent update
 // TODO: show different icon for dependent pull requests in same repo
-// TODO: show builds from same commit id as pull request MERGE commit id
+// TODO: post merge queue status to pull request
+// TODO: move filters to page header
 import React from "react";
 import * as luxon from 'luxon'
 import * as SDK from 'azure-devops-extension-sdk';
@@ -17,7 +18,7 @@ import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, ge
 import { GitAsyncOperationStatus, GitPullRequestSearchCriteria, GitRefUpdate, PullRequestAsyncStatus, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
 import { ExtensionManagementRestClient } from "azure-devops-extension-api/ExtensionManagement/ExtensionManagementClient";
 import { Icon, IconSize } from "azure-devops-ui/Icon";
-import { distinctBy } from "./lib";
+import { distinctBy, firstDefined } from "./lib";
 import { GitRestClient } from "azure-devops-extension-api/Git/GitClient";
 import { IHostNavigationService } from "azure-devops-extension-api/Common/CommonServices";
 import { Toggle } from "azure-devops-ui/Toggle";
@@ -167,11 +168,13 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     if (action.selectedMergeQueuePullRequestIds !== undefined) {
         console.log("MQ: reducer -> updating selected merge queue pull request IDs", action.selectedMergeQueuePullRequestIds);
         next.selectedMergeQueuePullRequestIds = action.selectedMergeQueuePullRequestIds;
+        next.selectedActivePullRequestIds = action.selectedMergeQueuePullRequestIds;
     }
 
     if (action.selectedActivePullRequestIds !== undefined) {
         console.log("MQ: reducer -> updating selected active pull request IDs", action.selectedActivePullRequestIds);
         next.selectedActivePullRequestIds = action.selectedActivePullRequestIds;
+        next.selectedMergeQueuePullRequestIds = action.selectedActivePullRequestIds;
     }
 
     if (action.mergeQueueItems !== undefined) {
@@ -238,10 +241,12 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     }
 
     // select pipeline runs via merge queue selection
-    if (action.selectedMergeQueuePullRequestIds !== undefined) {
-        let prids = action.selectedMergeQueuePullRequestIds;
+    let selIds = firstDefined(
+        action.selectedMergeQueuePullRequestIds,
+        action.selectedActivePullRequestIds);
+    if (selIds !== undefined) {
         let selectedCommitIds: string[] = (next.mergeQueueItems
-            .filter(mqi => prids.includes(mqi.id))
+            .filter(mqi => selIds.includes(mqi.id))
             .map(mqi => mqi.mergedCommitId)
         );
         let runIds: number[] = (next.filteredPipelineRuns

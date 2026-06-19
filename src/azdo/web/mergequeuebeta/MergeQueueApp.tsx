@@ -979,6 +979,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 author: item.author,
                 title: `${item.title}`,// - ${item.sourceCommitId} onto ${item.targetCommitId} is ${item.mergedCommitId}`,
                 dateString: dateString,
+                isDraft: item.isDraft,
             };
         });
     }
@@ -993,7 +994,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 repository: pr.repository.name,
                 author: pr.author,
                 title: pr.title,
-                dateString: dateString
+                dateString: dateString,
+                isDraft: pr.isDraft,
             };
         });
     }

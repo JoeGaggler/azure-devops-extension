@@ -3,6 +3,8 @@ import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Icon, IconSize } from "azure-devops-ui/Icon";
 import { VssPersona } from "azure-devops-ui/VssPersona";
 import { AuthorInfo } from "./azuredevops";
+import { PillGroup } from "azure-devops-ui/PillGroup";
+import { Pill, PillSize } from "azure-devops-ui/Pill";
 
 export interface PullRequestListItem {
     pullRequestId: number;
@@ -12,6 +14,7 @@ export interface PullRequestListItem {
     iconClassName?: string;
     author: AuthorInfo;
     dateString?: string;
+    isDraft: boolean;
 }
 
 export interface PullRequestListProps {
@@ -66,6 +69,15 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
             }
         }
 
+        function renderPills(pullRequest: PullRequestListItem): JSX.Element {
+            if (pullRequest) {
+
+            }
+            return <PillGroup className="padding-left-16 padding-right-16">
+                {pullRequest.isDraft && (<Pill size={PillSize.compact}>Draft</Pill>)}
+            </PillGroup>
+        }
+
         return (
             <ListItem
                 key={key || "list-item" + index}
@@ -78,6 +90,7 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
                     <VssPersona size={"extra-small"} identityDetailsProvider={initialsIdentityProvider} />
                     <div className="font-size-m">{pullRequest.repository}</div>
                     <div className="font-size-m italic text-neutral-70 text-ellipsis">{pullRequest.title}</div>
+                    <div>{renderPills(pullRequest)}</div>
                     <div className="font-size-m flex-row flex-center flex-grow rhythm-horizontal-8">
                         <div className="flex-grow" />
                         <div>{pullRequest.dateString}</div>

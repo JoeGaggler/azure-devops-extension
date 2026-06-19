@@ -11,7 +11,7 @@ import { Page } from "azure-devops-ui/Components/Page/Page";
 import { TitleSize } from "azure-devops-ui/Components/Header/Header.Props";
 import { Card } from "azure-devops-ui/Card";
 
-import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, getDefaultBranchCommitId, getRefCommitId, mergeCommits, AuthorInfo } from "./azuredevops";
+import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, getDefaultBranchCommitId, getRefCommitId, mergeCommits, AuthorInfo, summarizeVotes, PullRequestVotingResult } from "./azuredevops";
 
 import { GitAsyncOperationStatus, GitPullRequestSearchCriteria, GitRefUpdate, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
 import { ExtensionManagementRestClient } from "azure-devops-extension-api/ExtensionManagement/ExtensionManagementClient";
@@ -62,6 +62,7 @@ interface PullRequestInfo {
     isDraft: boolean;
     sourceRefName: string;
     targetRefName: string;
+    voting?: PullRequestVotingResult; // TODO: make mandatory
 }
 
 interface MergeQueueItemInfo {
@@ -377,7 +378,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 author: {
                     displayName: gitPR.createdBy?.displayName || "Unknown User",
                     imageUrl: gitPR.createdBy?.imageUrl
-                }
+                },
+                voting: summarizeVotes(gitPR.reviewers)
             });
         }
 
@@ -996,6 +998,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 title: pr.title,
                 dateString: dateString,
                 isDraft: pr.isDraft,
+                voting: pr.voting || { status: "none", count: 0 }
             };
         });
     }

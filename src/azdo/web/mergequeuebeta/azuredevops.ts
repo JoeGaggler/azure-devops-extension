@@ -104,3 +104,49 @@ export async function mergeCommits(gitClient: GetClientAPI.GitRestClient, projec
     }
     return undefined;
 }
+
+export interface PullRequestVotingResult {
+    status: "none" | "approved" | "suggestions" | "waiting" | "rejected" | "unknown";
+    count: number;
+}
+
+export function summarizeVotes(reviewers: any): PullRequestVotingResult {
+    let finalVote: number | undefined = undefined;
+    let finalCount = 0;
+    let voters = 0;
+    for (let reviewer of reviewers) {
+        if (!reviewer) { continue; }
+        if (!reviewer.vote) { continue; }
+
+        let vote = reviewer.vote;
+        if (!vote || typeof vote !== "number") { continue; }
+        // if (!reviewer.isRequired) { continue; } // skip non-required reviewers with no vote
+
+        vote = vote > 10 ? 10 : vote;
+        vote = vote < -10 ? -10 : vote;
+        if (!reviewer.isContainer) {
+            // count only non-container reviewers
+            voters++;
+
+            if (finalVote === undefined || finalVote > vote) {
+                finalVote = vote;
+                if (vote == 5) { finalCount++; }
+                else { finalCount = 1; }
+            }
+            else if (vote == finalVote) {
+                finalCount++;
+            }
+            else {
+                continue;
+            }
+        }
+    }
+    switch (finalVote || 0) {
+        case 10: return { status: "approved", count: finalCount }
+        case 5: return { status: "suggestions", count: finalCount }
+        case 0: return { status: "none", count: 0 }
+        case -5: return { status: "waiting", count: finalCount }
+        case -10: return { status: "rejected", count: finalCount }
+        default: return { status: "unknown", count: 0 };
+    }
+}

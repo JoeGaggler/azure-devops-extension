@@ -2,9 +2,9 @@ import { IListItemDetails, IListRow, ListItem, ListSelection, ScrollableList } f
 import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Icon, IconSize } from "azure-devops-ui/Icon";
 import { VssPersona } from "azure-devops-ui/VssPersona";
-import { AuthorInfo } from "./azuredevops";
+import { AuthorInfo, PullRequestVotingResult } from "./azuredevops";
 import { PillGroup } from "azure-devops-ui/PillGroup";
-import { Pill, PillSize } from "azure-devops-ui/Pill";
+import { Pill, PillSize, PillVariant } from "azure-devops-ui/Pill";
 
 export interface PullRequestListItem {
     pullRequestId: number;
@@ -15,6 +15,7 @@ export interface PullRequestListItem {
     author: AuthorInfo;
     dateString?: string;
     isDraft: boolean;
+    voting?: PullRequestVotingResult;
 }
 
 export interface PullRequestListProps {
@@ -70,11 +71,18 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
         }
 
         function renderPills(pullRequest: PullRequestListItem): JSX.Element {
-            if (pullRequest) {
+            let voteStatus = pullRequest.voting?.status;
+            let voteCount = pullRequest.voting?.count || 0;
+            let voteCountString = voteCount > 1 ? ` (${voteCount})` : "";
 
-            }
             return <PillGroup className="padding-left-16 padding-right-16">
                 {pullRequest.isDraft && (<Pill size={PillSize.compact}>Draft</Pill>)}
+
+                {voteStatus == "approved" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 128, blue: 64 }}>Approved{voteCountString}</Pill>)}
+                {voteStatus == "suggestions" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 64, green: 64, blue: 128 }}>Suggestions{voteCountString}</Pill>)}
+                {voteStatus == "waiting" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 169, green: 154, blue: 60 }}>Waiting{voteCountString}</Pill>)}
+                {voteStatus == "rejected" && (<Pill size={PillSize.compact} variant={PillVariant.outlined} color={{ red: 192, green: 0, blue: 0 }}>Rejected{voteCountString}</Pill>)}
+
             </PillGroup>
         }
 

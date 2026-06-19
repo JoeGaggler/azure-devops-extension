@@ -202,6 +202,9 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     if (next.filters.drafts === false) {
         next.filteredActivePullRequests = next.filteredActivePullRequests.filter(pr => !pr.isDraft);
     }
+    if (next.filters.queued === false) {
+        next.filteredActivePullRequests = next.filteredActivePullRequests.filter(pr => false === next.mergeQueueItems.some(mqi => mqi.id === pr.id));
+    }
 
     return next;
 }
@@ -241,6 +244,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     let gitClient = React.useRef(getGitClient());
     let extensionManagementClient = React.useRef(getExtensionManagementClient());
     let isMergeQueueRunning = React.useRef(false);
+    let [showIcons, setShowIcons] = React.useState(false);
 
     const [state, dispatch] = React.useReducer<(state: ReducerState, action: ReducerAction) => ReducerState>(reducer, {
         mergeQueueItems: [],
@@ -1075,11 +1079,11 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
             <div className="text-neutral-30 flex-row padding-4">
                 <div className="flex-grow"></div>
-                <div>__MERGEQUEUEVERSION__</div>
+                <div onClick={() => {setShowIcons(!showIcons);}}>__MERGEQUEUEVERSION__</div>
             </div>
 
             <div>
-                {AllIcons()}
+                {AllIcons(showIcons)}
             </div>
         </Page>
     );
@@ -1173,9 +1177,9 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
     </>
 }
 
-export function AllIcons() {
+export function AllIcons(showIcons: boolean) {
     return (
-        <div className="flex-column rhythm-vertical-16">
+        showIcons && <div className="flex-column rhythm-vertical-16">
             <div className="flex-row rhythm-horizontal-16">
                 <Icon iconName={"Accept"} size={IconSize.large} tooltipProps={{ text: "Accept" }} />
                 <Icon iconName={"AccountManagement"} size={IconSize.large} tooltipProps={{ text: "AccountManagement" }} />

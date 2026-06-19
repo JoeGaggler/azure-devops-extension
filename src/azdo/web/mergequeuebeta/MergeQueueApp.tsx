@@ -1157,6 +1157,20 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }));
     }
 
+    async function onActivatePipeline(runId: number, pipelineId: number) {
+        console.log("MQ: activating pipeline", runId, pipelineId);
+        let run = await runClient.current.getBuild(tenantInfo?.current?.project || "", runId);
+        if (run) {
+            console.log("MQ: retrieved build", run, run._links.web.href);
+            let url = run._links.web.href;
+            if (url) {
+                const navService = await SDK.getService<IHostNavigationService>("ms.vss-features.host-navigation-service");
+                console.log("url: ", url);
+                navService.openNewWindow(url, "");
+            }
+        }
+    }
+
     return (
         <Page className="">
             <Header
@@ -1190,9 +1204,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 <PipelineList
                     pipelines={mapPipelinesForMergeQueue()}
                     selectedIds={state.selectedFilteredPipelineRunIds}
-                // selectedIds={state.selectedMergeQueuePullRequestIds}
-                // onSelectPullRequestIds={onSelectMergeQueuePullRequestIds}
-                // onActivatePullRequest={onActivateMergeQueuePullRequest}
+                    // onSelectPullRequestIds={onSelectMergeQueuePullRequestIds}
+                    onActivatePipeline={onActivatePipeline}
                 />
             </Card>
 

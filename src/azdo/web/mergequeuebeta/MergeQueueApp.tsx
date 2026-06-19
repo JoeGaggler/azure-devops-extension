@@ -5,26 +5,22 @@ import React from "react";
 import * as luxon from 'luxon'
 import * as SDK from 'azure-devops-extension-sdk';
 
-import { ArrayItemProvider } from "azure-devops-ui/Utilities/Provider";
 import { Header } from "azure-devops-ui/Components/Header/Header";
 import { IHeaderCommandBarItem } from "azure-devops-ui/Components/HeaderCommandBar/HeaderCommandBar.Props";
-import { IListItemDetails, IListRow } from "azure-devops-ui/Components/List/List.Props";
-import { ListItem, ScrollableList } from "azure-devops-ui/Components/List/List";
-import { ListSelection } from "azure-devops-ui/Components/List/ListSelection";
 import { Page } from "azure-devops-ui/Components/Page/Page";
 import { TitleSize } from "azure-devops-ui/Components/Header/Header.Props";
 import { Card } from "azure-devops-ui/Card";
 
-import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, getDefaultBranchCommitId, getRefCommitId, mergeCommits } from "./azuredevops";
+import { getAzdoInfo, getGitClient, getExtensionManagementClient, TenantInfo, getDefaultBranchCommitId, getRefCommitId, mergeCommits, AuthorInfo } from "./azuredevops";
 
 import { GitAsyncOperationStatus, GitPullRequestSearchCriteria, GitRefUpdate, PullRequestStatus, PullRequestTimeRangeType } from "azure-devops-extension-api/Git/Git";
 import { ExtensionManagementRestClient } from "azure-devops-extension-api/ExtensionManagement/ExtensionManagementClient";
 import { Icon, IconSize } from "azure-devops-ui/Icon";
 import { distinctBy } from "./lib";
 import { GitRestClient } from "azure-devops-extension-api/Git/GitClient";
-import { VssPersona } from "azure-devops-ui/Components/VssPersona/VssPersona";
 import { IHostNavigationService } from "azure-devops-extension-api/Common/CommonServices";
 import { Toggle } from "azure-devops-ui/Toggle";
+import { PullRequestList, PullRequestListItem } from "./PullRequestList";
 
 const publisher = "pingmint";
 const extensionName = "pingmint-extension";
@@ -55,11 +51,6 @@ interface RepositoryDetails {
 interface RepositoryInfo {
     id: string;
     name: string;
-}
-
-interface AuthorInfo {
-    displayName: string;
-    imageUrl?: string;
 }
 
 interface PullRequestInfo {
@@ -136,15 +127,6 @@ interface ReducerAction {
     // actions
     enqueuePullRequests?: PullRequestInfo[];
     filters?: PullRequestFilters;
-}
-
-function applySelections<T, TItem>(listSelection: ListSelection, all: T[], accessor: (t: T) => TItem, ids: TItem[]) {
-    listSelection.clear();
-    for (let id of ids) {
-        let idx = all.findIndex((item) => accessor(item) === id);
-        if (idx < 0) { continue; }
-        listSelection.select(idx, 1, true, true);
-    }
 }
 
 function reducer(state: ReducerState, action: ReducerAction): ReducerState {
@@ -1109,93 +1091,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     );
 }
 
-export interface PullRequestListItem {
-    pullRequestId: number;
-    repository: string;
-    title: string;
-    icon: string;
-    iconClassName?: string;
-    author: AuthorInfo;
-    dateString?: string;
-}
 
-export interface PullRequestListProps {
-    pullRequests: PullRequestListItem[];
-    selectedIds: number[];
-    onSelectPullRequestIds: (id: number[]) => void;
-    onActivatePullRequest?: (id: number, repo: string) => void;
-}
-
-export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequestIds, onActivatePullRequest }: PullRequestListProps) {
-    let listSelection = new ListSelection(true);
-
-    applySelections(listSelection, pullRequests, (pr) => pr.pullRequestId, selectedIds);
-
-    function onSelectRow(row: IListRow<PullRequestListItem>) {
-        console.log("NextRunTab -> targetPipelineSelect", row);
-        onSelectPullRequestIds([row.data.pullRequestId]);
-    }
-
-    function onActivateRow(row: IListRow<PullRequestListItem>) {
-        console.log("NextRunTab -> targetPipelineActivate", row);
-        if (onActivatePullRequest) {
-            onActivatePullRequest(row.data.pullRequestId, row.data.repository);
-        }
-    }
-
-    function renderRow(
-        index: number,
-        pullRequest: PullRequestListItem,
-        details: IListItemDetails<PullRequestListItem>,
-        key?: string
-    ): JSX.Element {
-        if (!pullRequest) { return <></> }
-        let extra = "";
-        let className = `scroll-hidden flex-row flex-center rhythm-horizontal-8 flex-grow padding-4 ${extra}`;
-
-        let initialsIdentityProvider = {
-            getDisplayName() {
-                return pullRequest.author?.displayName || "?";
-            },
-            getIdentityImageUrl(_size: number) {
-                return pullRequest.author?.imageUrl || undefined;
-            }
-        }
-
-        return (
-            <ListItem
-                key={key || "list-item" + index}
-                index={index}
-                details={details}
-            >
-                <div className={className}>
-                    <Icon iconName={pullRequest.icon} size={IconSize.medium} className={pullRequest.iconClassName} />
-                    <div className="font-size-m flex-row flex-center flex-shrink">{pullRequest.pullRequestId}</div>
-                    <VssPersona size={"extra-small"} identityDetailsProvider={initialsIdentityProvider} />
-                    <div className="font-size-m">{pullRequest.repository}</div>
-                    <div className="font-size-m italic text-neutral-70 text-ellipsis">{pullRequest.title}</div>
-                    <div className="font-size-m flex-row flex-center flex-grow rhythm-horizontal-8">
-                        <div className="flex-grow" />
-                        <div>{pullRequest.dateString}</div>
-                    </div>
-                </div>
-            </ListItem>
-        )
-    }
-
-    return <>
-        <div className="flex-column">
-            <ScrollableList
-                itemProvider={new ArrayItemProvider(pullRequests || [])}
-                selection={listSelection}
-                onSelect={(_evt, listRow) => { onSelectRow(listRow); }}
-                onActivate={(_evt, listRow) => { onActivateRow(listRow); }}
-                renderRow={renderRow}
-                width="100%"
-            />
-        </div>
-    </>
-}
 
 export function AllIcons(showIcons: boolean) {
     return (

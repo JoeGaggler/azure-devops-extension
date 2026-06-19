@@ -16,6 +16,11 @@ export interface TenantInfo {
     project: string;
 }
 
+export interface AuthorInfo {
+    displayName: string;
+    imageUrl?: string;
+}
+
 export async function getAzdoInfo(): Promise<TenantInfo | undefined> {
     let host = SDK.getHost()
     let organization = host.name;

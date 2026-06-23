@@ -2,8 +2,6 @@
 // TODO: refresh current data after a failed concurrent update
 // TODO: show different icon for dependent pull requests in same repo
 // TODO: post merge queue status to pull request
-// TODO: move filters to page header
-// TODO: implement BLOCKED filter
 // TODO: push default branch to merge queue when last PR leaves queue
 // TODO: fix draft status not updated
 // TODO: PR refresh should update the merge queue and active list
@@ -227,6 +225,13 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         }
         if (next.filters.queued === false) {
             filt = filt.filter(pr => false === next.mergeQueueItems.some(mqi => mqi.id === pr.id));
+        }
+        if (next.filters.blocked === false) {
+            filt = filt.filter(pr => 
+                pr.voting.status !== "rejected" && 
+                pr.voting.status !== "waiting" && 
+                pr.voting.status !== "unknown"
+            );
         }
         next.filteredActivePullRequests = filt;
     }

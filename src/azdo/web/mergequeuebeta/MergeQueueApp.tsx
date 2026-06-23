@@ -3,6 +3,10 @@
 // TODO: show different icon for dependent pull requests in same repo
 // TODO: post merge queue status to pull request
 // TODO: move filters to page header
+// TODO: implement BLOCKED filter
+// TODO: push default branch to merge queue when last PR leaves queue
+// TODO: fix draft status not updated
+// TODO: PR refresh should update the merge queue and active list
 import React from "react";
 import * as luxon from 'luxon'
 import * as SDK from 'azure-devops-extension-sdk';
@@ -539,18 +543,24 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     old_mqitem.status = "blocked"; // TODO: error icon
                     continue;
                 }
+                if (pr.isDraft !== old_mqitem.isDraft) {
+                    old_mqitem.isDraft = pr.isDraft;
+                    mustSync = true;
+                }
+                if (pr.mergeStatus !== old_mqitem.mergeStatus) {
+                    old_mqitem.mergeStatus = pr.mergeStatus;
+                    mustSync = true;
+                }
+                let newVoting = summarizeVotes(pr.reviewers);
+                if (newVoting.status !== old_mqitem.voting.status || newVoting.count !== old_mqitem.voting.count) {
+                    old_mqitem.voting = newVoting;
+                    mustSync = true;
+                }
 
                 if (pr.status !== PullRequestStatus.Active) {
                     console.log("MQ: runMergeQueue -> pull request is abandoned or completed", old_mqitem.id);
                     old_mqitem.status = "blocked"; // TODO: REMOVE
                     removed_indexes.push(index);
-                    mustSync = true;
-                    continue;
-                }
-
-                if (pr.isDraft) {
-                    console.log("MQ: runMergeQueue -> pull request is draft", old_mqitem.id);
-                    old_mqitem.status = "draft";
                     mustSync = true;
                     continue;
                 }

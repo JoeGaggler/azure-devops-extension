@@ -243,33 +243,29 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     }
 
     // filter pipeline runs
-    {
-        var mq_items = next.mergeQueues.find(mq => mq.id === next.selectedQueueTabId)?.mergeQueueItems ?? [];
+    let selectedMergeQueue = next.mergeQueues.find(mq => mq.id === next.selectedQueueTabId);
+    if (selectedMergeQueue !== undefined) {
+        var mq_items = selectedMergeQueue.mergeQueueItems ?? [];
         next.filteredPipelineRuns = [...next.pipelineRuns];
         next.filteredPipelineRuns = next.filteredPipelineRuns.filter(run => {
             return mq_items.some(mqi => mqi.mergedCommitId === run.sourceVersion);
         });
+
+        // select pipeline runs via merge queue selection
+        let selectedCommitIds: string[] = (mq_items
+            .filter(mqi => next.selectedPullRequestIds.includes(mqi.id))
+            .map(mqi => mqi.mergedCommitId)
+        );
+        let runIds: number[] = (next.filteredPipelineRuns
+            .filter(run => selectedCommitIds.includes(run.sourceVersion))
+            .map(run => run.runId)
+        );
+    
+        next.selectedFilteredPipelineRunIds = runIds;
+        console.log("MQ: reducer -> updating selected pipeline runs", next.selectedFilteredPipelineRunIds);
     }
 
-    // TODO: fix selection for multiple merge queues
-    // select pipeline runs via merge queue selection
-    // let selIds = firstDefined(
-    //     action.selectedMergeQueuePullRequestIds,
-    //     action.selectedActivePullRequestIds);
-    // if (selIds !== undefined) {
-    //     let selectedCommitIds: string[] = (next.mergeQueueItems
-    //         .filter(mqi => selIds.includes(mqi.id))
-    //         .map(mqi => mqi.mergedCommitId)
-    //     );
-    //     let runIds: number[] = (next.filteredPipelineRuns
-    //         .filter(run => selectedCommitIds.includes(run.sourceVersion))
-    //         .map(run => run.runId)
-    //     );
-
-    //     next.selectedFilteredPipelineRunIds = runIds;
-    //     console.log("MQ: reducer -> updating selected pipeline runs", next.selectedFilteredPipelineRunIds);
-    // }
-
+    // TODO: EXCLUSIVE BETWEEN SELECTION TYPES?
     // if (action.selectedPipelineRunIds !== undefined) {
     //     let selIds = action.selectedPipelineRunIds;
     //     console.log("MQ: reducer -> updating selected pipeline runs", selIds);

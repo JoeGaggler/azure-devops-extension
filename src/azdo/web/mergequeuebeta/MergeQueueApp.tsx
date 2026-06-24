@@ -139,12 +139,11 @@ interface PipelineRunInfo {
 interface ReducerState {
     mergeQueues: MergeQueueInfo[];
     selectedPullRequestIds: number[];
-
     repositories: RepositoryDetails[];
 
     activePullRequests: PullRequestInfo[];
-    filteredActivePullRequests: PullRequestInfo[];
     filters: PullRequestFilters;
+    filteredActivePullRequests: PullRequestInfo[]; // derived
 
     pipelineRuns: PipelineRunInfo[];
     filteredPipelineRuns: PipelineRunInfo[];
@@ -223,10 +222,10 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         if (next.filters.drafts === false) {
             filt = filt.filter(pr => !pr.isDraft);
         }
-        // TODO: fix queued filter when used with multiple merge queues
-        // if (next.filters.queued === false) {
-        //     filt = filt.filter(pr => false === next.mergeQueueItems.some(mqi => mqi.id === pr.id));
-        // }
+        let main_mq_items = next.mergeQueues.find(mq => mq.id === mainQueueTabId)?.mergeQueueItems ?? [];
+        if (next.filters.queued === false) {
+            filt = filt.filter(pr => false === main_mq_items.some(mqi => mqi.id === pr.id));
+        }
         if (next.filters.blocked === false) {
             filt = filt.filter(pr =>
                 pr.voting.status !== "rejected" &&

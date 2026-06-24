@@ -194,10 +194,27 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         next.repositories = action.repositories;
     }
 
+    // selection changes (via pull requests or pipeline runs)
     if (action.selectedPullRequestIds !== undefined) {
         console.log("MQ: reducer -> updating selected pull request IDs", action.selectedPullRequestIds);
         next.selectedPullRequestIds = action.selectedPullRequestIds;
-        next.selectedPullRequestIds = action.selectedPullRequestIds;
+    }
+    else if (action.selectedPipelineRunIds !== undefined) {
+        let selIds = action.selectedPipelineRunIds;
+        console.log("MQ: reducer -> updating selected pipeline runs", selIds);
+
+        let runs = next.filteredPipelineRuns.filter(run => selIds.includes(run.runId))
+        let runIds = runs.map(run => run.runId);
+        let selectedCommitIds = runs.map(run => run.sourceVersion);
+
+        next.selectedFilteredPipelineRunIds = runIds;
+        let mq_items = next.mergeQueues.find(mq => mq.id === next.selectedQueueTabId)?.mergeQueueItems ?? [];
+        if (mq_items && mq_items.length > 0) {
+            next.selectedPullRequestIds = (mq_items
+                .filter(mqi => selectedCommitIds.includes(mqi.mergedCommitId))
+                .map(mqi => mqi.id)
+            );
+        }
     }
 
     if (action.activePullRequests !== undefined) {
@@ -260,27 +277,10 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
             .filter(run => selectedCommitIds.includes(run.sourceVersion))
             .map(run => run.runId)
         );
-    
+
         next.selectedFilteredPipelineRunIds = runIds;
         console.log("MQ: reducer -> updating selected pipeline runs", next.selectedFilteredPipelineRunIds);
     }
-
-    // TODO: EXCLUSIVE BETWEEN SELECTION TYPES?
-    // if (action.selectedPipelineRunIds !== undefined) {
-    //     let selIds = action.selectedPipelineRunIds;
-    //     console.log("MQ: reducer -> updating selected pipeline runs", selIds);
-
-    //     let runs = next.filteredPipelineRuns.filter(run => selIds.includes(run.runId))
-    //     let runIds = runs.map(run => run.runId);
-    //     let selectedCommitIds = runs.map(run => run.sourceVersion);
-
-    //     next.selectedFilteredPipelineRunIds = runIds;
-    //     next.selectedMergeQueuePullRequestIds = (next.mergeQueueItems
-    //         .filter(mqi => selectedCommitIds.includes(mqi.mergedCommitId))
-    //         .map(mqi => mqi.id)
-    //     );
-    //     next.selectedActivePullRequestIds = next.selectedMergeQueuePullRequestIds;
-    // }
 
     return next;
 }
@@ -873,7 +873,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 isPrimary: true,
                 important: true,
                 disabled: (
-                    state.selectedQueueTabId === allPullRequestsTabId && 
+                    state.selectedQueueTabId === allPullRequestsTabId &&
                     state.selectedPullRequestIds.length === 0
                 ) // TODO: not already in queue
             }

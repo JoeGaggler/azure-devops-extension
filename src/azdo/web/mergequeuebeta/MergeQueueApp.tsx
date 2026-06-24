@@ -35,8 +35,8 @@ import { Tab, TabBar, TabSize } from "azure-devops-ui/Tabs";
 const publisher = "pingmint";
 const extensionName = "pingmint-extension";
 const collectionId = "mergequeue";
-const mergeQueueDocumentId = "mergequeue";
-const activePullRequestsDocumentId = "activepullrequests";
+const allMergeQueuesDocumentId = "allmergequeues";
+const activePullRequestsDocumentId = "activepullrequests"; // TODO: MOVE THIS TO ITS OWN COLLECTION ID
 const zeroCommitId = "0000000000000000000000000000000000000000";
 const refMergeQueue = "refs/heads/merge-queue";
 const allPullRequestsTabId = "all";
@@ -120,9 +120,22 @@ interface PullRequestDocument {
 
 interface MergeQueueDocument {
     id: string;
+    name: string;
     viaVersion: string;
     __etag: number;
     mergeQueueItems: MergeQueueItemInfo[];
+}
+
+interface AllMergeQueuesItem {
+    id: string;
+    name: string;
+}
+
+interface AllMergeQueuesDocument {
+    id: string;
+    viaVersion: string;
+    __etag: number;
+    mergeQueues: AllMergeQueuesItem[];
 }
 
 interface PipelineRunInfo {
@@ -348,11 +361,12 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
     // TODO: eliminate this function and use the reducer directly
     function dispatch_old({ mergeQueueItems }: { mergeQueueItems: MergeQueueItemInfo[] }) {
+        console.warn("MQ: dispatch_old -> updating merge queue items", mergeQueueItems);
         let mergeQueues: MergeQueueInfo[] = [
             {
                 id: mainQueueTabId,
                 name: "Main",
-                mergeQueueItems: mergeQueueItems
+                mergeQueueItems: mergeQueueItems || []
             }
         ]
         dispatch({ mergeQueues: mergeQueues });
@@ -381,9 +395,62 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             const repoDetails = gitRepos.map(r => ({ id: r.id, defaultBranch: r.defaultBranch }));
             dispatch({ repositories: repoDetails });
 
-            var mdoc = await getMergeQueueDocument();
-            if (mdoc) {
-                dispatch_old({ mergeQueueItems: mdoc.mergeQueueItems });
+            var alldoc = await getAllMergeQueuesDocument();
+            if (alldoc) {
+                let nextMergeQueues: MergeQueueInfo[] = [];
+
+                if (!alldoc.mergeQueues || alldoc.mergeQueues.length === 0) {
+                    var mdoc = await getMergeQueueDocument(mainQueueTabId);
+                    if (!mdoc) {
+                        console.error("MQ: init -> failed to get merge queue document for main queue");
+                    } else {
+                        let mq: MergeQueueInfo = {
+                            id: mainQueueTabId,
+                            name: "Main",
+                            mergeQueueItems: mdoc.mergeQueueItems || []
+                        };
+                        mdoc.id = mainQueueTabId; // TODO: for upgrade only
+                        await updateMergeQueueDocument(mdoc, mdoc.id);
+                        nextMergeQueues.push(mq);
+                    }
+                } else {
+                    for (const mqref of alldoc.mergeQueues) {
+                        let mqid = mqref.id;
+
+                        // special case for main queue
+                        if (mqid === mainQueueTabId) {
+                            var mdoc = await getMergeQueueDocument(mainQueueTabId);
+                            if (!mdoc) {
+                                console.error("MQ: init -> failed to get merge queue document for main queue");
+                            } else {
+                                mdoc.id = mainQueueTabId; // TODO: for upgrade only
+                                await updateMergeQueueDocument(mdoc, mdoc.id);
+                                let mq: MergeQueueInfo = {
+                                    id: mainQueueTabId,
+                                    name: "Main",
+                                    mergeQueueItems: mdoc.mergeQueueItems || []
+                                };
+                                nextMergeQueues.push(mq);
+                            }
+                        } else {
+                            // TODO: ELSE!
+                        }
+                    }
+                }
+
+                console.log("MQ: init -> updating merge queues", nextMergeQueues);
+                dispatch({ mergeQueues: nextMergeQueues });
+
+                alldoc.mergeQueues = nextMergeQueues.map((mq: AllMergeQueuesItem) => ({
+                    id: mq.id,
+                    name: mq.name
+                }));
+
+                let nextAllDoc = await updateAllMergeQueuesDocument(alldoc);
+                if (!nextAllDoc) {
+                    console.error("MQ: init -> failed to update all merge queues document");
+                }
+                console.log("MQ: init -> updated all merge queues document", nextAllDoc);
             }
 
             var adoc = await getActivePullRequestDocument();
@@ -431,7 +498,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
             // TODO: run concurrently
             await refreshActivePullRequests(git, ti);
-            await runMergeQueue(git, proj);
+            await runMergeQueue(git, proj, mainQueueTabId); // TODO: for upgrade only
             await refreshPipelineRuns(proj);
         } catch (error) {
             console.error("MQ: ticktock -> error occurred", error);
@@ -507,7 +574,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
     }
 
-    async function runMergeQueue(gitClient: GitRestClient, project: string): Promise<void> {
+    async function runMergeQueue(gitClient: GitRestClient, project: string, queueId: string): Promise<void> {
         if (isMergeQueueRunning.current === true) {
             console.log("MQ: merge queue is already running");
             return;
@@ -516,9 +583,13 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         try {
             isMergeQueueRunning.current = true;
 
-            var old_mqdoc = await getMergeQueueDocument();
+            var old_mqdoc = await getMergeQueueDocument(queueId);
             if (!old_mqdoc) {
                 console.error("MQ: runMergeQueue -> failed to get merge queue document");
+                return;
+            }
+            if (!old_mqdoc.mergeQueueItems) {
+                console.error("MQ: runMergeQueue -> merge queue document has no items", old_mqdoc);
                 return;
             }
 
@@ -544,7 +615,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             let removed_indexes: number[] = [];
             for (const [index, old_mqitem] of old_mqitems.entries()) {
                 if (mustSync) {
-                    old_mqdoc = await syncMergeQueueDocument(old_mqdoc, old_mqitems);
+                    old_mqdoc = await syncMergeQueueDocument(old_mqdoc, queueId, old_mqitems);
                     if (!old_mqdoc) {
                         console.error(`MQ: runMergeQueue -> ${index}: failed to sync document`);
                         return;
@@ -669,7 +740,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
             // final sync
             if (mustSync) {
-                old_mqdoc = await syncMergeQueueDocument(old_mqdoc, old_mqitems);
+                old_mqdoc = await syncMergeQueueDocument(old_mqdoc, queueId, old_mqitems);
                 if (!old_mqdoc) {
                     console.error(`MQ: runMergeQueue -> final sync: failed to sync document`);
                     return;
@@ -781,8 +852,17 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         return doc as T;
     }
 
-    async function getMergeQueueDocument(): Promise<MergeQueueDocument | undefined> {
-        return await getAppDocument<MergeQueueDocument>(mergeQueueDocumentId);
+    async function getMergeQueueDocument(id: string): Promise<MergeQueueDocument | undefined> {
+        return await getAppDocument<MergeQueueDocument>(id);
+    }
+
+    async function getAllMergeQueuesDocument(): Promise<AllMergeQueuesDocument | undefined> {
+        return await getAppDocument<AllMergeQueuesDocument>(allMergeQueuesDocumentId);
+    }
+
+    async function updateAllMergeQueuesDocument(doc: AllMergeQueuesDocument): Promise<AllMergeQueuesDocument | undefined> {
+        doc.viaVersion = "__MERGEQUEUEVERSION__";
+        return await updateDocument(extensionManagementClient.current, collectionId, doc.id, doc);
     }
 
     async function getActivePullRequestDocument(): Promise<PullRequestDocument | undefined> {
@@ -794,14 +874,15 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         return await updateDocument(extensionManagementClient.current, collectionId, activePullRequestsDocumentId, doc);
     }
 
-    async function updateMergeQueueDocument(doc: MergeQueueDocument): Promise<MergeQueueDocument | undefined> {
+    async function updateMergeQueueDocument(doc: MergeQueueDocument, docId: string): Promise<MergeQueueDocument | undefined> {
         doc.viaVersion = "__MERGEQUEUEVERSION__";
-        return await updateDocument(extensionManagementClient.current, collectionId, mergeQueueDocumentId, doc);
+        return await updateDocument(extensionManagementClient.current, collectionId, docId, doc); // TODO: use doc.id instead of docId
     }
 
-    async function syncMergeQueueDocument(doc: MergeQueueDocument, items: MergeQueueItemInfo[]): Promise<MergeQueueDocument | undefined> {
+    // TODO: remove docId parameter and use doc.id instead
+    async function syncMergeQueueDocument(doc: MergeQueueDocument, docId: string, items: MergeQueueItemInfo[]): Promise<MergeQueueDocument | undefined> {
         doc.mergeQueueItems = items;
-        let doc2 = await updateMergeQueueDocument(doc);
+        let doc2 = await updateMergeQueueDocument(doc, docId);
         if (!doc2 || !doc2.mergeQueueItems) {
             return undefined;
         }
@@ -811,7 +892,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     function renderPageCommandBarItems(): IHeaderCommandBarItem[] {
-        // TODO: return page command bar items
         return [{
             id: "addQueue",
             iconProps: {
@@ -898,7 +978,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             // TODO: toast error
             return;
         }
-        let mq = state.mergeQueues.find(mq => mq.id === state.selectedQueueTabId);
+        let queueId = state.selectedQueueTabId;
+        let mq = state.mergeQueues.find(mq => mq.id === queueId);
         if (!mq) {
             // TODO: toast error
             return;
@@ -912,7 +993,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
 
         // get remote doc
-        let mdoc = await getMergeQueueDocument();
+        let mdoc = await getMergeQueueDocument(queueId);
         if (!mdoc) {
             console.error("Failed to get merge queue document");
             return;
@@ -941,7 +1022,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
 
         // sync
-        let updatedMdoc = await updateMergeQueueDocument(mdoc);
+        let updatedMdoc = await updateMergeQueueDocument(mdoc, queueId);
         if (!updatedMdoc) {
             console.error("MQ: onDequeuePullRequest -> failed to update merge queue document");
             return;
@@ -956,7 +1037,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             // TODO: toast error
             return;
         }
-        let mq = state.mergeQueues.find(mq => mq.id === state.selectedQueueTabId);
+        let queueId = state.selectedQueueTabId;
+        let mq = state.mergeQueues.find(mq => mq.id === queueId);
         if (!mq) {
             // TODO: toast error
             return;
@@ -970,7 +1052,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
 
         // get remote doc
-        let mdoc = await getMergeQueueDocument();
+        let mdoc = await getMergeQueueDocument(queueId);
         if (!mdoc) {
             console.error("Failed to get merge queue document");
             return;
@@ -999,7 +1081,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
 
         // sync
-        let updatedMdoc = await updateMergeQueueDocument(mdoc);
+        let updatedMdoc = await updateMergeQueueDocument(mdoc, queueId);
         if (!updatedMdoc) {
             console.error("MQ: onDemotePullRequest -> failed to update merge queue document");
             return;
@@ -1018,7 +1100,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         let aprs = adoc.pullRequests || [];
         dispatch({ activePullRequests: aprs });
 
-        let mdoc = await getMergeQueueDocument();
+        let queueId = state.selectedQueueTabId;
+        let mdoc = await getMergeQueueDocument(queueId);
         if (!mdoc) {
             console.error("Failed to get merge queue document");
             return;
@@ -1031,7 +1114,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         console.log("MQ: onDequeuePullRequest -> new pull requests", newMergeQueueItems);
 
         mdoc.mergeQueueItems = [...newMergeQueueItems];
-        let updatedMdoc = await updateMergeQueueDocument(mdoc);
+        let updatedMdoc = await updateMergeQueueDocument(mdoc, queueId);
         if (!updatedMdoc) {
             console.error("MQ: onDequeuePullRequest -> failed to update merge queue document");
             return;
@@ -1043,6 +1126,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     async function onEnqueuePullRequest() {
+        console.log("MQ: onEnqueuePullRequest -> starting");
         let adoc = await getActivePullRequestDocument();
         if (!adoc) {
             console.error("Failed to get active pull request document");
@@ -1051,7 +1135,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         let aprs = adoc.pullRequests || [];
         dispatch({ activePullRequests: aprs });
 
-        let mdoc = await getMergeQueueDocument();
+        let queueId = mainQueueTabId; // TODO: ALLOW ENQUEUE TO DIFFERENT QUEUE USING DROPDOWN
+        let mdoc = await getMergeQueueDocument(queueId);
         if (!mdoc) {
             console.error("Failed to get merge queue document");
             return;
@@ -1076,7 +1161,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         let filteredprs = nextprs.filter(pr => !mitems.some(mpr => mpr.id === pr.id));
         console.log("MQ: onEnqueuePullRequest -> filtered pull requests", filteredprs);
         if (filteredprs.length === 0) {
-            console.warn("MQ: onEnqueuePullRequest -> no pull requests to enqueue");
+            console.warn("MQ: onEnqueuePullRequest -> no pull requests to enqueue", mitems);
             return;
         }
 
@@ -1102,7 +1187,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         });
 
         mdoc.mergeQueueItems = [...mitems, ...newMergeQueueItems];
-        let updatedMdoc = await updateMergeQueueDocument(mdoc);
+        let updatedMdoc = await updateMergeQueueDocument(mdoc, queueId);
         if (!updatedMdoc) {
             console.error("MQ: onEnqueuePullRequest -> failed to update merge queue document");
             return;

@@ -5,6 +5,7 @@
 // TODO: push default branch to merge queue when last PR leaves queue
 // TODO: fix draft status not updated
 // TODO: PR refresh should update the merge queue and active list
+// TODO: badge for tabs to indicate PR count
 import React from "react";
 import * as luxon from 'luxon'
 import * as SDK from 'azure-devops-extension-sdk';
@@ -27,6 +28,7 @@ import { Toggle } from "azure-devops-ui/Toggle";
 import { PullRequestList, PullRequestListItem } from "./PullRequestList";
 import { PipelineList, PipelineListItem } from "./PipelineList";
 import { BuildQueryOrder } from "azure-devops-extension-api/Build/Build";
+import { Tab, TabBar, TabSize } from "azure-devops-ui/Tabs";
 
 const publisher = "pingmint";
 const extensionName = "pingmint-extension";
@@ -35,6 +37,7 @@ const mergeQueueDocumentId = "mergequeue";
 const activePullRequestsDocumentId = "activepullrequests";
 const zeroCommitId = "0000000000000000000000000000000000000000";
 const refMergeQueue = "refs/heads/merge-queue";
+const allPullRequestsTabId = "all";
 
 export interface MergeQueueAppSingleton {
     bearerToken: string;
@@ -138,6 +141,8 @@ interface ReducerState {
     pipelineRuns: PipelineRunInfo[];
     filteredPipelineRuns: PipelineRunInfo[];
     selectedFilteredPipelineRunIds: number[];
+
+    selectedQueueTabId: string;
 }
 
 interface ReducerAction {
@@ -154,6 +159,7 @@ interface ReducerAction {
     // actions
     enqueuePullRequests?: PullRequestInfo[];
     filters?: PullRequestFilters;
+    selectedQueueTabId?: string;
 
     // pipeline runs
     pipelineRuns?: PipelineRunInfo[];
@@ -162,6 +168,11 @@ interface ReducerAction {
 
 function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     let next = { ...state };
+
+    if (action.selectedQueueTabId !== undefined) {
+        console.log("MQ: reducer -> updating selected queue tab ID", action.selectedQueueTabId);
+        next.selectedQueueTabId = action.selectedQueueTabId;
+    }
 
     if (action.repositories !== undefined) {
         console.log("MQ: reducer -> updating repositories", action.repositories);
@@ -227,9 +238,9 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
             filt = filt.filter(pr => false === next.mergeQueueItems.some(mqi => mqi.id === pr.id));
         }
         if (next.filters.blocked === false) {
-            filt = filt.filter(pr => 
-                pr.voting.status !== "rejected" && 
-                pr.voting.status !== "waiting" && 
+            filt = filt.filter(pr =>
+                pr.voting.status !== "rejected" &&
+                pr.voting.status !== "waiting" &&
                 pr.voting.status !== "unknown"
             );
         }
@@ -346,6 +357,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         pipelineRuns: [],
         filteredPipelineRuns: [],
         selectedFilteredPipelineRunIds: [],
+
+        selectedQueueTabId: allPullRequestsTabId,
     })
 
     // initialize the app
@@ -802,7 +815,16 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
     function renderPageCommandBarItems(): IHeaderCommandBarItem[] {
         // TODO: return page command bar items
-        return [];
+        return [{
+            id: "addQueue",
+            iconProps: {
+                iconName: "Add"
+            },
+            onActivate: () => { onAddQueue(); },
+            isPrimary: false,
+            important: false,
+            disabled: false
+        }];
     }
 
     function renderMergeQueueCommandBarItems(): IHeaderCommandBarItem[] {
@@ -839,6 +861,10 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 disabled: (state.selectedMergeQueuePullRequestIds.length === 0)
             }
         ];
+    }
+
+    async function onAddQueue() {
+
     }
 
     function renderAllPullRequestsCommandBarItems(): IHeaderCommandBarItem[] {
@@ -1216,6 +1242,11 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         dispatch({ selectedPipelineRunIds: runIds });
     }
 
+    function onSelectedQueueTabChanged(tabId: string) {
+        console.log("MQ: selected tab changed", tabId);
+        dispatch({ selectedQueueTabId: tabId });
+    }
+
     return (
         <Page className="">
             <Header
@@ -1224,78 +1255,96 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 commandBarItems={renderPageCommandBarItems()}
             />
 
-            <Card
-                className="padding-8 margin-8"
-                contentProps={{ contentPadding: false }}
-                titleProps={{ text: "Main", className: "", size: TitleSize.Medium }}
-                headerClassName=""
-                headerCommandBarItems={renderMergeQueueCommandBarItems()}
+            <TabBar
+                tabSize={TabSize.Tall}
+                selectedTabId={state.selectedQueueTabId}
+                onSelectedTabChanged={onSelectedQueueTabChanged}
             >
-                <PullRequestList
-                    pullRequests={mapMergeQueueItemToPullRequestListItems()}
-                    selectedIds={state.selectedMergeQueuePullRequestIds}
-                    onSelectPullRequestIds={onSelectMergeQueuePullRequestIds}
-                    onActivatePullRequest={onActivateMergeQueuePullRequest}
-                />
-            </Card>
+                <Tab name="All" id={allPullRequestsTabId} />
+                <Tab name="Main" id="main" />
+            </TabBar>
 
-            <Card
-                className="padding-8 margin-8"
-                contentProps={{ contentPadding: false }}
-                titleProps={{ text: "Pipelines", className: "", size: TitleSize.Medium }}
-                headerClassName=""
-                headerCommandBarItems={[]}
-            >
-                <PipelineList
-                    pipelines={mapPipelinesForMergeQueue()}
-                    selectedIds={state.selectedFilteredPipelineRunIds}
-                    onSelectPipelines={onSelectPipelines}
-                    onActivatePipeline={onActivatePipeline}
-                />
-            </Card>
+            {
+                state.selectedQueueTabId !== allPullRequestsTabId && <>
+                    <Card
+                        className="padding-8 margin-8"
+                        contentProps={{ contentPadding: false }}
+                        titleProps={{ text: "Pull Requests", className: "", size: TitleSize.Medium }}
+                        headerClassName=""
+                        headerCommandBarItems={renderMergeQueueCommandBarItems()}
+                    >
+                        <PullRequestList
+                            pullRequests={mapMergeQueueItemToPullRequestListItems()}
+                            selectedIds={state.selectedMergeQueuePullRequestIds}
+                            onSelectPullRequestIds={onSelectMergeQueuePullRequestIds}
+                            onActivatePullRequest={onActivateMergeQueuePullRequest}
+                        />
+                    </Card>
 
-            <div className="padding-8 flex-row rhythm-horizontal-8 flex-grow">
-                <div className="flex-grow" />
-                <Toggle
-                    id="allBranches"
-                    text="All Branches"
-                    checked={state.filters.allBranches}
-                    onChange={(_event, value) => { saveUserFilters({ ...state.filters, allBranches: value }) }}
-                />
-                <Toggle
-                    id="drafts"
-                    text="Drafts"
-                    checked={state.filters.drafts}
-                    onChange={(_event, value) => { saveUserFilters({ ...state.filters, drafts: value }) }}
-                />
-                <Toggle
-                    id="blocked"
-                    text="Blocked"
-                    checked={state.filters.blocked}
-                    onChange={(_event, value) => { saveUserFilters({ ...state.filters, blocked: value }) }}
-                />
-                <Toggle
-                    id="Queued"
-                    text="Queued"
-                    checked={state.filters.queued}
-                    onChange={(_event, value) => { saveUserFilters({ ...state.filters, queued: value }) }}
-                />
-            </div>
+                    <Card
+                        className="padding-8 margin-8"
+                        contentProps={{ contentPadding: false }}
+                        titleProps={{ text: "Pipelines", className: "", size: TitleSize.Medium }}
+                        headerClassName=""
+                        headerCommandBarItems={[]}
+                    >
+                        <PipelineList
+                            pipelines={mapPipelinesForMergeQueue()}
+                            selectedIds={state.selectedFilteredPipelineRunIds}
+                            onSelectPipelines={onSelectPipelines}
+                            onActivatePipeline={onActivatePipeline}
+                        />
+                    </Card>
+                </>
+            }
 
-            <Card
-                className="padding-8 margin-8"
-                contentProps={{ contentPadding: false }}
-                titleProps={{ text: "All Pull Requests", className: "", size: TitleSize.Medium }}
-                headerClassName=""
-                headerCommandBarItems={renderAllPullRequestsCommandBarItems()}
-            >
-                <PullRequestList
-                    pullRequests={mapActivePullRequestsToPullRequestListItems()}
-                    selectedIds={state.selectedActivePullRequestIds}
-                    onSelectPullRequestIds={onSelectActivePullRequestIds}
-                    onActivatePullRequest={onActivateActivePullRequest}
-                />
-            </Card>
+            {
+                state.selectedQueueTabId === allPullRequestsTabId && <>
+
+                    <div className="padding-8 flex-row rhythm-horizontal-8 flex-grow">
+                        <div className="flex-grow" />
+                        <Toggle
+                            id="allBranches"
+                            text="All Branches"
+                            checked={state.filters.allBranches}
+                            onChange={(_event, value) => { saveUserFilters({ ...state.filters, allBranches: value }) }}
+                        />
+                        <Toggle
+                            id="drafts"
+                            text="Drafts"
+                            checked={state.filters.drafts}
+                            onChange={(_event, value) => { saveUserFilters({ ...state.filters, drafts: value }) }}
+                        />
+                        <Toggle
+                            id="blocked"
+                            text="Blocked"
+                            checked={state.filters.blocked}
+                            onChange={(_event, value) => { saveUserFilters({ ...state.filters, blocked: value }) }}
+                        />
+                        <Toggle
+                            id="Queued"
+                            text="Queued"
+                            checked={state.filters.queued}
+                            onChange={(_event, value) => { saveUserFilters({ ...state.filters, queued: value }) }}
+                        />
+                    </div>
+
+                    <Card
+                        className="padding-8 margin-8"
+                        contentProps={{ contentPadding: false }}
+                        titleProps={{ text: "Pull Requests", className: "", size: TitleSize.Medium }}
+                        headerClassName=""
+                        headerCommandBarItems={renderAllPullRequestsCommandBarItems()}
+                    >
+                        <PullRequestList
+                            pullRequests={mapActivePullRequestsToPullRequestListItems()}
+                            selectedIds={state.selectedActivePullRequestIds}
+                            onSelectPullRequestIds={onSelectActivePullRequestIds}
+                            onActivatePullRequest={onActivateActivePullRequest}
+                        />
+                    </Card>
+                </>
+            }
 
             <div className="text-neutral-30 flex-row padding-4">
                 <div className="flex-grow"></div>

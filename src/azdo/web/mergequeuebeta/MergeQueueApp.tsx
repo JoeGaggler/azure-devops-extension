@@ -31,6 +31,7 @@ import { PullRequestList, PullRequestListItem } from "./PullRequestList";
 import { PipelineList, PipelineListItem } from "./PipelineList";
 import { BuildQueryOrder } from "azure-devops-extension-api/Build/Build";
 import { Tab, TabBar, TabSize } from "azure-devops-ui/Tabs";
+import { IMenuItem } from "azure-devops-ui/Components/Menu/Menu.Props";
 
 const publisher = "pingmint";
 const extensionName = "pingmint-extension";
@@ -951,9 +952,17 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             {
                 id: "enqueue",
                 text: "Enqueue",
-                onActivate: () => { onEnqueuePullRequest(); },
+                // onActivate: () => { onEnqueuePullRequest(); },
                 isPrimary: true,
                 important: true,
+                subMenuProps: {
+                    id: "enqueueSubMenu",
+                    items: state.mergeQueues.map((mq): IMenuItem => ({
+                        id: mq.id,
+                        text: mq.name,
+                        onActivate: () => { onEnqueuePullRequest(mq.id); }
+                    }))
+                },
                 disabled: (
                     state.selectedQueueTabId === allPullRequestsTabId &&
                     state.selectedPullRequestIds.length === 0
@@ -1127,7 +1136,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         await ticktock(); // immediate refresh
     }
 
-    async function onEnqueuePullRequest() {
+    async function onEnqueuePullRequest(queueId: string) {
         console.log("MQ: onEnqueuePullRequest -> starting");
         let adoc = await getActivePullRequestDocument();
         if (!adoc) {
@@ -1137,7 +1146,17 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         let aprs = adoc.pullRequests || [];
         dispatch({ activePullRequests: aprs });
 
-        let queueId = mainQueueTabId; // TODO: ALLOW ENQUEUE TO DIFFERENT QUEUE USING DROPDOWN
+        let alldoc = await getAllMergeQueuesDocument();
+        if (!alldoc) {
+            console.error("Failed to get all merge queues document");
+            return;
+        }
+        let foundMergeQueue = alldoc.mergeQueues.find(mq => mq.id === queueId);
+        if (!foundMergeQueue) {
+            console.error("Failed to find merge queue in all merge queues document", queueId);
+            return;
+        }
+
         let mdoc = await getMergeQueueDocument(queueId);
         if (!mdoc) {
             console.error("Failed to get merge queue document");

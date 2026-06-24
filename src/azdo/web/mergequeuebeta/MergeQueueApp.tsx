@@ -140,7 +140,6 @@ interface ReducerState {
     mergeQueues: MergeQueueInfo[];
     selectedPullRequestIds: number[];
 
-    mergeQueuePullRequests: PullRequestInfo[];
     repositories: RepositoryDetails[];
 
     activePullRequests: PullRequestInfo[];
@@ -189,30 +188,6 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     if (action.selectedQueueTabId !== undefined) {
         console.log("MQ: reducer -> updating selected queue tab ID", action.selectedQueueTabId);
         next.selectedQueueTabId = action.selectedQueueTabId;
-    }
-
-    // mergeQueuePullRequests changes if the mergeQueueItems change, or if the selected tab changes
-    if (action.mergeQueues !== undefined || action.selectedQueueTabId !== undefined) {
-        let mq = next.mergeQueues.find(mq => mq.id === next.selectedQueueTabId);
-        if (mq) {
-            let mergeQueueItems = mq.mergeQueueItems;
-            next.mergeQueuePullRequests = mergeQueueItems.map((item): PullRequestInfo => {
-                return {
-                    id: item.id,
-                    title: item.title,
-                    repository: item.repository,
-                    sourceRefName: item.sourceRefName,
-                    targetRefName: item.targetRefName,
-                    createdTimestamp: item.createdTimestamp,
-                    author: item.author,
-                    isDraft: item.isDraft,
-                    isAutoComplete: item.isAutoComplete,
-                    voting: item.voting,
-                    mergeStatus: item.mergeStatus,
-                };
-            });
-        }
-        // TODO: confirm selections
     }
 
     if (action.repositories !== undefined) {
@@ -355,7 +330,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
     const [state, dispatch] = React.useReducer<(state: ReducerState, action: ReducerAction) => ReducerState>(reducer, {
         mergeQueues: [],
-        mergeQueuePullRequests: [],
         selectedPullRequestIds: [],
         repositories: [],
 

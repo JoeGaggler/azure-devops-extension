@@ -146,8 +146,8 @@ interface ReducerState {
     filteredActivePullRequests: PullRequestInfo[]; // derived
 
     pipelineRuns: PipelineRunInfo[];
-    filteredPipelineRuns: PipelineRunInfo[];
     selectedFilteredPipelineRunIds: number[];
+    filteredPipelineRuns: PipelineRunInfo[]; // derived
 
     selectedQueueTabId: string;
 }
@@ -242,14 +242,14 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         next.pipelineRuns = action.pipelineRuns;
     }
 
-    // TODO: fix filtering for multiple merge queues
     // filter pipeline runs
-    // {
-    //     next.filteredPipelineRuns = [...next.pipelineRuns];
-    //     next.filteredPipelineRuns = next.filteredPipelineRuns.filter(run => {
-    //         return next.mergeQueueItems.some(mqi => mqi.mergedCommitId === run.sourceVersion);
-    //     });
-    // }
+    {
+        var mq_items = next.mergeQueues.find(mq => mq.id === next.selectedQueueTabId)?.mergeQueueItems ?? [];
+        next.filteredPipelineRuns = [...next.pipelineRuns];
+        next.filteredPipelineRuns = next.filteredPipelineRuns.filter(run => {
+            return mq_items.some(mqi => mqi.mergedCommitId === run.sourceVersion);
+        });
+    }
 
     // TODO: fix selection for multiple merge queues
     // select pipeline runs via merge queue selection

@@ -7,6 +7,7 @@
 // TODO: PR refresh should update the merge queue and active list
 // TODO: badge for tabs to indicate PR count
 // TODO: tags on all pull requests tab to indicate which merge queue they are in
+// TODO: only APPEND pipeline runs that match merge commits, and REMOVE ones that are no longer matching
 import React from "react";
 import * as luxon from 'luxon'
 import * as SDK from 'azure-devops-extension-sdk';
@@ -334,6 +335,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     let gitClient = React.useRef(getGitClient());
     let runClient = React.useRef(getRunClient());
     let extensionManagementClient = React.useRef(getExtensionManagementClient());
+    let isTickTockRunning = React.useRef(false);
     let isMergeQueueRunning = React.useRef(false);
     let [showIcons, setShowIcons] = React.useState(false);
 
@@ -376,6 +378,9 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     // initialize the app
     React.useEffect(() => { init() }, []);
     async function init() {
+        let state = {} // shadow state to avoid stale closures
+        if (state) { }
+
         try {
             console.log("MQ: init");
             let nextTenantInfo = await getAzdoInfo();
@@ -445,11 +450,11 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             console.log("MQ: init -> updating merge queues", nextMergeQueues);
             dispatch({ mergeQueues: nextMergeQueues });
 
-            alldoc.mergeQueues = nextMergeQueues.map((mq: AllMergeQueuesItem) => ({
+            // update the all merge queues document with the latest names
+            alldoc.mergeQueues = nextMergeQueues.map((mq): AllMergeQueuesItem => ({
                 id: mq.id,
-                name: mq.name
+                name: mq.name,
             }));
-
             let nextAllDoc = await updateAllMergeQueuesDocument(alldoc);
             if (!nextAllDoc) {
                 console.error("MQ: init -> failed to update all merge queues document");
@@ -475,7 +480,15 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         return () => clearInterval(id);
     }, []);
     async function ticktock() {
+        let state = {} // shadow state to avoid stale closures
+        if (state) { }
+
+        if (isTickTockRunning.current === true) {
+            return;
+        }
         try {
+            isTickTockRunning.current = true;
+
             if (!singleton.current) {
                 console.error("MQ: ticktock -> no singleton available");
                 return;
@@ -501,10 +514,27 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
             // TODO: run concurrently
             await refreshActivePullRequests(git, ti);
-            await runMergeQueue(git, proj, mainQueueTabId); // TODO: for upgrade only
             await refreshPipelineRuns(proj);
+
+            var alldoc = await getAllMergeQueuesDocument();
+            if (alldoc) {
+                let allMergeQueues = alldoc.mergeQueues ?? [];
+                if (allMergeQueues.length > 0) {
+                    for (const mq of allMergeQueues) {
+                        await runMergeQueue(git, proj, mq.id);
+                    }
+                }
+                else {
+                    console.error("MQ: ticktock -> no merge queues to process2", alldoc);
+                }
+            }
+            else {
+                console.error("MQ: ticktock -> no merge queues to process1", alldoc);
+            }
         } catch (error) {
             console.error("MQ: ticktock -> error occurred", error);
+        } finally {
+            isTickTockRunning.current = false;
         }
     }
 
@@ -595,6 +625,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 console.error("MQ: runMergeQueue -> merge queue document has no items", old_mqdoc);
                 return;
             }
+            console.log("MQ: runMergeQueue -> starting", queueId);
 
             // get unique repositories referenced by the merge queue items
             const old_mqitems = [...old_mqdoc.mergeQueueItems];
@@ -785,7 +816,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         } catch (error) {
             console.error("MQ: runMergeQueue -> error occurred", error);
         } finally {
-            console.log("MQ: runMergeQueue -> finished");
+            console.log("MQ: runMergeQueue -> finished", queueId);
             isMergeQueueRunning.current = false;
         }
     }

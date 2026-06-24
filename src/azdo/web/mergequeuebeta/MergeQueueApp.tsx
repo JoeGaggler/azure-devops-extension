@@ -138,14 +138,13 @@ interface PipelineRunInfo {
 
 interface ReducerState {
     mergeQueues: MergeQueueInfo[];
+    selectedPullRequestIds: number[];
 
-    selectedMergeQueuePullRequestIds: number[];
     mergeQueuePullRequests: PullRequestInfo[];
     repositories: RepositoryDetails[];
 
     activePullRequests: PullRequestInfo[];
     filteredActivePullRequests: PullRequestInfo[];
-    selectedActivePullRequestIds: number[];
     filters: PullRequestFilters;
 
     pipelineRuns: PipelineRunInfo[];
@@ -158,16 +157,19 @@ interface ReducerState {
 interface ReducerAction {
     // collection loading
     mergeQueues?: MergeQueueInfo[];
+
+    // active pull requests
     activePullRequests?: PullRequestInfo[];
     filteredActivePullRequests?: PullRequestInfo[];
     repositories?: RepositoryDetails[];
 
     // selection changes
-    selectedMergeQueuePullRequestIds?: number[];
-    selectedActivePullRequestIds?: number[];
+    selectedPullRequestIds?: number[];
+
+    // queue actions
+    actionQueueId?: string;
 
     // actions
-    enqueuePullRequests?: PullRequestInfo[];
     filters?: PullRequestFilters;
     selectedQueueTabId?: string;
 
@@ -218,16 +220,10 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         next.repositories = action.repositories;
     }
 
-    if (action.selectedMergeQueuePullRequestIds !== undefined) {
-        console.log("MQ: reducer -> updating selected merge queue pull request IDs", action.selectedMergeQueuePullRequestIds);
-        next.selectedMergeQueuePullRequestIds = action.selectedMergeQueuePullRequestIds;
-        next.selectedActivePullRequestIds = action.selectedMergeQueuePullRequestIds;
-    }
-
-    if (action.selectedActivePullRequestIds !== undefined) {
-        console.log("MQ: reducer -> updating selected active pull request IDs", action.selectedActivePullRequestIds);
-        next.selectedActivePullRequestIds = action.selectedActivePullRequestIds;
-        next.selectedMergeQueuePullRequestIds = action.selectedActivePullRequestIds;
+    if (action.selectedPullRequestIds !== undefined) {
+        console.log("MQ: reducer -> updating selected pull request IDs", action.selectedPullRequestIds);
+        next.selectedPullRequestIds = action.selectedPullRequestIds;
+        next.selectedPullRequestIds = action.selectedPullRequestIds;
     }
 
     if (action.activePullRequests !== undefined) {
@@ -360,12 +356,11 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     const [state, dispatch] = React.useReducer<(state: ReducerState, action: ReducerAction) => ReducerState>(reducer, {
         mergeQueues: [],
         mergeQueuePullRequests: [],
-        selectedMergeQueuePullRequestIds: [],
+        selectedPullRequestIds: [],
         repositories: [],
 
         activePullRequests: [],
         filteredActivePullRequests: [],
-        selectedActivePullRequestIds: [],
 
         filters: {
             drafts: false,
@@ -861,7 +856,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     function renderMergeQueueCommandBarItems(): IHeaderCommandBarItem[] {
-        let hasSelection = state.selectedMergeQueuePullRequestIds.length === 1;
+        let hasSelection = state.selectedPullRequestIds.length === 1;
         if (hasSelection) {
         }
         return [
@@ -873,7 +868,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 onActivate: () => { onPromotePullRequest(); },
                 isPrimary: false,
                 important: true,
-                disabled: (state.selectedMergeQueuePullRequestIds.length === 0) // TODO: not at top
+                disabled: (state.selectedPullRequestIds.length === 0) // TODO: not at top
             },
             {
                 id: "demote",
@@ -883,7 +878,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 onActivate: () => { onDemotePullRequest(); },
                 isPrimary: false,
                 important: true,
-                disabled: (state.selectedMergeQueuePullRequestIds.length === 0) // TODO: not at bottom
+                disabled: (state.selectedPullRequestIds.length === 0) // TODO: not at bottom
             },
             {
                 id: "dequeue",
@@ -891,7 +886,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 onActivate: () => { onDequeuePullRequest(); },
                 isPrimary: true,
                 important: true,
-                disabled: (state.selectedMergeQueuePullRequestIds.length === 0)
+                disabled: (state.selectedPullRequestIds.length === 0)
             }
         ];
     }
@@ -908,7 +903,10 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 onActivate: () => { onEnqueuePullRequest(); },
                 isPrimary: true,
                 important: true,
-                disabled: (state.selectedActivePullRequestIds.length === 0)
+                disabled: (
+                    state.selectedQueueTabId === allPullRequestsTabId && 
+                    state.selectedPullRequestIds.length === 0
+                ) // TODO: not already in queue
             }
         ];
     }
@@ -927,7 +925,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     async function onPromotePullRequest() {
-        if (!state.selectedMergeQueuePullRequestIds || state.selectedMergeQueuePullRequestIds.length !== 1) {
+        if (!state.selectedPullRequestIds || state.selectedPullRequestIds.length !== 1) {
             // TODO: toast error
             return;
         }
@@ -937,7 +935,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             return;
         }
         let mq_items = mq.mergeQueueItems;
-        let selectedId = state.selectedMergeQueuePullRequestIds[0];
+        let selectedId = state.selectedPullRequestIds[0];
         let selectedIndex = mq_items.findIndex(m => m.id === selectedId);
         if (selectedIndex === -1) {
             // TODO: toast error
@@ -985,7 +983,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     async function onDemotePullRequest() {
-        if (!state.selectedMergeQueuePullRequestIds || state.selectedMergeQueuePullRequestIds.length !== 1) {
+        if (!state.selectedPullRequestIds || state.selectedPullRequestIds.length !== 1) {
             // TODO: toast error
             return;
         }
@@ -995,7 +993,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             return;
         }
         let mq_items = mq.mergeQueueItems;
-        let selectedId = state.selectedMergeQueuePullRequestIds[0];
+        let selectedId = state.selectedPullRequestIds[0];
         let selectedIndex = mq_items.findIndex(m => m.id === selectedId);
         if (selectedIndex === -1) {
             // TODO: toast error
@@ -1059,7 +1057,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         let mitems = mdoc.mergeQueueItems || [];
         dispatch_old({ mergeQueueItems: mitems });
 
-        let oldids = state.selectedMergeQueuePullRequestIds;
+        let oldids = state.selectedPullRequestIds;
         let newMergeQueueItems = mitems.filter(m => !oldids.includes(m.id));
         console.log("MQ: onDequeuePullRequest -> new pull requests", newMergeQueueItems);
 
@@ -1092,7 +1090,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         let mitems = mdoc.mergeQueueItems || [];
         dispatch_old({ mergeQueueItems: mitems });
 
-        let nextids = state.selectedActivePullRequestIds;
+        let nextids = state.selectedPullRequestIds;
         let nextprs = aprs.filter(pr => nextids.includes(pr.id));
         console.log("MQ: onEnqueuePullRequest -> next pull requests", nextids, nextprs);
 
@@ -1147,11 +1145,11 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     function onSelectMergeQueuePullRequestIds(ids: number[]) {
-        dispatch({ selectedMergeQueuePullRequestIds: ids });
+        dispatch({ selectedPullRequestIds: ids });
     }
 
     function onSelectActivePullRequestIds(ids: number[]) {
-        dispatch({ selectedActivePullRequestIds: ids });
+        dispatch({ selectedPullRequestIds: ids });
     }
 
     function onActivateMergeQueuePullRequest(id: number, repo: string) {
@@ -1322,7 +1320,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     >
                         <PullRequestList
                             pullRequests={mapMergeQueueItemToPullRequestListItems()}
-                            selectedIds={state.selectedMergeQueuePullRequestIds}
+                            selectedIds={state.selectedPullRequestIds}
                             onSelectPullRequestIds={onSelectMergeQueuePullRequestIds}
                             onActivatePullRequest={onActivateMergeQueuePullRequest}
                         />
@@ -1385,7 +1383,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     >
                         <PullRequestList
                             pullRequests={mapActivePullRequestsToPullRequestListItems()}
-                            selectedIds={state.selectedActivePullRequestIds}
+                            selectedIds={state.selectedPullRequestIds}
                             onSelectPullRequestIds={onSelectActivePullRequestIds}
                             onActivatePullRequest={onActivateActivePullRequest}
                         />

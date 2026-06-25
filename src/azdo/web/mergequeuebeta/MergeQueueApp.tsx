@@ -102,7 +102,7 @@ interface MergeQueueItemInfo {
 interface MergeQueueInfo {
     id: string;
     name: string;
-    mergeQueueItems: MergeQueueItemInfo[];
+    items: MergeQueueItemInfo[];
 }
 
 type MergeQueueStatus =
@@ -151,12 +151,6 @@ interface PipelineRunInfo {
     createdAt: number;
 }
 
-interface ReduceSingleMergeQueue {
-    id: string;
-    name: string;
-    items: MergeQueueItemInfo[]
-}
-
 interface ReducerState {
     mergeQueues: MergeQueueInfo[];
     selectedPullRequestIds: number[];
@@ -176,6 +170,7 @@ interface ReducerState {
 interface ReducerAction {
     // collection loading
     mergeQueues?: MergeQueueInfo[];
+    singleMergeQueue?: MergeQueueInfo;
 
     // active pull requests
     activePullRequests?: PullRequestInfo[];
@@ -196,26 +191,25 @@ interface ReducerAction {
     pipelineRuns?: PipelineRunInfo[];
     selectedPipelineRunIds?: number[];
 
-    hackReduceSingleMergeQueue?: ReduceSingleMergeQueue;
 }
 
 function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     let next = { ...state };
 
-    if (action.hackReduceSingleMergeQueue !== undefined) {
-        let id = action.hackReduceSingleMergeQueue.id;
-        let name = action.hackReduceSingleMergeQueue.name;
-        let items = action.hackReduceSingleMergeQueue.items || [];
+    if (action.singleMergeQueue !== undefined) {
+        let id = action.singleMergeQueue.id;
+        let name = action.singleMergeQueue.name;
+        let items = action.singleMergeQueue.items || [];
 
         let nextQueues = [...next.mergeQueues];
         let found = next.mergeQueues.find(i => i.id === id);
         if (found) {
-            found.mergeQueueItems = items;
+            found.items = items;
         } else {
             found = {
                 id: id,
                 name: name,
-                mergeQueueItems: items,
+                items: items,
             };
             nextQueues = [...next.mergeQueues, found]
         }
@@ -251,7 +245,7 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         let selectedCommitIds = runs.map(run => run.sourceVersion);
 
         next.selectedFilteredPipelineRunIds = runIds;
-        let mq_items = next.mergeQueues.find(mq => mq.id === next.selectedQueueTabId)?.mergeQueueItems ?? [];
+        let mq_items = next.mergeQueues.find(mq => mq.id === next.selectedQueueTabId)?.items ?? [];
         if (mq_items && mq_items.length > 0) {
             next.selectedPullRequestIds = (mq_items
                 .filter(mqi => selectedCommitIds.includes(mqi.mergedCommitId))
@@ -282,7 +276,7 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         if (next.filters.drafts === false) {
             filt = filt.filter(pr => !pr.isDraft);
         }
-        let main_mq_items = next.mergeQueues.find(mq => mq.id === mainQueueTabId)?.mergeQueueItems ?? [];
+        let main_mq_items = next.mergeQueues.find(mq => mq.id === mainQueueTabId)?.items ?? [];
         if (next.filters.queued === false) {
             filt = filt.filter(pr => false === main_mq_items.some(mqi => mqi.id === pr.id));
         }
@@ -305,7 +299,7 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     // filter pipeline runs
     let selectedMergeQueue = next.mergeQueues.find(mq => mq.id === next.selectedQueueTabId);
     if (selectedMergeQueue !== undefined) {
-        var mq_items = selectedMergeQueue.mergeQueueItems ?? [];
+        var mq_items = selectedMergeQueue.items ?? [];
         next.filteredPipelineRuns = [...next.pipelineRuns];
         next.filteredPipelineRuns = next.filteredPipelineRuns.filter(run => {
             return mq_items.some(mqi => mqi.mergedCommitId === run.sourceVersion);
@@ -432,7 +426,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     let mq: MergeQueueInfo = {
                         id: mainQueueTabId,
                         name: "Main",
-                        mergeQueueItems: mdoc.mergeQueueItems || []
+                        items: mdoc.mergeQueueItems || []
                     };
                     mdoc.id = mainQueueTabId; // TODO: for upgrade only
                     await updateMergeQueueDocument(mdoc, mdoc.id);
@@ -457,7 +451,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 let mq: MergeQueueInfo = {
                     id: mqid,
                     name: mqref.name,
-                    mergeQueueItems: mdoc.mergeQueueItems || []
+                    items: mdoc.mergeQueueItems || []
                 };
                 nextMergeQueues.push(mq);
             }
@@ -642,8 +636,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             }
             console.log("MQ: runMergeQueue -> starting", queueId);
 
-            const empty: ReduceSingleMergeQueue = { id: queueId, name: sync_doc.name, items: [] }
-            dispatch({ hackReduceSingleMergeQueue: { ...empty, items: sync_doc.mergeQueueItems } })
+            const empty: MergeQueueInfo = { id: queueId, name: sync_doc.name, items: [] }
+            dispatch({ singleMergeQueue: { ...empty, items: sync_doc.mergeQueueItems } })
 
             // get unique repositories referenced by the merge queue items
             const sync_list = [...sync_doc.mergeQueueItems];
@@ -939,7 +933,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
         // console.log("MQ: runMergeQueue -> updated merge queue document", doc2);
         dispatch({
-            hackReduceSingleMergeQueue: {
+            singleMergeQueue: {
                 id: doc2.id,
                 name: doc2.name,
                 items: doc2.mergeQueueItems,
@@ -1050,7 +1044,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             // TODO: toast error
             return;
         }
-        let mq_items = mq.mergeQueueItems;
+        let mq_items = mq.items;
         let selectedId = state.selectedPullRequestIds[0];
         let selectedIndex = mq_items.findIndex(m => m.id === selectedId);
         if (selectedIndex === -1) {
@@ -1065,7 +1059,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             return;
         }
         mq_items = mdoc.mergeQueueItems || [];
-        dispatch({ hackReduceSingleMergeQueue: { id: queueId, name: mdoc.name, items: mq_items } });
+        dispatch({ singleMergeQueue: { id: queueId, name: mdoc.name, items: mq_items } });
         if (selectedIndex !== mq_items.findIndex(m => m.id === selectedId)) {
             // TODO: toast error
             return;
@@ -1093,7 +1087,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             console.error("MQ: onDequeuePullRequest -> failed to update merge queue document");
             return;
         }
-        dispatch({ hackReduceSingleMergeQueue: { id: queueId, name: mdoc.name, items: updatedMdoc.mergeQueueItems } });
+        dispatch({ singleMergeQueue: { id: queueId, name: mdoc.name, items: updatedMdoc.mergeQueueItems } });
 
         await ticktock(); // immediate refresh
     }
@@ -1109,7 +1103,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             // TODO: toast error
             return;
         }
-        let mq_items = mq.mergeQueueItems;
+        let mq_items = mq.items;
         let selectedId = state.selectedPullRequestIds[0];
         let selectedIndex = mq_items.findIndex(m => m.id === selectedId);
         if (selectedIndex === -1) {
@@ -1124,7 +1118,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             return;
         }
         mq_items = mdoc.mergeQueueItems || [];
-        dispatch({ hackReduceSingleMergeQueue: { id: queueId, name: mdoc.name, items: mq_items } });
+        dispatch({ singleMergeQueue: { id: queueId, name: mdoc.name, items: mq_items } });
         if (selectedIndex !== mq_items.findIndex(m => m.id === selectedId)) {
             // TODO: toast error
             return;
@@ -1152,7 +1146,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             console.error("MQ: onDemotePullRequest -> failed to update merge queue document");
             return;
         }
-        dispatch({ hackReduceSingleMergeQueue: { id: queueId, name: updatedMdoc.name, items: updatedMdoc.mergeQueueItems } });
+        dispatch({ singleMergeQueue: { id: queueId, name: updatedMdoc.name, items: updatedMdoc.mergeQueueItems } });
 
         await ticktock(); // immediate refresh
     }
@@ -1173,7 +1167,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             return;
         }
         let mitems = mdoc.mergeQueueItems || [];
-        dispatch({ hackReduceSingleMergeQueue: { id: queueId, name: mdoc.name, items: mitems } });
+        dispatch({ singleMergeQueue: { id: queueId, name: mdoc.name, items: mitems } });
 
         let oldids = state.selectedPullRequestIds;
         let newMergeQueueItems = mitems.filter(m => !oldids.includes(m.id));
@@ -1186,7 +1180,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             return;
         }
         console.log("MQ: onDequeuePullRequest -> updated merge queue document", updatedMdoc);
-        dispatch({ hackReduceSingleMergeQueue: { id: queueId, name: updatedMdoc.name, items: updatedMdoc.mergeQueueItems } });
+        dispatch({ singleMergeQueue: { id: queueId, name: updatedMdoc.name, items: updatedMdoc.mergeQueueItems } });
 
         await ticktock(); // immediate refresh
     }
@@ -1218,7 +1212,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             return;
         }
         let mitems = mdoc.mergeQueueItems || [];
-        dispatch({ hackReduceSingleMergeQueue: { id: queueId, name: mdoc.name, items: mitems } });
+        dispatch({ singleMergeQueue: { id: queueId, name: mdoc.name, items: mitems } });
 
         let nextids = state.selectedPullRequestIds;
         let nextprs = aprs.filter(pr => nextids.includes(pr.id));
@@ -1269,7 +1263,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             return;
         }
         console.log("MQ: onEnqueuePullRequest -> updated merge queue document", updatedMdoc);
-        dispatch({ hackReduceSingleMergeQueue: { id: queueId, name: updatedMdoc.name, items: updatedMdoc.mergeQueueItems } });
+        dispatch({ singleMergeQueue: { id: queueId, name: updatedMdoc.name, items: updatedMdoc.mergeQueueItems } });
 
         await ticktock(); // immediate refresh
     }
@@ -1306,7 +1300,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         if (!mq) {
             return [];
         }
-        return mq.mergeQueueItems.map((item): PullRequestListItem => {
+        return mq.items.map((item): PullRequestListItem => {
             let status = item.status;
             let icon = "Starburst";
             let iconClassName: string | undefined = undefined;

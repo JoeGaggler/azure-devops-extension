@@ -636,9 +636,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             }
             console.log("MQ: runMergeQueue -> starting", queueId);
 
-            const empty: MergeQueueInfo = { id: queueId, name: sync_doc.name, items: [] }
-            dispatch({ singleMergeQueue: { ...empty, items: sync_doc.mergeQueueItems } })
-
             // get unique repositories referenced by the merge queue items
             const sync_list = [...sync_doc.mergeQueueItems];
             const repos = sync_list.map(i => i.repository);
@@ -660,7 +657,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             let removed_indexes: number[] = [];
             for (const [index, sync_item] of sync_list.entries()) {
                 if (mustSync) {
-                    sync_doc = await syncMergeQueueDocument(sync_doc, queueId, sync_list);
+                    sync_doc.mergeQueueItems = sync_list;
+                    sync_doc = await syncMergeQueueDocument(sync_doc);
                     if (!sync_doc) {
                         console.error(`MQ: runMergeQueue -> ${index}: failed to sync document`);
                         return;
@@ -785,7 +783,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
             // final sync
             if (mustSync) {
-                sync_doc = await syncMergeQueueDocument(sync_doc, queueId, sync_list);
+                sync_doc.mergeQueueItems = sync_list;
+                sync_doc = await syncMergeQueueDocument(sync_doc);
                 if (!sync_doc) {
                     console.error(`MQ: runMergeQueue -> final sync: failed to sync document`);
                     return;
@@ -898,7 +897,19 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     async function getMergeQueueDocument(id: string): Promise<MergeQueueDocument | undefined> {
-        return await getAppDocument<MergeQueueDocument>(id);
+        let doc = await getAppDocument<MergeQueueDocument>(id);
+
+        if (doc && doc.id && doc.name && doc.mergeQueueItems) {
+            dispatch({
+                singleMergeQueue: {
+                    id: doc.id,
+                    name: doc.name,
+                    items: doc.mergeQueueItems,
+                }
+            });
+        }
+
+        return doc;
     }
 
     async function getAllMergeQueuesDocument(): Promise<AllMergeQueuesDocument | undefined> {
@@ -924,10 +935,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         return await updateDocument(extensionManagementClient.current, collectionId, docId, doc); // TODO: use doc.id instead of docId
     }
 
-    // TODO: remove docId parameter and use doc.id instead
-    async function syncMergeQueueDocument(doc: MergeQueueDocument, docId: string, items: MergeQueueItemInfo[]): Promise<MergeQueueDocument | undefined> {
-        doc.mergeQueueItems = items;
-        let doc2 = await updateMergeQueueDocument(doc, docId);
+    async function syncMergeQueueDocument(doc: MergeQueueDocument): Promise<MergeQueueDocument | undefined> {
+        let doc2 = await updateMergeQueueDocument(doc, doc.id);
         if (!doc2 || !doc2.mergeQueueItems) {
             return undefined;
         }
@@ -1059,7 +1068,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             return;
         }
         mq_items = mdoc.mergeQueueItems || [];
-        dispatch({ singleMergeQueue: { id: queueId, name: mdoc.name, items: mq_items } });
         if (selectedIndex !== mq_items.findIndex(m => m.id === selectedId)) {
             // TODO: toast error
             return;
@@ -1118,7 +1126,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             return;
         }
         mq_items = mdoc.mergeQueueItems || [];
-        dispatch({ singleMergeQueue: { id: queueId, name: mdoc.name, items: mq_items } });
         if (selectedIndex !== mq_items.findIndex(m => m.id === selectedId)) {
             // TODO: toast error
             return;
@@ -1167,7 +1174,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             return;
         }
         let mitems = mdoc.mergeQueueItems || [];
-        dispatch({ singleMergeQueue: { id: queueId, name: mdoc.name, items: mitems } });
 
         let oldids = state.selectedPullRequestIds;
         let newMergeQueueItems = mitems.filter(m => !oldids.includes(m.id));
@@ -1212,7 +1218,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             return;
         }
         let mitems = mdoc.mergeQueueItems || [];
-        dispatch({ singleMergeQueue: { id: queueId, name: mdoc.name, items: mitems } });
 
         let nextids = state.selectedPullRequestIds;
         let nextprs = aprs.filter(pr => nextids.includes(pr.id));

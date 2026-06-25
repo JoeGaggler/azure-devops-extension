@@ -912,6 +912,11 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         return doc;
     }
 
+    async function updateMergeQueueDocument(doc: MergeQueueDocument, docId: string): Promise<MergeQueueDocument | undefined> {
+        doc.viaVersion = "__MERGEQUEUEVERSION__";
+        return await updateDocument(extensionManagementClient.current, collectionId, docId, doc); // TODO: use doc.id instead of docId
+    }
+
     async function getAllMergeQueuesDocument(): Promise<AllMergeQueuesDocument | undefined> {
         return await getAppDocument<AllMergeQueuesDocument>(allMergeQueuesDocumentId);
     }
@@ -928,11 +933,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     async function updateActivePullRequestDocument(doc: PullRequestDocument): Promise<PullRequestDocument | undefined> {
         doc.viaVersion = "__MERGEQUEUEVERSION__";
         return await updateDocument(extensionManagementClient.current, collectionId, activePullRequestsDocumentId, doc);
-    }
-
-    async function updateMergeQueueDocument(doc: MergeQueueDocument, docId: string): Promise<MergeQueueDocument | undefined> {
-        doc.viaVersion = "__MERGEQUEUEVERSION__";
-        return await updateDocument(extensionManagementClient.current, collectionId, docId, doc); // TODO: use doc.id instead of docId
     }
 
     async function syncMergeQueueDocument(doc: MergeQueueDocument): Promise<MergeQueueDocument | undefined> {
@@ -1090,12 +1090,11 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
 
         // sync
-        let updatedMdoc = await updateMergeQueueDocument(mdoc, queueId);
+        let updatedMdoc = await syncMergeQueueDocument(mdoc);
         if (!updatedMdoc) {
             console.error("MQ: onDequeuePullRequest -> failed to update merge queue document");
             return;
         }
-        dispatch({ singleMergeQueue: { id: queueId, name: mdoc.name, items: updatedMdoc.mergeQueueItems } });
 
         await ticktock(); // immediate refresh
     }
@@ -1148,12 +1147,11 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
 
         // sync
-        let updatedMdoc = await updateMergeQueueDocument(mdoc, queueId);
+        let updatedMdoc = await syncMergeQueueDocument(mdoc);
         if (!updatedMdoc) {
             console.error("MQ: onDemotePullRequest -> failed to update merge queue document");
             return;
         }
-        dispatch({ singleMergeQueue: { id: queueId, name: updatedMdoc.name, items: updatedMdoc.mergeQueueItems } });
 
         await ticktock(); // immediate refresh
     }
@@ -1180,13 +1178,12 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         console.log("MQ: onDequeuePullRequest -> new pull requests", newMergeQueueItems);
 
         mdoc.mergeQueueItems = [...newMergeQueueItems];
-        let updatedMdoc = await updateMergeQueueDocument(mdoc, queueId);
+        let updatedMdoc = await syncMergeQueueDocument(mdoc);
         if (!updatedMdoc) {
             console.error("MQ: onDequeuePullRequest -> failed to update merge queue document");
             return;
         }
         console.log("MQ: onDequeuePullRequest -> updated merge queue document", updatedMdoc);
-        dispatch({ singleMergeQueue: { id: queueId, name: updatedMdoc.name, items: updatedMdoc.mergeQueueItems } });
 
         await ticktock(); // immediate refresh
     }
@@ -1206,18 +1203,17 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             console.error("Failed to get all merge queues document");
             return;
         }
-        let foundMergeQueue = alldoc.mergeQueues.find(mq => mq.id === queueId);
-        if (!foundMergeQueue) {
+        if (alldoc.mergeQueues.find(mq => mq.id === queueId) === undefined) {
             console.error("Failed to find merge queue in all merge queues document", queueId);
             return;
         }
 
-        let mdoc = await getMergeQueueDocument(queueId);
-        if (!mdoc) {
+        let sync_doc = await getMergeQueueDocument(queueId);
+        if (!sync_doc) {
             console.error("Failed to get merge queue document");
             return;
         }
-        let mitems = mdoc.mergeQueueItems || [];
+        let sync_items = sync_doc.mergeQueueItems || [];
 
         let nextids = state.selectedPullRequestIds;
         let nextprs = aprs.filter(pr => nextids.includes(pr.id));
@@ -1233,15 +1229,15 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
 
         // exclude nextprs that are already in the merge queue
-        let filteredprs = nextprs.filter(pr => !mitems.some(mpr => mpr.id === pr.id));
+        let filteredprs = nextprs.filter(pr => !sync_items.some(mpr => mpr.id === pr.id));
         console.log("MQ: onEnqueuePullRequest -> filtered pull requests", filteredprs);
         if (filteredprs.length === 0) {
-            console.warn("MQ: onEnqueuePullRequest -> no pull requests to enqueue", mitems);
+            console.warn("MQ: onEnqueuePullRequest -> no pull requests to enqueue", sync_items);
             return;
         }
 
         // create new merge queue items
-        var newMergeQueueItems = filteredprs.map((pr): MergeQueueItemInfo => {
+        var new_sync_items = filteredprs.map((pr): MergeQueueItemInfo => {
             return {
                 id: pr.id,
                 title: pr.title,
@@ -1261,14 +1257,13 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             };
         });
 
-        mdoc.mergeQueueItems = [...mitems, ...newMergeQueueItems];
-        let updatedMdoc = await updateMergeQueueDocument(mdoc, queueId);
-        if (!updatedMdoc) {
+        sync_doc.mergeQueueItems = [...sync_items, ...new_sync_items];
+        sync_doc = await syncMergeQueueDocument(sync_doc);
+        if (!sync_doc) {
             console.error("MQ: onEnqueuePullRequest -> failed to update merge queue document");
             return;
         }
-        console.log("MQ: onEnqueuePullRequest -> updated merge queue document", updatedMdoc);
-        dispatch({ singleMergeQueue: { id: queueId, name: updatedMdoc.name, items: updatedMdoc.mergeQueueItems } });
+        console.log("MQ: onEnqueuePullRequest -> updated merge queue document", sync_doc);
 
         await ticktock(); // immediate refresh
     }

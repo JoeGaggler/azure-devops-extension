@@ -9,6 +9,7 @@
 // TODO: tags on all pull requests tab to indicate which merge queue they are in
 // TODO: only APPEND pipeline runs that match merge commits, and REMOVE ones that are no longer matching
 // TODO: figure out why state gets captured from an async function in the component
+// TODO: defer processing when app version is newer than ours
 import React from "react";
 import * as luxon from 'luxon'
 import * as SDK from 'azure-devops-extension-sdk';
@@ -411,16 +412,20 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             dispatch({ repositories: repoDetails });
 
             var alldoc = await getAllMergeQueuesDocument();
-            if (!alldoc) {
+            if (alldoc === undefined) {
                 // TODO: lock the app
                 console.error("MQ: init -> failed to get all merge queues document");
                 return;
             }
 
             // initialize main queue if it does not exist
-            if (!alldoc.mergeQueues || alldoc.mergeQueues.length === 0) {
+            if ((alldoc.mergeQueues === undefined) ||
+                (alldoc.mergeQueues.length === 0) ||
+                (undefined === alldoc.mergeQueues.find(i => i.id === mainQueueTabId))
+            ) {
                 var mdoc = await getMergeQueueDocument(mainQueueTabId);
                 if (!mdoc) {
+                    // TODO: lock the app
                     console.error("MQ: init -> failed to get merge queue document for main queue");
                 } else {
                     let mq: MergeQueueInfo = {
@@ -429,7 +434,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                         items: mdoc.mergeQueueItems || []
                     };
                     mdoc.id = mainQueueTabId; // TODO: for upgrade only
-                    await updateMergeQueueDocument(mdoc, mdoc.id);
+                    await updateMergeQueueDocument(mdoc);
 
                     alldoc.mergeQueues = [{
                         id: mq.id,
@@ -450,7 +455,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 }
                 let mq: MergeQueueInfo = {
                     id: mqid,
-                    name: mqref.name,
+                    name: mdoc.name,
                     items: mdoc.mergeQueueItems || []
                 };
                 nextMergeQueues.push(mq);
@@ -521,7 +526,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 return;
             }
 
-            // TODO: run concurrently
             await refreshActivePullRequests(git, ti);
             await refreshPipelineRuns(proj);
 
@@ -912,9 +916,9 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         return doc;
     }
 
-    async function updateMergeQueueDocument(doc: MergeQueueDocument, docId: string): Promise<MergeQueueDocument | undefined> {
+    async function updateMergeQueueDocument(doc: MergeQueueDocument): Promise<MergeQueueDocument | undefined> {
         doc.viaVersion = "__MERGEQUEUEVERSION__";
-        return await updateDocument(extensionManagementClient.current, collectionId, docId, doc); // TODO: use doc.id instead of docId
+        return await updateDocument(extensionManagementClient.current, collectionId, doc.id, doc);
     }
 
     async function getAllMergeQueuesDocument(): Promise<AllMergeQueuesDocument | undefined> {
@@ -936,7 +940,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     async function syncMergeQueueDocument(doc: MergeQueueDocument): Promise<MergeQueueDocument | undefined> {
-        let doc2 = await updateMergeQueueDocument(doc, doc.id);
+        let doc2 = await updateMergeQueueDocument(doc);
         if (!doc2 || !doc2.mergeQueueItems) {
             return undefined;
         }

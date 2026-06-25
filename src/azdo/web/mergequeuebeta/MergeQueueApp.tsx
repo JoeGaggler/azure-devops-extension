@@ -34,6 +34,7 @@ import { PipelineList, PipelineListItem } from "./PipelineList";
 import { BuildQueryOrder } from "azure-devops-extension-api/Build/Build";
 import { Tab, TabBar, TabSize } from "azure-devops-ui/Tabs";
 import { IMenuItem } from "azure-devops-ui/Components/Menu/Menu.Props";
+import { AddMergeQueuePanel } from "./AddMergeQueuePanel";
 
 const publisher = "pingmint";
 const extensionName = "pingmint-extension";
@@ -166,6 +167,8 @@ interface ReducerState {
     filteredPipelineRuns: PipelineRunInfo[]; // derived
 
     selectedQueueTabId: string;
+
+    isShowingAddQueue: boolean;
 }
 
 interface ReducerAction {
@@ -192,10 +195,16 @@ interface ReducerAction {
     pipelineRuns?: PipelineRunInfo[];
     selectedPipelineRunIds?: number[];
 
+    showAddQueue?: boolean;
+
 }
 
 function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     let next = { ...state };
+
+    if (action.showAddQueue !== undefined) {
+        next.isShowingAddQueue = action.showAddQueue;
+    }
 
     if (action.singleMergeQueue !== undefined) {
         let id = action.singleMergeQueue.id;
@@ -205,6 +214,7 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         let nextQueues = [...next.mergeQueues];
         let found = next.mergeQueues.find(i => i.id === id);
         if (found) {
+            found.name = name;
             found.items = items;
         } else {
             found = {
@@ -383,6 +393,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         selectedFilteredPipelineRunIds: [],
 
         selectedQueueTabId: allPullRequestsTabId,
+
+        isShowingAddQueue: false,
     })
 
     // initialize the app
@@ -959,8 +971,9 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     function renderPageCommandBarItems(): IHeaderCommandBarItem[] {
         return [{
             id: "addQueue",
+            text: "New Queue",
             iconProps: {
-                iconName: "Add"
+                iconName: "Add",
             },
             onActivate: () => { onAddQueue(); },
             isPrimary: false,
@@ -1006,7 +1019,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     async function onAddQueue() {
-
+        dispatch({ showAddQueue: true })
     }
 
     function renderAllPullRequestsCommandBarItems(): IHeaderCommandBarItem[] {
@@ -1021,14 +1034,14 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     id: "enqueueSubMenu",
                     items: state.mergeQueues.map((mq): IMenuItem => ({
                         id: mq.id,
-                        text: mq.name,
+                        text: mq.name || mq.id, // TODO: WHY IS NAME NOT HERE?
                         onActivate: () => { onEnqueuePullRequest(mq.id); }
                     }))
                 },
                 disabled: (
                     state.selectedQueueTabId === allPullRequestsTabId &&
                     state.selectedPullRequestIds.length === 0
-                ) // TODO: not already in queue
+                ) // TODO: and not already in queue
             }
         ];
     }
@@ -1420,6 +1433,14 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         dispatch({ selectedQueueTabId: tabId });
     }
 
+    async function onCommitAddMergeQueue() {
+        dispatch({ showAddQueue: false });
+    }
+
+    async function onCancelAddMergeQueue() {
+        dispatch({ showAddQueue: false });
+    }
+
     return (
         <Page className="">
             <Header
@@ -1527,6 +1548,15 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             <div>
                 {AllIcons(showIcons)}
             </div>
+
+            {
+                state.isShowingAddQueue && (
+                    <AddMergeQueuePanel
+                        onCancel={() => { onCancelAddMergeQueue(); }}
+                        onCommit={() => { onCommitAddMergeQueue(); }}
+                    />
+                )
+            }
         </Page>
     );
 }

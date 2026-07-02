@@ -41,6 +41,7 @@ const extensionName = "pingmint-extension";
 const collectionId = "mergequeue";
 const allMergeQueuesDocumentId = "allmergequeues";
 const activePullRequestsDocumentId = "activepullrequests"; // TODO: MOVE THIS TO ITS OWN COLLECTION ID
+const allPipelineRunsDocumentId = "allpipelineruns";
 const zeroCommitId = "0000000000000000000000000000000000000000";
 const refMergeQueue = "refs/heads/merge-queue";
 const allPullRequestsTabId = "all";
@@ -153,7 +154,16 @@ interface PipelineRunInfo {
     createdAt: number;
 }
 
+interface PipelineRunsDocument {
+    id: string;
+    viaVersion: string;
+    __etag: number;
+    pipelineRuns: PipelineRunInfo[];
+}
+
 interface ReducerState {
+    didInit: boolean;
+
     mergeQueues: MergeQueueInfo[];
     selectedPullRequestIds: number[];
     repositories: RepositoryDetails[];
@@ -172,6 +182,8 @@ interface ReducerState {
 }
 
 interface ReducerAction {
+    didInit?: boolean;
+
     // collection loading
     mergeQueues?: MergeQueueInfo[];
     singleMergeQueue?: MergeQueueInfo;
@@ -196,11 +208,14 @@ interface ReducerAction {
     selectedPipelineRunIds?: number[];
 
     showAddQueue?: boolean;
-
 }
 
 function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     let next = { ...state };
+
+    if (action.didInit !== undefined) {
+        next.didInit = action.didInit;
+    }
 
     if (action.showAddQueue !== undefined) {
         next.isShowingAddQueue = action.showAddQueue;
@@ -304,7 +319,42 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     // pipeline runs
     if (action.pipelineRuns !== undefined) {
         console.log("MQ: reducer -> updating pipeline runs", action.pipelineRuns);
-        next.pipelineRuns = action.pipelineRuns;
+        let allMergeCommitIds = next.mergeQueues.flatMap(mq => mq.items.map(mqi => mqi.mergedCommitId));
+        let didChange = false;
+        for (const run of action.pipelineRuns) {
+            let existing = next.pipelineRuns.find(r => r.runId === run.runId);
+            if (existing) {
+                // avoid triggering render if run does not change
+                if (existing.pipelineName !== run.pipelineName ||
+                    existing.status !== run.status ||
+                    existing.result !== run.result ||
+                    (existing.createdAt !== run.createdAt && run.createdAt !== 0) // HACK
+                ) {
+                    Object.assign(existing, run);
+                    didChange = true;
+                }
+            } else if (allMergeCommitIds.includes(run.sourceVersion)) {
+                next.pipelineRuns.push(run);
+                didChange = true;
+            }
+        }
+        let removedRunIds = next.pipelineRuns.filter(r => {
+            for (const mq of next.mergeQueues) {
+                for (const mqi of mq.items) {
+                    if (mqi.mergedCommitId === r.sourceVersion) { return false; }
+                }
+            }
+            console.log("MQ: reducer -> removing pipeline run", r.runId, r);
+            return true;
+        });
+        if (removedRunIds.length > 0) {
+            didChange = true;
+            next.pipelineRuns = next.pipelineRuns.filter(r => !removedRunIds.includes(r));
+        }
+        if (didChange) {
+            next.pipelineRuns = [...next.pipelineRuns];
+            console.log("MQ: reducer -> updated pipeline runs", next.pipelineRuns);
+        }
     }
 
     // filter pipeline runs
@@ -373,6 +423,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     let [showIcons, setShowIcons] = React.useState(false);
 
     const [state, dispatch] = React.useReducer<(state: ReducerState, action: ReducerAction) => ReducerState>(reducer, {
+        didInit: false,
+
         mergeQueues: [],
         selectedPullRequestIds: [],
         repositories: [],
@@ -416,7 +468,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             let em = getExtensionManagementClient();
             extensionManagementClient.current = em;
 
-            // TODO: LOAD DOC
             await refreshPipelineRuns(tenantInfo.current.project);
 
             let gitRepos = await gitClient.current.getRepositories(tenantInfo.current.project);
@@ -492,7 +543,17 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 dispatch({ activePullRequests: adoc.pullRequests });
             }
 
+            var pdoc = await getAppDocument<PipelineRunsDocument>(allPipelineRunsDocumentId);
+            if (!pdoc) {
+                console.error("MQ: refreshPipelineRuns -> failed to get pipeline runs document");
+                return;
+            }
+            let pipelineRuns = pdoc.pipelineRuns ?? [];
+            dispatch({ pipelineRuns: pipelineRuns });
+            console.warn("MQ: init -> fetched pipeline runs document", pdoc);
+
             console.log("MQ: init -> done");
+            dispatch({ didInit: true });
         } catch (error) {
             console.error("MQ: init -> error occurred", error);
         }
@@ -822,7 +883,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 }
 
                 if (oldCommitId === newCommitId) {
-                    console.log("MQ: runMergeQueue -> no changes needed for repository", repo.id, repo.name);
+                    console.log("MQ: runMergeQueue -> no changes needed for repository", repo.id, repo.name, newCommitId);
                     continue;
                 }
 
@@ -850,9 +911,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     async function refreshPipelineRuns(project: string) {
         console.log("MQ: refreshPipelineRuns -> starting");
         try {
-            // (project: string, definitions?: number[], queues?: number[], buildNumber?: string, minTime?: Date, maxTime?: Date, requestedFor?: string, 
-            // reasonFilter?: Build.BuildReason, statusFilter?: Build.BuildStatus, resultFilter?: Build.BuildResult, tagFilters?: string[],
-            //  properties?: string[], top?: number, continuationToken?: string, maxBuildsPerDefinition?: number, deletedFilter?: Build.QueryDeletedOption, queryOrder?: Build.BuildQueryOrder, branchName?: string, buildIds?: number[], repositoryId?: string, repositoryType?: string)
             let allBuilds = await runClient.current.getBuilds(
                 project, // project
                 undefined, // definitions
@@ -876,6 +934,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 undefined, // repositoryId
                 undefined  // repositoryType
             );
+
             let pipelineRuns = allBuilds.map((run): PipelineRunInfo => ({
                 runId: run.id || 0,
                 pipelineId: run.definition.id || 0,
@@ -884,13 +943,39 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 sourceVersion: run.sourceVersion,
                 status: getRunStatus(run.status),
                 result: getRunResult(run.result),
-                createdAt: luxon.DateTime.fromJSDate(run.startTime).toSeconds(),
+                createdAt: run.startTime ? luxon.DateTime.fromJSDate(run.startTime || new Date()).toSeconds() : 0, // HACK: why is startTime sometimes undefined?
             }));
+
             dispatch({ pipelineRuns: pipelineRuns });
         } catch (error) {
             console.error("MQ: refreshPipelineRuns -> error occurred", error);
         }
     }
+
+    // push new pipeline runs document
+    React.useEffect(() => {
+        if (state.didInit === false) {
+            return;
+        }
+        let statePipelineRuns = state.pipelineRuns;
+        console.log("MQ: refreshPipelineRuns -> updating pipeline runs document", statePipelineRuns, allPipelineRunsDocumentId);
+        (async () => {
+            console.log("MQ: refreshPipelineRuns -> updating pipeline runs document", statePipelineRuns);
+            var doc = await getAppDocument<PipelineRunsDocument>(allPipelineRunsDocumentId);
+            if (!doc) {
+                console.error("MQ: refreshPipelineRuns -> failed to get pipeline runs document");
+                return;
+            }
+            let old = doc.pipelineRuns ?? [];
+            doc.pipelineRuns = statePipelineRuns;
+            let doc2 = await updateDocument(extensionManagementClient.current, collectionId, allPipelineRunsDocumentId, doc);
+            if (!doc2) {
+                console.error("MQ: refreshPipelineRuns -> failed to update pipeline runs document");
+                return;
+            }
+            console.log("MQ: refreshPipelineRuns -> updated pipeline runs document", old, doc2);
+        })();
+    }, [state.didInit, state.pipelineRuns]);
 
     async function getAppDocument<T>(appDocumentId: string): Promise<T | undefined> {
         let doc = await getDocument(extensionManagementClient.current, collectionId, appDocumentId);

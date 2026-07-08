@@ -31,7 +31,7 @@ import { IHostNavigationService } from "azure-devops-extension-api/Common/Common
 import { Toggle } from "azure-devops-ui/Toggle";
 import { PullRequestList, PullRequestListItem } from "./PullRequestList";
 import { PipelineList, PipelineListItem } from "./PipelineList";
-import { BuildQueryOrder } from "azure-devops-extension-api/Build/Build";
+import { BuildQueryOrder, BuildStatus } from "azure-devops-extension-api/Build/Build";
 import { Tab, TabBar, TabSize } from "azure-devops-ui/Tabs";
 import { IMenuItem } from "azure-devops-ui/Components/Menu/Menu.Props";
 import { AddMergeQueuePanel } from "./AddMergeQueuePanel";
@@ -920,7 +920,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 undefined, // maxTime
                 undefined, // requestedFor
                 undefined, // reasonFilter
-                undefined, // statusFilter
+                BuildStatus.All, // statusFilter
                 undefined, // resultFilter
                 undefined, // tagFilters
                 undefined, // properties
@@ -928,7 +928,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 undefined, // continuationToken
                 undefined, // maxBuildsPerDefinition
                 undefined, // deletedFilter
-                BuildQueryOrder.StartTimeDescending, // queryOrder
+                BuildQueryOrder.QueueTimeDescending, // queryOrder
                 undefined, // branchName
                 undefined, // buildIds
                 undefined, // repositoryId
@@ -943,7 +943,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 sourceVersion: run.sourceVersion,
                 status: getRunStatus(run.status),
                 result: getRunResult(run.result),
-                createdAt: run.startTime ? luxon.DateTime.fromJSDate(run.startTime || new Date()).toSeconds() : 0, // HACK: why is startTime sometimes undefined?
+                createdAt: run.queueTime ? luxon.DateTime.fromJSDate(run.queueTime || new Date()).toSeconds() : 0,
             }));
 
             dispatch({ pipelineRuns: pipelineRuns });

@@ -108,6 +108,11 @@ interface MergeQueueInfo {
     items: MergeQueueItemInfo[];
 }
 
+interface MergeCommitInfo {
+    repositoryId: string;
+    commitId: string;
+}
+
 type MergeQueueStatus =
     "queued" | // requires recalculation
     "recalculating" | // currently being recalculated
@@ -167,6 +172,7 @@ interface ReducerState {
     mergeQueues: MergeQueueInfo[];
     selectedPullRequestIds: number[];
     repositories: RepositoryDetails[];
+    repoMergeCommits: MergeCommitInfo[];
 
     activePullRequests: PullRequestInfo[];
     filters: PullRequestFilters;
@@ -187,6 +193,7 @@ interface ReducerAction {
     // collection loading
     mergeQueues?: MergeQueueInfo[];
     singleMergeQueue?: MergeQueueInfo;
+    repoMergeCommits?: MergeCommitInfo[];
 
     // active pull requests
     activePullRequests?: PullRequestInfo[];
@@ -257,6 +264,11 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         next.repositories = action.repositories;
     }
 
+    if (action.repoMergeCommits !== undefined) {
+        console.log("MQ: reducer -> updating repo merge commits", action.repoMergeCommits);
+        next.repoMergeCommits = action.repoMergeCommits;
+    }
+
     // selection changes (via pull requests or pipeline runs)
     if (action.selectedPullRequestIds !== undefined) {
         console.log("MQ: reducer -> updating selected pull request IDs", action.selectedPullRequestIds);
@@ -319,7 +331,7 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
     // pipeline runs
     if (action.pipelineRuns !== undefined) {
         console.log("MQ: reducer -> updating pipeline runs", action.pipelineRuns);
-        let allMergeCommitIds = next.mergeQueues.flatMap(mq => mq.items.map(mqi => mqi.mergedCommitId));
+        let allMergeCommitIds = next.repoMergeCommits.map(mci => mci.commitId);
         let didChange = false;
         for (const run of action.pipelineRuns) {
             let existing = next.pipelineRuns.find(r => r.runId === run.runId);
@@ -428,6 +440,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         mergeQueues: [],
         selectedPullRequestIds: [],
         repositories: [],
+        repoMergeCommits: [],
 
         activePullRequests: [],
         filteredActivePullRequests: [],
@@ -889,7 +902,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
                 console.log("MQ: runMergeQueue -> updating merge queue ref", repo.id, repo.name, oldCommitId, newCommitId);
 
-                // repoBaseCommits.push({ repoId: repo.id, baseCommitId: commitId });
                 const refUpdate: GitRefUpdate = {
                     name: refMergeQueue,
                     repositoryId: repo.id,
@@ -900,6 +912,10 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 let refResult = await gitClient.updateRefs([refUpdate], repo.id, project, project);
                 console.log("MQ: runMergeQueue -> updateRefs result", refResult);
             }
+
+            // TODO: derive this in the reducer instead?
+            let mergeCommitIds = repoBaseCommits.map((i): MergeCommitInfo => ({ repositoryId: i.repoId, commitId: i.baseCommitId }));
+            dispatch({ repoMergeCommits: mergeCommitIds });
         } catch (error) {
             console.error("MQ: runMergeQueue -> error occurred", error);
         } finally {

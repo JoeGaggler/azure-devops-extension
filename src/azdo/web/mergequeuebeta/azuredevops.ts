@@ -21,6 +21,7 @@ export interface TenantInfo {
 export interface AuthorInfo {
     displayName: string;
     imageUrl?: string;
+    descriptor?: string;
 }
 
 export async function getAzdoInfo(): Promise<TenantInfo | undefined> {

@@ -27,6 +27,7 @@ export interface PullRequestListProps {
     selectedIds: number[];
     onSelectPullRequestIds: (id: number[]) => void;
     onActivatePullRequest?: (id: number, repo: string) => void;
+    getAuthorImageUrl?: (author: AuthorInfo, size: number) => string | undefined;
 }
 
 function applySelections<T, TItem>(listSelection: ListSelection, all: T[], accessor: (t: T) => TItem, ids: TItem[]) {
@@ -38,7 +39,7 @@ function applySelections<T, TItem>(listSelection: ListSelection, all: T[], acces
     }
 }
 
-export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequestIds, onActivatePullRequest }: PullRequestListProps) {
+export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequestIds, onActivatePullRequest, getAuthorImageUrl }: PullRequestListProps) {
     let listSelection = new ListSelection(true);
 
     applySelections(listSelection, pullRequests, (pr) => pr.pullRequestId, selectedIds);
@@ -69,7 +70,10 @@ export function PullRequestList({ pullRequests, selectedIds, onSelectPullRequest
             getDisplayName() {
                 return pullRequest.author?.displayName || "?";
             },
-            getIdentityImageUrl(_size: number) {
+            getIdentityImageUrl(size: number) {
+                if (getAuthorImageUrl) {
+                    return getAuthorImageUrl(pullRequest.author, size);
+                }
                 return pullRequest.author?.imageUrl || undefined;
             }
         }

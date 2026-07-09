@@ -364,7 +364,7 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
             next.pipelineRuns = next.pipelineRuns.filter(r => !removedRunIds.includes(r));
         }
         if (didChange) {
-            next.pipelineRuns = [...next.pipelineRuns];
+            next.pipelineRuns = [...next.pipelineRuns.sort((a, b) => a.createdAt - b.createdAt)]; // sort by creation time, 
             console.log("MQ: reducer -> updated pipeline runs", next.pipelineRuns);
         }
     }
@@ -686,7 +686,8 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 },
                 author: {
                     displayName: gitPR.createdBy?.displayName || "Unknown User",
-                    imageUrl: gitPR.createdBy?.imageUrl
+                    imageUrl: gitPR.createdBy?.imageUrl,
+                    descriptor: gitPR.createdBy?.descriptor
                 },
                 voting: summarizeVotes(gitPR.reviewers),
                 mergeStatus: gitPR.mergeStatus,
@@ -1542,6 +1543,13 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         dispatch({ showAddQueue: false });
     }
 
+    function getAuthorImageUrl(author: AuthorInfo, _size: number): string | undefined {
+        let org = tenantInfo.current?.organization;
+        let desc = author.descriptor;
+        if (!org || !desc) { return author.imageUrl; }
+        return `https://vssps.dev.azure.com/${org}/_apis/graph/Subjects/${encodeURIComponent(desc)}/avatars?api-version=7.2-preview.1&format=png`
+    }
+
     return (
         <Page className="">
             <Header
@@ -1573,6 +1581,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                             selectedIds={state.selectedPullRequestIds}
                             onSelectPullRequestIds={onSelectMergeQueuePullRequestIds}
                             onActivatePullRequest={onActivateMergeQueuePullRequest}
+                            getAuthorImageUrl={getAuthorImageUrl}
                         />
                     </Card>
 
@@ -1636,6 +1645,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                             selectedIds={state.selectedPullRequestIds}
                             onSelectPullRequestIds={onSelectActivePullRequestIds}
                             onActivatePullRequest={onActivateActivePullRequest}
+                            getAuthorImageUrl={getAuthorImageUrl}
                         />
                     </Card>
                 </>

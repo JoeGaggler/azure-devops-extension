@@ -807,14 +807,22 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 const isQueuedStatus = status === 'queued';
                 const isRecalculatingStatus = status === 'recalculating';
                 const isConflictStatus = status === 'conflict';
+                const isBlockedStatus = status === 'blocked';
                 const isSameSourceCommit = sourceCommitId === sync_item.sourceCommitId;
                 const isSameTargetCommit = targetCommitId === sync_item.targetCommitId;
                 if (isQueuedStatus) { console.log(`MQ: runMergeQueue -> ${index}: queued`); }
                 else if (isRecalculatingStatus) { console.log(`MQ: runMergeQueue -> ${index}: recalculating`); }
                 else if (!isSameSourceCommit) { console.log(`MQ: runMergeQueue -> ${index}: new source commit`, sourceCommitId, sync_item.sourceCommitId); }
                 else if (!isSameTargetCommit) { console.log(`MQ: runMergeQueue -> ${index}: new target commit`, targetCommitId, sync_item.targetCommitId); }
-                else if (isConflictStatus || targetCommitEntry.blockRepo) {
+                else if (isConflictStatus) {
                     console.log(`MQ: runMergeQueue -> ${index}: same commits, but in conflict`);
+                    sync_item.status = 'conflict';
+                    resetStatusOfDependentPullRequests(sync_list, index, repoid, 'blocked');
+                    targetCommitEntry.blockRepo = true;
+                    continue;
+                }
+                else if (isBlockedStatus || targetCommitEntry.blockRepo) {
+                    console.log(`MQ: runMergeQueue -> ${index}: same commits, but blocked`);
                     sync_item.status = 'blocked';
                     resetStatusOfDependentPullRequests(sync_list, index, repoid, 'blocked');
                     targetCommitEntry.blockRepo = true;

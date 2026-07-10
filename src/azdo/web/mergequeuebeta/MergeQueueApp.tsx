@@ -5,7 +5,6 @@
 // TODO: push default branch to merge queue when last PR leaves queue
 // TODO: fix draft status not updated
 // TODO: PR refresh should update the merge queue and active list
-// TODO: badge for tabs to indicate PR count
 // TODO: tags on all pull requests tab to indicate which merge queue they are in
 // TODO: only APPEND pipeline runs that match merge commits, and REMOVE ones that are no longer matching
 // TODO: figure out why state gets captured from an async function in the component
@@ -1558,6 +1557,14 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         return `https://vssps.dev.azure.com/${org}/_apis/graph/Subjects/${encodeURIComponent(desc)}/avatars?api-version=7.2-preview.1&format=png`
     }
 
+    function getBadgeCountForTab(tabId: string): number | undefined {
+        let mq = state.mergeQueues.find(mq => mq.id === tabId);
+        if (!mq) {
+            return undefined;
+        }
+        return mq.items.length;
+    }
+
     return (
         <Page className="">
             <Header
@@ -1572,7 +1579,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 onSelectedTabChanged={onSelectedQueueTabChanged}
             >
                 <Tab name="All" id={allPullRequestsTabId} />
-                <Tab name="Main" id={mainQueueTabId} />
+                <Tab name="Main" id={mainQueueTabId} badgeCount={getBadgeCountForTab(mainQueueTabId)} />
             </TabBar>
 
             {

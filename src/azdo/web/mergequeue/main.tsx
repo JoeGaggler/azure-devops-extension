@@ -1,25 +1,24 @@
 import ReactDOM from 'react-dom'
 import * as SDK from 'azure-devops-extension-sdk';
-import { App } from './App.tsx'
-import type { AppProps, AppSingleton } from './App.tsx'
-import { Spacing, SurfaceBackground, SurfaceContext } from "azure-devops-ui/Surface";
-import { DropdownMultiSelection } from "azure-devops-ui/Utilities/DropdownSelection";
-
-console.log("pingmint menu is loading");
+import { SurfaceBackground, SurfaceContext, Spacing } from "azure-devops-ui/Surface";
+import { MergeQueueApp, MergeQueueAppSingleton } from './MergeQueueApp';
 
 SDK.init();
 
 // singleton
 
-const appSingleton: AppSingleton = {
-    repositoryFilterDropdownMultiSelection: new DropdownMultiSelection()
+const appSingleton: MergeQueueAppSingleton = {
+    appToken: "",
+    bearerToken: "",
 };
 
-let render = (p: AppProps) => {
-    console.log("render");
+let render = () => {
     ReactDOM.render(
-        <SurfaceContext.Provider value={{ background: SurfaceBackground.neutral, spacing: Spacing.default  }}>
-            <App appToken={p.appToken} bearerToken={p.bearerToken} singleton={appSingleton} />
+        <SurfaceContext.Provider value={{
+            background: SurfaceBackground.neutral,
+            spacing: Spacing.default
+        }}>
+            <MergeQueueApp singleton={appSingleton} />
         </SurfaceContext.Provider>,
         document.getElementById('extension_root_div')
     );
@@ -28,10 +27,10 @@ let render = (p: AppProps) => {
 let refreshMs = 1000 * 60 * 5; // 5 minutes
 
 let refreshToken = () => {
-    console.log("refreshToken");
     SDK.getAccessToken().then((token) => {
-        console.log("Refreshed token", token);
-        render({ bearerToken: token, appToken: "TODO_REFRESH_APP_TOKEN", singleton: appSingleton });
+        appSingleton.bearerToken = token;
+        // TODO: also refresh app token
+        // render({ bearerToken: token, appToken: "TODO_REFRESH_APP_TOKEN", singleton: appSingleton });
         setTimeout(refreshToken, refreshMs);
     }).catch((err) => {
         console.error("Error getting access token", err);
@@ -39,20 +38,16 @@ let refreshToken = () => {
 }
 
 SDK.ready().then(() => {
-    console.log("SDK is ready");
     SDK.getAppToken().then((a) => {
-        console.log("AppToken is ready");
-        console.log(a);
+        appSingleton.appToken = a;
+
         SDK.getAccessToken().then((b) => {
-            console.log("BearerToken is ready");
-            console.log(b);
+            appSingleton.bearerToken = b;
 
-            let conf = SDK.getConfiguration();
-            console.log("conf", conf);
-
+            // let conf = SDK.getConfiguration();
             SDK.notifyLoadSucceeded();
 
-            render({ bearerToken: b, appToken: a, singleton: appSingleton });
+            render();
 
             setTimeout(refreshToken, refreshMs);
         });

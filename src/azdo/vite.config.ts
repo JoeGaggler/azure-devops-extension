@@ -34,8 +34,7 @@ export default defineConfig({
       input: {
         // index: './web/index.html',
         currentruns: './web/currentruns/index.html',
-        mergequeue: './web/mergequeue/index.html',
-        mergequeuebeta: './web/mergequeuebeta/index.html'
+        mergequeue: './web/mergequeue/index.html'
       },
     }
   }

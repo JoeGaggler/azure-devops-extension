@@ -6,9 +6,8 @@
 // TODO: fix draft status not updated
 // TODO: PR refresh should update the merge queue and active list
 // TODO: tags on all pull requests tab to indicate which merge queue they are in
-// TODO: only APPEND pipeline runs that match merge commits, and REMOVE ones that are no longer matching
-// TODO: figure out why state gets captured from an async function in the component
 // TODO: defer processing when app version is newer than ours
+// TODO: discretely poll each tracked pipeline run
 import React from "react";
 import * as luxon from 'luxon'
 import * as SDK from 'azure-devops-extension-sdk';
@@ -295,6 +294,17 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
         console.log("MQ: reducer -> updating active pull requests", action.activePullRequests);
         next.activePullRequests = action.activePullRequests.sort((a, b) => b.createdTimestamp - a.createdTimestamp);
         // TODO: confirm selections
+
+        // update merge queue items with latest pull request data
+        next.mergeQueues.forEach(mq => {
+            let mq_items = mq.items ?? [];
+            mq_items.forEach(mqi => {
+                let pr = next.activePullRequests.find(pr => pr.id === mqi.id);
+                if (pr) {
+                    mqi.title = pr.title;
+                }
+            });
+        });
     }
 
     if (action.filters !== undefined) {
@@ -845,7 +855,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 mustSync = true;
 
                 // merge request
-                let comment = `Merge Queue: ${sourceCommitId} into ${targetCommitId}`;
+                let comment = `Merge Queue: !${sync_item.id} into ${targetCommitId}`;
                 let mergeResult = await mergeCommits(gitClient, project, repoid, sourceCommitId, targetCommitId, comment);
                 if (!mergeResult) {
                     console.error(`MQ: runMergeQueue -> ${index}: failed to merge commits 1`);

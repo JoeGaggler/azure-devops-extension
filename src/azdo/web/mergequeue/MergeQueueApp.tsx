@@ -32,7 +32,7 @@ import { PipelineList, PipelineListItem } from "./PipelineList";
 import { BuildQueryOrder, BuildStatus } from "azure-devops-extension-api/Build/Build";
 import { Tab, TabBar, TabSize } from "azure-devops-ui/Tabs";
 import { IMenuItem } from "azure-devops-ui/Components/Menu/Menu.Props";
-import { AddMergeQueuePanel } from "./AddMergeQueuePanel";
+import { AddMergeQueuePanel, AddMergeQueuePanelValues } from "./AddMergeQueuePanel";
 
 const publisher = "pingmint";
 const extensionName = "pingmint-extension";
@@ -187,6 +187,7 @@ interface ReducerState {
     selectedQueueTabId: string;
 
     isShowingAddQueue: boolean;
+    isShowingEditQueue: boolean;
 }
 
 interface ReducerAction {
@@ -217,6 +218,7 @@ interface ReducerAction {
     selectedPipelineRunIds?: number[];
 
     showAddQueue?: boolean;
+    showEditQueue?: boolean;
 }
 
 function reducer(state: ReducerState, action: ReducerAction): ReducerState {
@@ -228,6 +230,10 @@ function reducer(state: ReducerState, action: ReducerAction): ReducerState {
 
     if (action.showAddQueue !== undefined) {
         next.isShowingAddQueue = action.showAddQueue;
+    }
+
+    if (action.showEditQueue !== undefined) {
+        next.isShowingEditQueue = action.showEditQueue;
     }
 
     if (action.singleMergeQueue !== undefined) {
@@ -477,6 +483,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         selectedQueueTabId: allPullRequestsTabId,
 
         isShowingAddQueue: false,
+        isShowingEditQueue: false,
     })
 
     // initialize the app
@@ -1138,17 +1145,30 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     function renderPageCommandBarItems(): IHeaderCommandBarItem[] {
-        return [{
-            id: "addQueue",
-            text: "New Queue",
-            iconProps: {
-                iconName: "Add",
+        return [
+            {
+                id: "addQueue",
+                text: "New Queue",
+                iconProps: {
+                    iconName: "Add",
+                },
+                onActivate: () => { onAddQueue(); },
+                isPrimary: false,
+                important: false,
+                disabled: false
             },
-            onActivate: () => { onAddQueue(); },
-            isPrimary: false,
-            important: false,
-            disabled: false
-        }];
+            {
+                id: "editQueue",
+                text: "Edit Queue",
+                iconProps: {
+                    iconName: "Edit",
+                },
+                onActivate: () => { onEditQueue(); },
+                isPrimary: false,
+                important: false,
+                disabled: false
+            }
+        ];
     }
 
     function renderMergeQueueCommandBarItems(): IHeaderCommandBarItem[] {
@@ -1189,6 +1209,12 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
     async function onAddQueue() {
         dispatch({ showAddQueue: true })
+    }
+
+    async function onEditQueue() {
+        if (state.selectedQueueTabId === mainQueueTabId) { return; } // TODO: allow editing main queue?
+
+        dispatch({ showEditQueue: true })
     }
 
     function renderAllPullRequestsCommandBarItems(): IHeaderCommandBarItem[] {
@@ -1602,12 +1628,67 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         dispatch({ selectedQueueTabId: tabId });
     }
 
-    async function onCommitAddMergeQueue() {
+    async function onCommitAddMergeQueue(p: AddMergeQueuePanelValues) {
+        console.log("MQ: onCommitAddMergeQueue", p);
         dispatch({ showAddQueue: false });
     }
 
     async function onCancelAddMergeQueue() {
         dispatch({ showAddQueue: false });
+    }
+
+    async function onCommitEditMergeQueue(p: AddMergeQueuePanelValues) {
+        console.log("MQ: onCommitEditMergeQueue", p);
+        dispatch({ showEditQueue: false });
+
+        let q_id = p.id;
+        if (!q_id) { return; }
+
+        let q_name = p.name || q_id;
+        let q_targetRefName = p.targetRefName || `refs/heads/merge-queues/${q_id}`;
+
+        let alldoc = await getAllMergeQueuesDocument();
+        if (!alldoc) { return; }
+
+        let allQueues = alldoc.mergeQueues || [];
+
+
+        let queue = allQueues.find(i => i.id === demoQueueTabId);
+        if (!queue) {
+            return;
+        }
+
+        var ddoc = await getMergeQueueDocument(q_id);
+        if (!ddoc) {
+            console.error("MQ: onCommitEditMergeQueue -> failed to get merge queue document for demo queue");
+            return;
+        } else {
+            queue.name = q_name;
+
+            ddoc.name = q_name;
+            ddoc.targetRefName = q_targetRefName;
+
+            await updateMergeQueueDocument(ddoc);
+
+            queue.name = q_name;
+            await updateAllMergeQueuesDocument(alldoc);
+        }
+
+        let nextMergeQueues = [...state.mergeQueues];
+        let q2 = nextMergeQueues.findIndex(i => i.id === demoQueueTabId);
+        if (q2 >= 0) {
+            nextMergeQueues[q2] = {
+                ...nextMergeQueues[q2],
+                name: q_name,
+                targetRefName: q_targetRefName
+            }
+
+            dispatch({ mergeQueues: nextMergeQueues });
+        }
+    }
+
+    async function onCancelEditMergeQueue() {
+        dispatch({ showEditQueue: false });
     }
 
     function getAuthorImageUrl(author: AuthorInfo, _size: number): string | undefined {
@@ -1625,6 +1706,29 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         return mq.items.length;
     }
 
+    function renderAdditionalTabContent() {
+        if (state.selectedQueueTabId === allPullRequestsTabId) {
+            return <></>
+        }
+
+        // return (
+        //     <Button text="Edit" />
+        // );
+        return <></>;
+    }
+
+    function renderQueueTabs() {
+        // return <Tab name="Demo TODO" id={demoQueueTabId} badgeCount={getBadgeCountForTab(demoQueueTabId)} />
+        return state.mergeQueues.map((mq) => {
+            return <Tab
+                key={mq.id}
+                name={mq.name || mq.id}
+                id={mq.id}
+                badgeCount={getBadgeCountForTab(mq.id)}
+            />
+        });
+    }
+
     return (
         <Page className="">
             <Header
@@ -1637,10 +1741,11 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 tabSize={TabSize.Tall}
                 selectedTabId={state.selectedQueueTabId}
                 onSelectedTabChanged={onSelectedQueueTabChanged}
+                renderAdditionalContent={renderAdditionalTabContent}
             >
                 <Tab name="All" id={allPullRequestsTabId} />
-                <Tab name="Main" id={mainQueueTabId} badgeCount={getBadgeCountForTab(mainQueueTabId)} />
-                <Tab name="Demo" id={demoQueueTabId} badgeCount={getBadgeCountForTab(demoQueueTabId)} />
+                {/* <Tab name="Main" id={mainQueueTabId} badgeCount={getBadgeCountForTab(mainQueueTabId)} /> */}
+                {renderQueueTabs()}
             </TabBar>
 
             {
@@ -1740,7 +1845,19 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 state.isShowingAddQueue && (
                     <AddMergeQueuePanel
                         onCancel={() => { onCancelAddMergeQueue(); }}
-                        onCommit={() => { onCommitAddMergeQueue(); }}
+                        onCommit={(p) => { onCommitAddMergeQueue(p); }}
+                    />
+                )
+            }
+
+            {
+                state.isShowingEditQueue && (
+                    <AddMergeQueuePanel
+                        id={state.selectedQueueTabId}
+                        name={state.mergeQueues.find(mq => mq.id === state.selectedQueueTabId)?.name}
+                        targetRefName={state.mergeQueues.find(mq => mq.id === state.selectedQueueTabId)?.targetRefName}
+                        onCancel={() => { onCancelEditMergeQueue(); }}
+                        onCommit={(p) => { onCommitEditMergeQueue(p); }}
                     />
                 )
             }

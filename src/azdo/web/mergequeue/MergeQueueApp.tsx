@@ -44,8 +44,6 @@ const zeroCommitId = "0000000000000000000000000000000000000000";
 const refMergeQueue = "refs/heads/merge-queue";
 const allPullRequestsTabId = "all";
 const mainQueueTabId = "main";
-const demoQueueTabId = "demo";
-// const refDemoQueue = "refs/heads/merge-queue-demo";
 
 export interface MergeQueueAppSingleton {
     bearerToken: string;
@@ -545,6 +543,20 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                     }];
                 }
             }
+
+            // let t1 = alldoc.mergeQueues.findIndex(i => i.id == "new1");
+            // if (t1 > 0) {
+            //     let t2 = alldoc.mergeQueues.findIndex((i, idx) => i.id == "new1" && idx != t1);
+            //     if (t2 > 0) {
+            //         console.error("DUPLICATE", t1, t2)
+            //         alldoc.mergeQueues.splice(t2, 1);
+            //     }
+            // }
+
+            // let t3 = alldoc.mergeQueues.findIndex(i => i.id == "main");
+            // if (t3) {
+            //     alldoc.mergeQueues[t3].name = "Main"
+            // }
 
             // TODO: remove demo queue
             // let demoQueue = alldoc.mergeQueues.find(i => i.id === demoQueueTabId);
@@ -1167,7 +1179,18 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
                 isPrimary: false,
                 important: false,
                 disabled: false
-            }
+            },
+            {
+                id: "deleteQueue",
+                text: "Delete Queue",
+                iconProps: {
+                    iconName: "Delete",
+                },
+                onActivate: () => { onDeleteQueue(); },
+                isPrimary: false,
+                important: false,
+                disabled: false,
+            },
         ];
     }
 
@@ -1628,9 +1651,114 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         dispatch({ selectedQueueTabId: tabId });
     }
 
+    async function onDeleteQueue() {
+        let q_id = state.selectedQueueTabId;
+
+        let alldoc = await getAllMergeQueuesDocument();
+        if (!alldoc) {
+            console.error("MQ: onDeleteQueue -> failed to fetch all merge queues document", p);
+            return;
+        }
+
+        let allQueues = alldoc.mergeQueues || [];
+        if (q_id == mainQueueTabId) {
+            // already exists
+            console.error("MQ: onDeleteQueue -> cannot delete main", q_id);
+            return;
+        }
+
+        let found_idx = allQueues.findIndex(i => i.id === q_id);
+        if (found_idx < 0) {
+            console.error("MQ: onDeleteQueue -> cannot find queue", q_id);
+            return;
+        }
+
+        allQueues.splice(found_idx, 1);
+
+        // TODO: DELETE QUEUE DOCUMENT
+
+        let alldoc2 = await updateAllMergeQueuesDocument(alldoc);
+        if (!alldoc2) {
+            console.error("MQ: onDeleteQueue -> cannot save all docs queue", q_id);
+            return;
+        }
+
+        let nextMergeQueues = [...state.mergeQueues.filter(i => i.id != q_id)]
+        dispatch({mergeQueues: nextMergeQueues})
+    }
+
     async function onCommitAddMergeQueue(p: AddMergeQueuePanelValues) {
         console.log("MQ: onCommitAddMergeQueue", p);
         dispatch({ showAddQueue: false });
+
+        let q_id = p.id;
+        let q_name = p.name;
+        let q_targetRefName = p.targetRefName;
+
+        if (!q_id || !q_name || !q_targetRefName) {
+            console.error("MQ: onCommitAddMergeQueue -> missing values", p);
+            return;
+        }
+
+        let alldoc = await getAllMergeQueuesDocument();
+        if (!alldoc) {
+            console.error("MQ: onCommitAddMergeQueue -> failed to fetch all merge queues document", p);
+            return;
+        }
+
+        let allQueues = alldoc.mergeQueues || [];
+        if (q_id == mainQueueTabId) {
+            // already exists
+            console.error("MQ: onCommitAddMergeQueue -> already exists (main)", p);
+            return;
+        }
+        if (allQueues.find(i => i.id === q_id) !== undefined) {
+            // already exists
+            console.error("MQ: onCommitAddMergeQueue -> already exists", p);
+            return;
+        }
+
+        // 1) Save merge queue document
+        let nextMergeQueues = [...state.mergeQueues.filter(i => i.id != q_id)]
+        var ddoc = await getMergeQueueDocument(q_id);
+        if (!ddoc) {
+            console.error("MQ: onCommitAddMergeQueue -> unable to get merge queue document", p);
+            return;
+        } else {
+            ddoc.id = q_id;
+            ddoc.name = q_name;
+            ddoc.targetRefName = q_targetRefName;
+            let ddoc2 = await updateMergeQueueDocument(ddoc);
+            if (!ddoc2) {
+                console.error("MQ: onCommitAddMergeQueue -> unable to save merge queue document", p);
+                return
+            }
+
+            let mq: MergeQueueInfo = {
+                id: q_id,
+                name: q_name,
+                targetRefName: q_targetRefName,
+                items: [],
+            };
+
+            nextMergeQueues.push(mq);
+        }
+
+        // 2) Update queues list
+        let nextAllDocQueue: AllMergeQueuesItem = {
+            id: q_id,
+            name: q_name,
+        }
+        alldoc.mergeQueues = [...alldoc.mergeQueues, nextAllDocQueue];
+
+        let alldoc2 = updateAllMergeQueuesDocument(alldoc);
+        if (!alldoc2) {
+            console.error("MQ: onCommitAddMergeQueue -> unable to save all merge queues document", p);
+            return;
+        }
+
+        dispatch({ mergeQueues: nextMergeQueues });
+        console.log("MQ: onCommitAddMergeQueue -> added", p);
     }
 
     async function onCancelAddMergeQueue() {
@@ -1652,8 +1780,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
 
         let allQueues = alldoc.mergeQueues || [];
 
-
-        let queue = allQueues.find(i => i.id === demoQueueTabId);
+        let queue = allQueues.find(i => i.id === q_id);
         if (!queue) {
             return;
         }
@@ -1675,7 +1802,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
         }
 
         let nextMergeQueues = [...state.mergeQueues];
-        let q2 = nextMergeQueues.findIndex(i => i.id === demoQueueTabId);
+        let q2 = nextMergeQueues.findIndex(i => i.id === q_id);
         if (q2 >= 0) {
             nextMergeQueues[q2] = {
                 ...nextMergeQueues[q2],
@@ -1718,7 +1845,6 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
     }
 
     function renderQueueTabs() {
-        // return <Tab name="Demo TODO" id={demoQueueTabId} badgeCount={getBadgeCountForTab(demoQueueTabId)} />
         return state.mergeQueues.map((mq) => {
             return <Tab
                 key={mq.id}
@@ -1844,6 +1970,7 @@ export function MergeQueueApp(p: { singleton: MergeQueueAppSingleton }) {
             {
                 state.isShowingAddQueue && (
                     <AddMergeQueuePanel
+                        targetRefName="refs/heads/new-merge-queue"
                         onCancel={() => { onCancelAddMergeQueue(); }}
                         onCommit={(p) => { onCommitAddMergeQueue(p); }}
                     />
